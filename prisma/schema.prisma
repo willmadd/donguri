@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Profile {
+  id           String             @id @db.Uuid
+  email        String
+  fullName     String?            @map("full_name")
+  role         String             @default("user")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  enrollments  CourseEnrollment[]
+  wordProgress UserWordProgress[]
+
+  @@map("profiles")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Course {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug           String             @unique
+  title          String
+  targetLanguage String             @map("target_language")
+  sourceLanguage String             @map("source_language")
+  description    String?
+  position       Int
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  enrollments    CourseEnrollment[]
+  lessons        Lesson[]
+
+  @@map("courses")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CourseEnrollment {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  courseId         String    @map("course_id") @db.Uuid
+  enrolledAt       DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  currentStreak    Int       @default(0) @map("current_streak")
+  longestStreak    Int       @default(0) @map("longest_streak")
+  lastActivityDate DateTime? @map("last_activity_date") @db.Date
+
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, courseId])
+  @@map("course_enrollments")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Lesson {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  path      String
+  title     String
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  courseId  String   @map("course_id") @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  words     Word[]
+
+  @@unique([courseId, path, position])
+  @@map("lessons")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Word {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId        String             @map("lesson_id") @db.Uuid
+  term            String
+  translation     String
+  exampleSentence String?            @map("example_sentence")
+  position        Int
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  romanization    String?
+  progress        UserWordProgress[]
+  lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([lessonId, position])
+  @@map("words")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserWordProgress {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  wordId         String    @map("word_id") @db.Uuid
+  status         String    @default("learning")
+  box            Int       @default(1)
+  correctCount   Int       @default(0) @map("correct_count")
+  incorrectCount Int       @default(0) @map("incorrect_count")
+  skipped        Boolean   @default(false)
+  introducedAt   DateTime  @default(now()) @map("introduced_at") @db.Timestamptz(6)
+  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  profile        Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  word           Word      @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, wordId])
+  @@map("user_word_progress")
+}

@@ -1,4 +1,21 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is **Donguri**, a [Next.js](https://nextjs.org) app bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), using [Supabase](https://supabase.com) for auth and [Prisma](https://www.prisma.io) for typed database access.
+
+## Setup
+
+1. Create a Supabase project at [supabase.com](https://supabase.com).
+2. In the SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql) — it creates the `profiles` table (with a `user` / `admin` `role` column), row-level security policies, and a trigger that auto-creates a profile whenever someone signs up. **This SQL file is the source of truth for the schema**, not Prisma Migrate — Supabase-managed things like the `auth.users` link, RLS policies, and triggers aren't something Prisma models.
+3. Copy `.env.example` to `.env` and fill in:
+   - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` from **Project Settings → API**.
+   - `DATABASE_URL` / `DIRECT_URL` from **Project Settings → Database → Connection string** (see the comments in `.env.example` for which pooling mode each needs).
+4. Run `npx prisma generate` (also runs automatically on `npm install` via the `postinstall` script) to generate the Prisma Client into `generated/prisma`.
+5. If you change `supabase/schema.sql` later, re-run it in the SQL Editor, then run `npm run db:pull` to resync `prisma/schema.prisma`, followed by `npm run db:generate`.
+6. To make someone an admin, run in the SQL Editor:
+   ```sql
+   update public.profiles set role = 'admin' where email = 'someone@example.com';
+   ```
+   There is no public sign-up path to admin — new accounts always start as `user`.
+
+Note: Prisma connects to Postgres directly with its own role, so it does not carry the caller's Supabase session — RLS policies don't apply to it the way they do to `supabase-js` queries. `lib/dal.ts` is the authorization boundary for Prisma reads (it always scopes queries to the verified session's user id).
 
 ## Getting Started
 

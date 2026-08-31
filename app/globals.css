@@ -1,11 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Kotoba — a friendly, warm Japanese-inspired palette */
+  --washi: #faf3e7; /* washi paper */
+  --washi-soft: #f3ead9; /* deeper paper tone for panels */
+  --sumi: #2b2420; /* ink */
+  --sumi-soft: #5c5147; /* muted ink for secondary text */
+  --ai: #2a5c7c; /* ai-iro, indigo blue */
+  --ai-dark: #1d4258;
+  --ai-soft: #dceaf0;
+  --sakura: #f2b8c6; /* sakura-iro, cherry blossom */
+  --sakura-dark: #e08fa3;
+  --sakura-soft: #fbe9ee;
+  --matcha: #7c9070; /* matcha green */
+  --matcha-dark: #5f7256;
+  --matcha-soft: #e6ecdf;
+  --shu: #c9432c; /* shu-iro, vermillion */
+  --shu-dark: #a83521;
+  --kin: #c9a66b; /* kincha, muted gold */
+
+  --background: var(--washi);
+  --foreground: var(--sumi);
 }
 
 @theme inline {
+  --color-washi: var(--washi);
+  --color-washi-soft: var(--washi-soft);
+  --color-sumi: var(--sumi);
+  --color-sumi-soft: var(--sumi-soft);
+  --color-ai: var(--ai);
+  --color-ai-dark: var(--ai-dark);
+  --color-ai-soft: var(--ai-soft);
+  --color-sakura: var(--sakura);
+  --color-sakura-dark: var(--sakura-dark);
+  --color-sakura-soft: var(--sakura-soft);
+  --color-matcha: var(--matcha);
+  --color-matcha-dark: var(--matcha-dark);
+  --color-matcha-soft: var(--matcha-soft);
+  --color-shu: var(--shu);
+  --color-shu-dark: var(--shu-dark);
+  --color-kin: var(--kin);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -14,13 +48,29 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --washi: #211c18;
+    --washi-soft: #2a241f;
+    --sumi: #f3ead9;
+    --sumi-soft: #c9bdac;
+    --ai: #6ba3c4;
+    --ai-dark: #8fbcd8;
+    --ai-soft: #22374a;
+    --sakura: #e3a7b7;
+    --sakura-dark: #ecc3cf;
+    --sakura-soft: #3a2a2e;
+    --matcha: #9db28e;
+    --matcha-dark: #b7c8ab;
+    --matcha-soft: #29312a;
+    --shu: #e06b52;
+    --shu-dark: #ef8c76;
+    --kin: #d8bd8c;
+
+    --background: var(--washi);
+    --foreground: var(--sumi);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
