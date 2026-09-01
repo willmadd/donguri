@@ -2,10 +2,7 @@ import * as z from "zod";
 
 export const LoginFormSchema = z.object({
   email: z.email({ error: "Please enter a valid email." }).trim(),
-  password: z
-    .string()
-    .min(1, { error: "Password is required." })
-    .trim(),
+  password: z.string().min(1, { error: "Password is required." }).trim(),
 });
 
 export const SignupFormSchema = z.object({
@@ -108,6 +105,7 @@ export type RevealWord = {
 export type QuizOption = {
   text: string;
   romanization: string | null;
+  image?: string | null;
 };
 
 export type QuizQuestion = {
@@ -132,12 +130,24 @@ export type PracticeQueue = {
   quiz: QuizQuestion[];
 };
 
+export type LessonWordSummary = {
+  id: string;
+  term: string;
+  translation: string;
+  romanization: string | null;
+  known: boolean;
+};
+
 export type LessonSummary = {
   id: string;
   title: string;
   position: number;
   totalWords: number;
+  // Words with any practice history (revealed or quizzed at least once),
+  // regardless of mastery — a superset of knownWords.
+  learntWords: number;
   knownWords: number;
+  words: LessonWordSummary[];
 };
 
 export type CourseSummary = {

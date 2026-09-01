@@ -258,7 +258,12 @@ export const getCourseVocabOverview = cache(async (courseSlug: string) => {
     orderBy: { position: "asc" },
     include: {
       words: {
+        orderBy: { position: "asc" },
         select: {
+          id: true,
+          term: true,
+          translation: true,
+          romanization: true,
           progress: {
             where: { userId: user.id },
             select: { status: true },
@@ -268,14 +273,25 @@ export const getCourseVocabOverview = cache(async (courseSlug: string) => {
     },
   });
 
-  const lessonSummaries: LessonSummary[] = lessons.map((lesson) => ({
-    id: lesson.id,
-    title: lesson.title,
-    position: lesson.position,
-    totalWords: lesson.words.length,
-    knownWords: lesson.words.filter((word) => word.progress.some((p) => p.status === "known"))
-      .length,
-  }));
+  const lessonSummaries: LessonSummary[] = lessons.map((lesson) => {
+    const words = lesson.words.map((word) => ({
+      id: word.id,
+      term: word.term,
+      translation: word.translation,
+      romanization: word.romanization,
+      known: word.progress.some((p) => p.status === "known"),
+    }));
+
+    return {
+      id: lesson.id,
+      title: lesson.title,
+      position: lesson.position,
+      totalWords: words.length,
+      learntWords: lesson.words.filter((word) => word.progress.length > 0).length,
+      knownWords: words.filter((word) => word.known).length,
+      words,
+    };
+  });
 
   return {
     course: toCourseSummary(course),
@@ -455,8 +471,16 @@ function buildQuestion(
 
   const toOption = (candidate: QuestionWord): QuizOption =>
     showingTerm
-      ? { text: candidate.term, romanization: candidate.romanization }
-      : { text: candidate.translation, romanization: null };
+      ? {
+          text: candidate.term,
+          romanization: candidate.romanization,
+          image: wordImagePath(candidate),
+        }
+      : {
+          text: candidate.translation,
+          romanization: null,
+          image: wordImagePath(candidate),
+        };
 
   const distractors = shuffle(pool.filter((candidate) => candidate.id !== word.id))
     .slice(0, 3)

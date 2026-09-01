@@ -44,18 +44,7 @@ export default async function Home() {
       </header>
 
       <main className="flex-1">
-        <section className="mx-auto grid max-w-5xl grid-cols-1 items-center gap-10 px-6 py-16 sm:py-20 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:gap-14 md:py-24">
-          <div className="flex items-center justify-center">
-            <Image
-              src="/images/mascot.png"
-              alt="Donguri mascot"
-              width={480}
-              height={480}
-              priority
-              className="h-auto w-full max-w-[240px] object-contain sm:max-w-[300px] md:max-w-[380px]"
-            />
-          </div>
-
+        <section className="mx-auto grid max-w-5xl grid-cols-1 items-center gap-10 px-6 py-16 sm:py-20 md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] md:gap-14 md:py-24">
           <div className="flex flex-col items-center text-center md:items-start md:text-left">
             <span className="rounded-full bg-sakura-soft px-4 py-1 text-sm font-medium text-sakura-dark">
               Welcome to Donguri
@@ -85,6 +74,17 @@ export default async function Home() {
                 I already have an account
               </Link>
             </div>
+          </div>
+
+          <div className="flex items-center justify-center">
+            <Image
+              src="/images/mascot.png"
+              alt="Donguri mascot"
+              width={480}
+              height={480}
+              priority
+              className="h-auto w-full max-w-[240px] object-contain sm:max-w-[300px] md:max-w-[380px]"
+            />
           </div>
         </section>
 

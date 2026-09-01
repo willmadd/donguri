@@ -18,7 +18,12 @@ function slugify(value: string): string {
 // Picks whichever of `term`/`translation` is ASCII (so it works regardless
 // of which side of a course pair is English, e.g. Cantonese `term` falls
 // back to the English `translation`).
-export function wordImagePath(word: { term: string; translation: string }): string {
+export function wordImagePath(word: {
+  term: string;
+  translation: string;
+}): string {
   const label = isAsciiWord(word.term) ? word.term : word.translation;
-  return `/vocab-images/${slugify(label)}.png`;
+
+  console.log(slugify(label));
+  return `/vocab-images/${slugify(label)}.webp`;
 }

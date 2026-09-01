@@ -40,14 +40,15 @@ export async function submitAnswer(
     },
   });
 
-  // Deliberately no revalidatePath here: this runs on every answer during an
-  // active practice session. Revalidating the dashboard layout would push
-  // fresh RSC data for the whole subtree — including the practice route
-  // that's currently mounted — swapping its `quiz` prop out from under the
-  // in-progress session (the question at the current index would suddenly
-  // become a different question). The dashboard/course pages are already
-  // dynamically rendered per-request, so they show fresh data on their own
-  // next visit without this.
+  // No revalidatePath here: this action is invoked from the practice route
+  // itself, and any revalidatePath call — no matter which path it targets —
+  // makes Next.js re-render *this* route in the same response (see
+  // node_modules/next/dist/docs/01-app/02-guides/server-actions.md). Since
+  // `getPracticeQueue` reshuffles the quiz randomly on every render, that
+  // swapped the current question out from under the user mid-session. The
+  // dashboard/vocab pages read the session via cookies() and are already
+  // fully dynamic (staleTimes.dynamic defaults to 0), so they pick up the
+  // updated progress on their own next visit without on-demand revalidation.
 
   return { correct, correctAnswer };
 }
@@ -71,9 +72,7 @@ export async function skipWord(wordId: string): Promise<void> {
     },
   });
 
-  // No revalidatePath here either — same reason as `submitAnswer` above:
-  // this is called mid-session (from the reveal step), and a "layout"
-  // revalidation would corrupt the currently-mounted practice page's props.
+  // Same reasoning as `submitAnswer` above — no revalidatePath here.
 }
 
 export async function skipLesson(lessonId: string): Promise<void> {
