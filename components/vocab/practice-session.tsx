@@ -163,6 +163,7 @@ export function PracticeSession({ reveals, quiz, courseSlug }: PracticeSessionPr
           Review {quizIndex + 1} of {quiz.length}
         </p>
         <div className="w-full max-w-sm rounded-2xl border border-sumi/10 bg-washi-soft p-8 text-center">
+          <WordImage src={question.image} alt={question.prompt} />
           <p className="text-xs uppercase tracking-wide text-sumi-soft">
             {question.direction === "term-to-translation"
               ? "What does this mean?"

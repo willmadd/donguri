@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCourseHome, getPracticeQueue } from "@/lib/dal";
 import { PracticeSession } from "@/components/vocab/practice-session";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ lessonId?: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -13,9 +15,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: `Practice — ${course.title}` };
 }
 
-export default async function CoursePracticePage({ params }: PageProps) {
+export default async function CoursePracticePage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const queue = await getPracticeQueue(slug);
+  const { lessonId } = await searchParams;
+
+  if (!lessonId) {
+    redirect(`/dashboard/courses/${slug}/vocab`);
+  }
+
+  const queue = await getPracticeQueue(slug, lessonId);
 
   if (queue.reveals.length === 0 && queue.quiz.length === 0) {
     return (
@@ -27,7 +35,7 @@ export default async function CoursePracticePage({ params }: PageProps) {
           You&apos;ve mastered every word here
         </h1>
         <p className="max-w-sm text-sm text-sumi-soft">
-          There&apos;s nothing left to practice in this course right now —
+          There&apos;s nothing left to practice in this category right now —
           check back once more lessons are added.
         </p>
         <Link

@@ -122,6 +122,9 @@ export type QuizQuestion = {
   // only ever speaks this language, never the learner's base language.
   targetLanguage: string;
   options: QuizOption[];
+  // Same convention as RevealWord.image — one picture per word, independent
+  // of quiz direction.
+  image: string;
 };
 
 export type PracticeQueue = {

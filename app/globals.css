@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  /* Kotoba — a friendly, warm Japanese-inspired palette */
-  --washi: #faf3e7; /* washi paper */
-  --washi-soft: #f3ead9; /* deeper paper tone for panels */
-  --sumi: #2b2420; /* ink */
-  --sumi-soft: #5c5147; /* muted ink for secondary text */
-  --ai: #2a5c7c; /* ai-iro, indigo blue */
-  --ai-dark: #1d4258;
-  --ai-soft: #dceaf0;
-  --sakura: #f2b8c6; /* sakura-iro, cherry blossom */
-  --sakura-dark: #e08fa3;
-  --sakura-soft: #fbe9ee;
-  --matcha: #7c9070; /* matcha green */
-  --matcha-dark: #5f7256;
-  --matcha-soft: #e6ecdf;
-  --shu: #c9432c; /* shu-iro, vermillion */
-  --shu-dark: #a83521;
-  --kin: #c9a66b; /* kincha, muted gold */
+  /* Donguri — a bright, playful palette (same roles, punchier hues) */
+  --washi: #fff9f0; /* warm paper */
+  --washi-soft: #fff0dc; /* deeper paper tone for panels */
+  --sumi: #201a15; /* ink */
+  --sumi-soft: #6b5d4f; /* muted ink for secondary text */
+  --ai: #0a5fc4; /* vivid indigo blue */
+  --ai-dark: #073f82;
+  --ai-soft: #dceeff;
+  --sakura: #ff5c93; /* vivid cherry blossom pink */
+  --sakura-dark: #e13d74;
+  --sakura-soft: #ffe3ee;
+  --matcha: #34b24a; /* vivid matcha green */
+  --matcha-dark: #237a34;
+  --matcha-soft: #dff5df;
+  --shu: #e63b24; /* vivid vermillion */
+  --shu-dark: #c22e1b;
+  --kin: #ffb800; /* vivid gold */
 
   --background: var(--washi);
   --foreground: var(--sumi);
@@ -48,22 +48,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --washi: #211c18;
-    --washi-soft: #2a241f;
-    --sumi: #f3ead9;
-    --sumi-soft: #c9bdac;
-    --ai: #6ba3c4;
-    --ai-dark: #8fbcd8;
-    --ai-soft: #22374a;
-    --sakura: #e3a7b7;
-    --sakura-dark: #ecc3cf;
-    --sakura-soft: #3a2a2e;
-    --matcha: #9db28e;
-    --matcha-dark: #b7c8ab;
-    --matcha-soft: #29312a;
-    --shu: #e06b52;
-    --shu-dark: #ef8c76;
-    --kin: #d8bd8c;
+    --washi: #17130f;
+    --washi-soft: #1f1912;
+    --sumi: #fff7ea;
+    --sumi-soft: #d9c9b5;
+    --ai: #4e9cff;
+    --ai-dark: #7cb8ff;
+    --ai-soft: #163257;
+    --sakura: #ff7fae;
+    --sakura-dark: #ffa0c4;
+    --sakura-soft: #3d1f2b;
+    --matcha: #5fd470;
+    --matcha-dark: #85e393;
+    --matcha-soft: #1a3320;
+    --shu: #ff6e52;
+    --shu-dark: #ff9075;
+    --kin: #ffcb4d;
 
     --background: var(--washi);
     --foreground: var(--sumi);

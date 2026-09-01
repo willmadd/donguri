@@ -7,8 +7,13 @@
 const MAX_BOX = 5;
 const SET_SIZE = 3;
 const REVIEW_BATCH_SIZE = 5;
+// Flat multiplier on top of `weightForBox` for words in the category being
+// practiced — makes them dominate the review sample without excluding the
+// rest of the course (a boost, not a filter, same philosophy as the box
+// weighting itself).
+const CATEGORY_BOOST = 4;
 
-export { MAX_BOX, SET_SIZE, REVIEW_BATCH_SIZE };
+export { MAX_BOX, SET_SIZE, REVIEW_BATCH_SIZE, CATEGORY_BOOST };
 
 export function nextBoxAfterAnswer(box: number, correct: boolean): number {
   return correct ? Math.min(box + 1, MAX_BOX) : 1;

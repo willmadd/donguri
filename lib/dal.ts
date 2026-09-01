@@ -19,6 +19,7 @@ import type {
 import {
   addDays,
   applyDailyActivity,
+  CATEGORY_BOOST,
   REVIEW_BATCH_SIZE,
   SET_SIZE,
   startOfUTCDay,
@@ -36,7 +37,11 @@ export const getSession = cache(async () => {
   } = await supabase.auth.getUser();
 
   if (error) {
-    console.error("Failed to retrieve Supabase user:", error);
+    // "No session" is the normal state for a signed-out visitor (e.g. every
+    // anonymous homepage visit) — only log genuinely unexpected failures.
+    if (error.name !== "AuthSessionMissingError") {
+      console.error("Failed to retrieve Supabase user:", error);
+    }
     return null;
   }
 
@@ -323,79 +328,97 @@ export const getDailyWordCounts = cache(async (courseSlug: string): Promise<Dail
 // everywhere else in this file.
 //
 // There's no daily cap — a "set" is just SET_SIZE new words, and a user can
-// run as many sets as they want in a day. Review questions are drawn from
-// every word that was already `learning` *before* this set started, weighted
-// by `weightForBox` so newer/weaker words come up far more often than
-// consistently-correct ones — a sliding scale rather than a due-date cutoff.
-// A word only enters the review pool starting from the *next* set after it
-// was introduced, never the same one — that's why `activePool` is read
-// before this set's new words are inserted below, not after. Otherwise a
-// word could be quizzed seconds after being revealed for the first time,
-// which is what was happening before this was fixed.
-export const getPracticeQueue = cache(async (courseSlug: string): Promise<PracticeQueue> => {
-  const { user, course } = await requireEnrolledCourse(courseSlug);
-  const now = new Date();
+// run as many sets as they want in a day. New words come only from the
+// chosen category (`lessonId`); review questions are drawn from every word
+// that was already `learning` *before* this set started, across the whole
+// course, weighted by `weightForBox` (newer/weaker words come up more often)
+// times `CATEGORY_BOOST` for words in the chosen category (they dominate the
+// sample without excluding the rest of the course). A word only enters the
+// review pool starting from the *next* set after it was introduced, never
+// the same one — that's why `activePool` is read before this set's new
+// words are inserted below, not after. Otherwise a word could be quizzed
+// seconds after being revealed for the first time.
+export const getPracticeQueue = cache(
+  async (courseSlug: string, lessonId: string): Promise<PracticeQueue> => {
+    const { user, course } = await requireEnrolledCourse(courseSlug);
 
-  const newWords = await prisma.word.findMany({
-    where: {
-      lesson: { courseId: course.id },
-      progress: { none: { userId: user.id } },
-    },
-    orderBy: [{ lesson: { position: "asc" } }, { position: "asc" }],
-    take: SET_SIZE,
-  });
-
-  const activePool = await prisma.userWordProgress.findMany({
-    where: {
-      userId: user.id,
-      status: "learning",
-      word: { lesson: { courseId: course.id } },
-    },
-    include: { word: true },
-  });
-
-  if (newWords.length > 0) {
-    await prisma.userWordProgress.createMany({
-      data: newWords.map((word) => ({
-        userId: user.id,
-        wordId: word.id,
-        box: 1,
-      })),
-      skipDuplicates: true,
+    const lesson = await prisma.lesson.findFirst({
+      where: { id: lessonId, courseId: course.id },
+      select: { id: true },
     });
-  }
 
-  if (newWords.length > 0 || activePool.length > 0) {
-    await bumpStreak(user.id, course.id, now);
-  }
+    if (!lesson) {
+      redirect(`/dashboard/courses/${courseSlug}/vocab`);
+    }
 
-  const reviewSample = weightedSample(
-    activePool.map((progress) => ({ item: progress.word, weight: weightForBox(progress.box) })),
-    REVIEW_BATCH_SIZE,
-  );
+    const now = new Date();
 
-  const distractorPool =
-    reviewSample.length > 0
-      ? await prisma.word.findMany({
-          where: { lesson: { courseId: course.id } },
-          select: { id: true, term: true, translation: true, romanization: true },
-        })
-      : [];
+    const newWords = await prisma.word.findMany({
+      where: {
+        lessonId: lesson.id,
+        progress: { none: { userId: user.id } },
+      },
+      orderBy: { position: "asc" },
+      take: SET_SIZE,
+    });
 
-  return {
-    reveals: newWords.map((word) => ({
-      id: word.id,
-      term: word.term,
-      translation: word.translation,
-      romanization: word.romanization,
-      exampleSentence: word.exampleSentence,
-      image: wordImagePath(word),
-    })),
-    quiz: shuffle(
-      reviewSample.map((word) => buildQuestion(word, distractorPool, course)),
-    ),
-  };
-});
+    const activePool = await prisma.userWordProgress.findMany({
+      where: {
+        userId: user.id,
+        status: "learning",
+        word: { lesson: { courseId: course.id } },
+      },
+      include: { word: true },
+    });
+
+    if (newWords.length > 0) {
+      await prisma.userWordProgress.createMany({
+        data: newWords.map((word) => ({
+          userId: user.id,
+          wordId: word.id,
+          box: 1,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (newWords.length > 0 || activePool.length > 0) {
+      await bumpStreak(user.id, course.id, now);
+    }
+
+    const reviewSample = weightedSample(
+      activePool.map((progress) => ({
+        item: progress.word,
+        weight:
+          weightForBox(progress.box) *
+          (progress.word.lessonId === lesson.id ? CATEGORY_BOOST : 1),
+      })),
+      REVIEW_BATCH_SIZE,
+    );
+
+    const distractorPool =
+      reviewSample.length > 0
+        ? await prisma.word.findMany({
+            where: { lesson: { courseId: course.id } },
+            select: { id: true, term: true, translation: true, romanization: true },
+          })
+        : [];
+
+    return {
+      reveals: newWords.map((word) => ({
+        id: word.id,
+        term: word.term,
+        translation: word.translation,
+        romanization: word.romanization,
+        exampleSentence: word.exampleSentence,
+        image: wordImagePath(word),
+      })),
+      quiz: shuffle(
+        reviewSample.map((word) => buildQuestion(word, distractorPool, course)),
+      ),
+    };
+  },
+);
 
 async function bumpStreak(userId: string, courseId: string, now: Date) {
   const enrollment = await prisma.courseEnrollment.findUniqueOrThrow({
@@ -446,6 +469,7 @@ function buildQuestion(
     promptRomanization: direction === "term-to-translation" ? word.romanization : null,
     targetLanguage: course.targetLanguage,
     options: shuffle([toOption(word), ...distractors]),
+    image: wordImagePath(word),
   };
 }
 

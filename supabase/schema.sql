@@ -472,3 +472,333 @@ cross join (values
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 2
 on conflict (lesson_id, position) do nothing;
+
+-- 15. New topic vocabulary: greetings, sports, actions, numbers, placements,
+--     foods, hobbies (both courses) ---------------------------------------
+-- Same idempotent shape as every section above. "Colours" already exists in
+-- both courses so it's not repeated here. en-for-ja continues at position 5,
+-- yue-for-en at position 3.
+
+insert into public.lessons (course_id, path, title, position)
+select id, 'vocab', l.title, l.position
+from public.courses
+cross join (values
+  ('Greetings', 5),
+  ('Sports', 6),
+  ('Actions', 7),
+  ('Numbers to 10', 8),
+  ('Placements', 9),
+  ('Foods', 10),
+  ('Hobbies', 11)
+) as l(title, position)
+where public.courses.slug = 'en-for-ja'
+on conflict (course_id, path, position) do nothing;
+
+insert into public.lessons (course_id, path, title, position)
+select id, 'vocab', l.title, l.position
+from public.courses
+cross join (values
+  ('Greetings', 3),
+  ('Sports', 4),
+  ('Actions', 5),
+  ('Numbers to 10', 6),
+  ('Placements', 7),
+  ('Foods', 8),
+  ('Hobbies', 9)
+) as l(title, position)
+where public.courses.slug = 'yue-for-en'
+on conflict (course_id, path, position) do nothing;
+
+-- English for Japanese speakers -------------------------------------------
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('good morning', 'おはようございます', 'Good morning! Did you sleep well?', 1),
+  ('good evening', 'こんばんは', 'Good evening, everyone.', 2),
+  ('good night', 'おやすみなさい', 'Good night, see you tomorrow.', 3),
+  ('see you later', 'またね', 'See you later, take care!', 4),
+  ('see you tomorrow', 'また明日', 'See you tomorrow at school.', 5),
+  ('how are you', 'お元気ですか', 'How are you today?', 6),
+  ('I''m fine', '元気です', 'I''m fine, thank you for asking.', 7),
+  ('nice to meet you', 'はじめまして', 'Nice to meet you, I''m Tom.', 8),
+  ('long time no see', 'お久しぶりです', 'Long time no see! How have you been?', 9),
+  ('welcome', 'ようこそ', 'Welcome to our home.', 10),
+  ('have a good day', '良い一日を', 'Have a good day at work!', 11),
+  ('take care', 'お大事に', 'Take care, and get well soon.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 5
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('soccer', 'サッカー', 'He plays soccer every weekend.', 1),
+  ('baseball', '野球', 'Baseball is very popular in Japan.', 2),
+  ('basketball', 'バスケットボール', 'She is good at basketball.', 3),
+  ('tennis', 'テニス', 'We watched a tennis match.', 4),
+  ('swimming', '水泳', 'Swimming is great exercise.', 5),
+  ('running', 'ランニング', 'I go running every morning.', 6),
+  ('volleyball', 'バレーボール', 'They played volleyball at the beach.', 7),
+  ('golf', 'ゴルフ', 'My father enjoys golf.', 8),
+  ('skiing', 'スキー', 'Skiing is fun in winter.', 9),
+  ('table tennis', '卓球', 'Table tennis is fast and fun.', 10),
+  ('badminton', 'バドミントン', 'Badminton is easy to learn.', 11),
+  ('judo', '柔道', 'Judo is a traditional Japanese sport.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 6
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('eat', '食べる', 'I eat breakfast at seven.', 1),
+  ('drink', '飲む', 'Please drink some water.', 2),
+  ('run', '走る', 'He runs every morning.', 3),
+  ('walk', '歩く', 'We walk to school together.', 4),
+  ('sleep', '寝る', 'The baby is sleeping now.', 5),
+  ('read', '読む', 'I like to read books.', 6),
+  ('write', '書く', 'She writes in her diary.', 7),
+  ('speak', '話す', 'Can you speak English?', 8),
+  ('listen', '聞く', 'I listen to music every day.', 9),
+  ('watch', '見る', 'Let''s watch a movie tonight.', 10),
+  ('play', '遊ぶ', 'The kids play in the park.', 11),
+  ('study', '勉強する', 'I study Japanese every night.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 7
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('one', '一', 'I have one brother.', 1),
+  ('two', '二', 'She has two cats.', 2),
+  ('three', '三', 'There are three books on the table.', 3),
+  ('four', '四', 'He is four years old.', 4),
+  ('five', '五', 'Five people are waiting.', 5),
+  ('six', '六', 'I wake up at six.', 6),
+  ('seven', '七', 'We have seven days in a week.', 7),
+  ('eight', '八', 'The store closes at eight.', 8),
+  ('nine', '九', 'Nine students are absent today.', 9),
+  ('ten', '十', 'Ten fingers, ten toes.', 10)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 8
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('next to', '隣に', 'The bank is next to the station.', 1),
+  ('left', '左', 'Turn left at the corner.', 2),
+  ('right', '右', 'The store is on the right.', 3),
+  ('above', '上に', 'The bird flew above the trees.', 4),
+  ('below', '下に', 'The cat is below the table.', 5),
+  ('in front of', '前に', 'She is standing in front of the door.', 6),
+  ('behind', '後ろに', 'The garden is behind the house.', 7),
+  ('inside', '中に', 'The keys are inside the bag.', 8),
+  ('outside', '外に', 'Let''s eat outside today.', 9),
+  ('between', '間に', 'The park is between two buildings.', 10),
+  ('near', '近くに', 'The school is near my house.', 11),
+  ('far', '遠くに', 'The airport is far from here.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 9
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('rice', 'ご飯', 'I eat rice every day.', 1),
+  ('potato', 'じゃがいも', 'She boiled the potatoes.', 2),
+  ('bread', 'パン', 'He bought fresh bread.', 3),
+  ('meat', '肉', 'We don''t eat meat on Fridays.', 4),
+  ('fish', '魚', 'The fish was delicious.', 5),
+  ('vegetable', '野菜', 'Eat more vegetables.', 6),
+  ('fruit', '果物', 'Fruit is good for you.', 7),
+  ('egg', '卵', 'I had an egg for breakfast.', 8),
+  ('milk', '牛乳', 'Please pass the milk.', 9),
+  ('cheese', 'チーズ', 'I love cheese on pizza.', 10),
+  ('noodles', '麺', 'Noodles are easy to cook.', 11),
+  ('soup', 'スープ', 'The soup is still hot.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 10
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, example_sentence, position)
+select l.id, w.term, w.translation, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('reading', '読書', 'Reading is my favorite hobby.', 1),
+  ('cooking', '料理', 'Cooking relaxes me after work.', 2),
+  ('drawing', '絵を描くこと', 'She enjoys drawing in her free time.', 3),
+  ('photography', '写真撮影', 'Photography is a fun hobby.', 4),
+  ('gardening', 'ガーデニング', 'Gardening keeps him busy on weekends.', 5),
+  ('traveling', '旅行', 'Traveling opens your mind.', 6),
+  ('singing', '歌うこと', 'Singing makes me happy.', 7),
+  ('dancing', 'ダンス', 'Dancing is great exercise.', 8),
+  ('fishing', '釣り', 'Fishing is peaceful.', 9),
+  ('camping', 'キャンプ', 'We went camping last summer.', 10),
+  ('gaming', 'ゲーム', 'Gaming is popular among teens.', 11),
+  ('knitting', '編み物', 'Knitting is a relaxing hobby.', 12)
+) as w(term, translation, example_sentence, position)
+where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 11
+on conflict (lesson_id, position) do nothing;
+
+-- Cantonese for English speakers -------------------------------------------
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('早晨', 'good morning', 'zou2 san4', '早晨，你瞓得好唔好？', 1),
+  ('夜晚好', 'good evening', 'je6 maan5 hou2', '夜晚好，各位。', 2),
+  ('晚安', 'good night', 'maan5 on1', '晚安，聽日見。', 3),
+  ('遲啲見', 'see you later', 'ci4 di1 gin3', '遲啲見，你要保重呀。', 4),
+  ('聽日見', 'see you tomorrow', 'ting1 jat6 gin3', '聽日見，返學要早啲。', 5),
+  ('你好嗎', 'how are you', 'nei5 hou2 maa3', '你好嗎？今日點呀？', 6),
+  ('我幾好', 'I''m fine', 'ngo5 gei2 hou2', '我幾好，多謝關心。', 7),
+  ('好高興認識你', 'nice to meet you', 'hou2 gou1 hing3 jing6 sik1 nei5', '好高興認識你，我叫阿明。', 8),
+  ('好耐冇見', 'long time no see', 'hou2 noi6 mou5 gin3', '好耐冇見，你最近點呀？', 9),
+  ('歡迎', 'welcome', 'fun1 jing4', '歡迎嚟到我屋企。', 10),
+  ('祝你今日愉快', 'have a good day', 'zuk1 nei5 gam1 jat6 jyu4 faai3', '返工順利，祝你今日愉快。', 11),
+  ('保重', 'take care', 'bou2 zung6', '保重呀，早啲好返。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 3
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('足球', 'soccer', 'zuk1 kau4', '佢每個週末都踢足球。', 1),
+  ('棒球', 'baseball', 'paang5 kau4', '棒球喺日本好受歡迎。', 2),
+  ('籃球', 'basketball', 'laam4 kau4', '佢打籃球好叻。', 3),
+  ('網球', 'tennis', 'mong5 kau4', '我哋睇咗場網球比賽。', 4),
+  ('游水', 'swimming', 'jau4 seoi2', '游水係好好嘅運動。', 5),
+  ('跑步', 'running', 'paau2 bou6', '我每朝都去跑步。', 6),
+  ('排球', 'volleyball', 'paai4 kau4', '佢哋喺沙灘打排球。', 7),
+  ('高爾夫球', 'golf', 'gou1 ji5 fu1 kau4', '我爸爸鍾意打高爾夫球。', 8),
+  ('滑雪', 'skiing', 'waat6 syut3', '冬天滑雪好好玩。', 9),
+  ('乒乓波', 'table tennis', 'bing1 bam1 bo1', '乒乓波又快又好玩。', 10),
+  ('羽毛球', 'badminton', 'jyu5 mou4 kau4', '羽毛球好易學。', 11),
+  ('柔道', 'judo', 'jau4 dou6', '柔道係日本傳統運動。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 4
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('食', 'eat', 'sik6', '我七點食早餐。', 1),
+  ('飲', 'drink', 'jam2', '唔該飲啲水。', 2),
+  ('跑', 'run', 'paau2', '佢每朝都跑步。', 3),
+  ('行', 'walk', 'haang4', '我哋一齊行去學校。', 4),
+  ('瞓覺', 'sleep', 'fan3 gaau3', 'BB而家瞓緊覺。', 5),
+  ('睇書', 'read', 'tai2 syu1', '我鍾意睇書。', 6),
+  ('寫', 'write', 'se2', '佢寫緊日記。', 7),
+  ('講', 'speak', 'gong2', '你識唔識講英文？', 8),
+  ('聽', 'listen', 'teng1', '我日日都聽歌。', 9),
+  ('睇', 'watch', 'tai2', '今晚一齊睇戲呀。', 10),
+  ('玩', 'play', 'waan2', '啲細路喺公園玩。', 11),
+  ('讀書', 'study', 'duk6 syu1', '我夜晚都讀緊日文。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 5
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('一', 'one', 'jat1', '而家一點。', 1),
+  ('二', 'two', 'ji6', '我住喺二樓。', 2),
+  ('三', 'three', 'saam1', '而家三點。', 3),
+  ('四', 'four', 'sei3', '佢四歲。', 4),
+  ('五', 'five', 'ng5', '而家五點。', 5),
+  ('六', 'six', 'luk6', '我六點起身。', 6),
+  ('七', 'seven', 'cat1', '一個禮拜有七日。', 7),
+  ('八', 'eight', 'baat3', '間鋪八點關門。', 8),
+  ('九', 'nine', 'gau2', '九個學生冇嚟。', 9),
+  ('十', 'ten', 'sap6', '十隻手指，十隻腳趾。', 10)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 6
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('隔籬', 'next to', 'gaak3 lei4', '銀行喺車站隔籬。', 1),
+  ('左邊', 'left', 'zo2 bin1', '喺路口轉左。', 2),
+  ('右邊', 'right', 'jau6 bin1', '間鋪喺右邊。', 3),
+  ('上面', 'above', 'soeng6 min6', '隻雀喺樹上面飛。', 4),
+  ('下面', 'below', 'haa6 min6', '隻貓喺枱下面。', 5),
+  ('前面', 'in front of', 'cin4 min6', '佢企喺門前面。', 6),
+  ('後面', 'behind', 'hau6 min6', '花園喺屋後面。', 7),
+  ('入面', 'inside', 'jap6 min6', '鎖匙喺袋入面。', 8),
+  ('出面', 'outside', 'ceot1 min6', '今日出面食飯啦。', 9),
+  ('中間', 'between', 'zung1 gaan1', '公園喺兩座樓中間。', 10),
+  ('附近', 'near', 'fu6 gan6', '學校喺我屋企附近。', 11),
+  ('遠', 'far', 'jyun5', '機場離呢度好遠。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 7
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('飯', 'rice', 'faan6', '我日日都食飯。', 1),
+  ('薯仔', 'potato', 'syu4 zai2', '佢煲咗啲薯仔。', 2),
+  ('麵包', 'bread', 'min6 baau1', '佢買咗新鮮麵包。', 3),
+  ('肉', 'meat', 'juk6', '我哋星期五唔食肉。', 4),
+  ('魚', 'fish', 'jyu2', '條魚好好味。', 5),
+  ('菜', 'vegetable', 'coi3', '多食啲菜啦。', 6),
+  ('生果', 'fruit', 'saang1 gwo2', '生果對身體好。', 7),
+  ('蛋', 'egg', 'daan2', '我食咗隻蛋做早餐。', 8),
+  ('奶', 'milk', 'naai5', '唔該遞返樽奶畀我。', 9),
+  ('芝士', 'cheese', 'zi1 si2', '我鍾意薄餅加芝士。', 10),
+  ('麵', 'noodles', 'min6', '麵好易煮。', 11),
+  ('湯', 'soup', 'tong1', '碗湯仲好熱。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 8
+on conflict (lesson_id, position) do nothing;
+
+insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
+from public.lessons l
+join public.courses c on c.id = l.course_id
+cross join (values
+  ('睇書', 'reading', 'tai2 syu1', '睇書係我最鍾意嘅興趣。', 1),
+  ('煮飯', 'cooking', 'zyu2 faan6', '煮飯令我放鬆。', 2),
+  ('畫畫', 'drawing', 'waak6 waa2', '佢得閒鍾意畫畫。', 3),
+  ('攝影', 'photography', 'sip3 jing2', '攝影係好好玩嘅興趣。', 4),
+  ('種花', 'gardening', 'zung3 faa1', '佢週末鍾意種花。', 5),
+  ('旅行', 'traveling', 'leoi5 hang4', '旅行可以開闊眼界。', 6),
+  ('唱歌', 'singing', 'coeng3 go1', '唱歌令我開心。', 7),
+  ('跳舞', 'dancing', 'tiu3 mou5', '跳舞係好好嘅運動。', 8),
+  ('釣魚', 'fishing', 'diu3 jyu2', '釣魚好寧靜。', 9),
+  ('露營', 'camping', 'lou6 jing4', '我哋琴年夏天去露營。', 10),
+  ('打機', 'gaming', 'daa2 gei1', '打機喺後生仔中間好流行。', 11),
+  ('織冷衫', 'knitting', 'zik1 laang1 saam1', '織冷衫係好放鬆嘅興趣。', 12)
+) as w(term, translation, romanization, example_sentence, position)
+where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 9
+on conflict (lesson_id, position) do nothing;
