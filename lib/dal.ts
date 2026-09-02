@@ -20,11 +20,11 @@ import {
   addDays,
   applyDailyActivity,
   CATEGORY_BOOST,
-  REVIEW_BATCH_SIZE,
+  QUIZ_SIZE,
   SET_SIZE,
   startOfUTCDay,
   weightForBox,
-  weightedSample,
+  weightedSampleWithRepeats,
 } from "@/lib/srs";
 import { wordImagePath } from "@/lib/images";
 
@@ -345,15 +345,15 @@ export const getDailyWordCounts = cache(async (courseSlug: string): Promise<Dail
 //
 // There's no daily cap — a "set" is just SET_SIZE new words, and a user can
 // run as many sets as they want in a day. New words come only from the
-// chosen category (`lessonId`); review questions are drawn from every word
-// that was already `learning` *before* this set started, across the whole
-// course, weighted by `weightForBox` (newer/weaker words come up more often)
-// times `CATEGORY_BOOST` for words in the chosen category (they dominate the
-// sample without excluding the rest of the course). A word only enters the
-// review pool starting from the *next* set after it was introduced, never
-// the same one — that's why `activePool` is read before this set's new
-// words are inserted below, not after. Otherwise a word could be quizzed
-// seconds after being revealed for the first time.
+// chosen category (`lessonId`); quiz questions are drawn from every word
+// that is `learning` (including this set's brand-new words — a reveal is
+// immediately followed by a quiz on it, not held back to the next session),
+// across the whole course, weighted by `weightForBox` (newer/weaker words
+// come up more often) times `CATEGORY_BOOST` for words in the chosen
+// category (they dominate the sample without excluding the rest of the
+// course). The quiz always aims for QUIZ_SIZE questions — when someone has
+// only learnt a handful of words, `weightedSampleWithRepeats` repeats them
+// rather than shipping a short quiz.
 export const getPracticeQueue = cache(
   async (courseSlug: string, lessonId: string): Promise<PracticeQueue> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
@@ -402,21 +402,34 @@ export const getPracticeQueue = cache(
       await bumpStreak(user.id, course.id, now);
     }
 
-    const reviewSample = weightedSample(
-      activePool.map((progress) => ({
+    const quizCandidates = [
+      ...activePool.map((progress) => ({
         item: progress.word,
         weight:
           weightForBox(progress.box) *
           (progress.word.lessonId === lesson.id ? CATEGORY_BOOST : 1),
       })),
-      REVIEW_BATCH_SIZE,
-    );
+      // This set's newly introduced words are always in the chosen lesson,
+      // so they always get the category boost too.
+      ...newWords.map((word) => ({
+        item: word,
+        weight: weightForBox(1) * CATEGORY_BOOST,
+      })),
+    ];
+
+    const reviewSample = weightedSampleWithRepeats(quizCandidates, QUIZ_SIZE);
 
     const distractorPool =
       reviewSample.length > 0
         ? await prisma.word.findMany({
             where: { lesson: { courseId: course.id } },
-            select: { id: true, term: true, translation: true, romanization: true },
+            select: {
+              id: true,
+              term: true,
+              translation: true,
+              romanization: true,
+              lessonId: true,
+            },
           })
         : [];
 
@@ -428,6 +441,7 @@ export const getPracticeQueue = cache(
         romanization: word.romanization,
         exampleSentence: word.exampleSentence,
         image: wordImagePath(word),
+        targetLanguage: course.targetLanguage,
       })),
       quiz: shuffle(
         reviewSample.map((word) => buildQuestion(word, distractorPool, course)),
@@ -458,7 +472,22 @@ async function bumpStreak(userId: string, courseId: string, now: Date) {
   });
 }
 
-type QuestionWord = { id: string; term: string; translation: string; romanization: string | null };
+type QuestionWord = {
+  id: string;
+  term: string;
+  translation: string;
+  romanization: string | null;
+  lessonId: string;
+};
+
+// Distractors lean heavily toward the word's own category: 2 of the 3 come
+// from the same lesson and 1 from elsewhere in the course, so together with
+// the correct answer (always same-category) 3 of the 4 options share a
+// category — close to the requested 4-out-of-5 split, given there are only
+// 4 options on screen. Falls back to whatever's left in the course when a
+// category is too small to fill on its own.
+const SAME_CATEGORY_DISTRACTORS = 2;
+const OTHER_CATEGORY_DISTRACTORS = 1;
 
 function buildQuestion(
   word: QuestionWord,
@@ -482,9 +511,22 @@ function buildQuestion(
           image: wordImagePath(candidate),
         };
 
-  const distractors = shuffle(pool.filter((candidate) => candidate.id !== word.id))
-    .slice(0, 3)
-    .map(toOption);
+  const rest = pool.filter((candidate) => candidate.id !== word.id);
+  const sameCategory = shuffle(rest.filter((candidate) => candidate.lessonId === word.lessonId));
+  const otherCategory = shuffle(rest.filter((candidate) => candidate.lessonId !== word.lessonId));
+
+  const picked: QuestionWord[] = [
+    ...sameCategory.slice(0, SAME_CATEGORY_DISTRACTORS),
+    ...otherCategory.slice(0, OTHER_CATEGORY_DISTRACTORS),
+  ];
+
+  if (picked.length < 3) {
+    const used = new Set(picked.map((candidate) => candidate.id));
+    const fallback = shuffle(rest.filter((candidate) => !used.has(candidate.id)));
+    picked.push(...fallback.slice(0, 3 - picked.length));
+  }
+
+  const distractors = picked.map(toOption);
 
   return {
     wordId: word.id,

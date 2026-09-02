@@ -199,12 +199,16 @@ export const PracticeSession = ({
 
           <div className="flex flex-col items-center md:items-start">
             <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
-              <p className="text-4xl font-semibold tracking-tight text-sumi">
-                {word.term}
-              </p>
+              <div className="flex items-center justify-center gap-3">
+                <p className="text-4xl font-semibold tracking-tight text-sumi">
+                  {word.term}
+                </p>
+
+                <SpeakButton text={word.term} language={word.targetLanguage} />
+              </div>
 
               {word.romanization && (
-                <p className="mt-2 text-sm text-sumi-soft">
+                <p className="mt-2 text-lg text-sumi-soft">
                   {word.romanization}
                 </p>
               )}
@@ -235,7 +239,9 @@ export const PracticeSession = ({
                 onClick={advanceFromReveal}
                 className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
               >
-                Got it — next word
+                {revealIndex + 1 < reveals.length
+                  ? "Got it — next word"
+                  : "Got it — time to practice"}
               </button>
 
               <button
@@ -261,7 +267,7 @@ export const PracticeSession = ({
     const answersUseImages = promptIsTargetLanguage;
 
     return (
-      <section className="mx-auto flex w-full max-w-2xl flex-col items-center">
+      <section className="mx-auto flex w-full max-w-4xl flex-col items-center">
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <span className="rounded-full bg-ai-soft px-4 py-1.5 text-sm font-medium text-ai-dark">
             Quick review
@@ -282,15 +288,13 @@ export const PracticeSession = ({
               className="mx-auto mb-6 max-h-64 w-full object-contain sm:max-h-72"
             />
           )}
-
           <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
             {answersUseImages
               ? "What does this mean?"
               : "Can you find the right word?"}
           </p>
-
           <div className="mt-3 flex items-center justify-center gap-3">
-            <p className="text-3xl font-semibold text-sumi">
+            <p className="text-3xl font-semibold text-sumi capitalize">
               {question.prompt}
             </p>
 
@@ -301,7 +305,6 @@ export const PracticeSession = ({
               />
             )}
           </div>
-
           {question.promptRomanization && (
             <p className="mt-2 text-sm text-sumi-soft">
               {question.promptRomanization}
@@ -309,7 +312,7 @@ export const PracticeSession = ({
           )}
         </div>
 
-        <div className="mt-5 grid w-full grid-cols-1 gap-3">
+        <div className="mt-5 grid w-full grid-cols-1 gap-3 md:grid-cols-2">
           {question.options.map((option) => {
             const isSelected = feedback?.selected === option.text;
             const isCorrectOption =
@@ -338,7 +341,13 @@ export const PracticeSession = ({
                     className="h-16 w-16 shrink-0 rounded-xl bg-washi-soft object-contain p-1"
                   />
                 )}
-
+                {/* {!promptIsTargetLanguage && option.image && (
+                  <WordImage
+                    src={option.image}
+                    alt=""
+                    className="h-16 w-16 shrink-0 rounded-xl bg-washi-soft object-contain p-1"
+                  />
+                )} */}
                 <button
                   type="button"
                   disabled={pending || Boolean(feedback)}
@@ -346,17 +355,16 @@ export const PracticeSession = ({
                   aria-label={`Choose ${option.text}`}
                   className="flex min-w-0 flex-1 items-center self-stretch text-left font-medium disabled:cursor-not-allowed"
                 >
-                  <span>
+                  <span className="capitalize">
                     {option.text}
 
                     {option.romanization && (
-                      <span className="mt-0.5 block text-xs font-normal opacity-70">
+                      <span className="mt-0.5 block text-xs font-normal opacity-70 lowercase">
                         {option.romanization}
                       </span>
                     )}
                   </span>
                 </button>
-
                 {feedback && isCorrectOption && (
                   <span
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-matcha text-sm text-white"
@@ -365,7 +373,6 @@ export const PracticeSession = ({
                     ✓
                   </span>
                 )}
-
                 {feedback && isSelected && !feedback.correct && (
                   <span
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-shu text-sm text-white"
@@ -374,7 +381,6 @@ export const PracticeSession = ({
                     ×
                   </span>
                 )}
-
                 {!promptIsTargetLanguage && (
                   <SpeakButton
                     text={option.text}

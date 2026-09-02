@@ -6,14 +6,16 @@
 // answer always drops a word back to box 1; box 5 retires it as "known".
 const MAX_BOX = 5;
 const SET_SIZE = 3;
-const REVIEW_BATCH_SIZE = 5;
+// A full quiz round — long enough to give real practice even early on, when
+// filling it means repeating the handful of words learnt so far.
+const QUIZ_SIZE = 12;
 // Flat multiplier on top of `weightForBox` for words in the category being
 // practiced — makes them dominate the review sample without excluding the
 // rest of the course (a boost, not a filter, same philosophy as the box
 // weighting itself).
 const CATEGORY_BOOST = 4;
 
-export { MAX_BOX, SET_SIZE, REVIEW_BATCH_SIZE, CATEGORY_BOOST };
+export { MAX_BOX, SET_SIZE, QUIZ_SIZE, CATEGORY_BOOST };
 
 export function nextBoxAfterAnswer(box: number, correct: boolean): number {
   return correct ? Math.min(box + 1, MAX_BOX) : 1;
@@ -35,6 +37,23 @@ export function weightedSample<T>(items: { item: T; weight: number }[], k: numbe
     .sort((a, b) => b.key - a.key)
     .slice(0, k)
     .map((entry) => entry.item);
+}
+
+// Same weighted draw as `weightedSample`, but once every candidate has been
+// used once it starts drawing again with replacement until `k` is reached —
+// so a quiz still hits its full length even when only a few words have been
+// introduced so far. Repeating words early on is fine; running a 3-question
+// quiz isn't.
+export function weightedSampleWithRepeats<T>(items: { item: T; weight: number }[], k: number): T[] {
+  if (items.length === 0) return [];
+
+  const result = weightedSample(items, Math.min(k, items.length));
+
+  while (result.length < k) {
+    result.push(weightedSample(items, 1)[0]);
+  }
+
+  return result;
 }
 
 export function startOfUTCDay(date: Date = new Date()): Date {

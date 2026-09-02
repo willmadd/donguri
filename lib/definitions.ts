@@ -100,6 +100,7 @@ export type RevealWord = {
   romanization: string | null;
   exampleSentence: string | null;
   image: string;
+  targetLanguage: string;
 };
 
 export type QuizOption = {
