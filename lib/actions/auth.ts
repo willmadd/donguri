@@ -15,12 +15,25 @@ import {
 } from "@/lib/definitions";
 import { prisma } from "@/lib/prisma";
 
-async function getOrigin() {
+const getOrigin = async () => {
+  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
+  }
+
   const headersList = await headers();
-  const host = headersList.get("host");
-  const protocol = headersList.get("x-forwarded-proto") ?? "http";
+  const host = headersList.get("x-forwarded-host") ?? headersList.get("host");
+  const protocol =
+    headersList.get("x-forwarded-proto") ??
+    (host?.includes("localhost") ? "http" : "https");
+
+  if (!host) {
+    throw new Error("Could not determine the application URL.");
+  }
+
   return `${protocol}://${host}`;
-}
+};
 
 export async function login(
   _state: LoginFormState,
