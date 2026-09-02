@@ -76,9 +76,14 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-shu/20 bg-shu/5 p-6">
           <h2 className="font-semibold text-shu-dark">Admin panel</h2>
           <p className="mt-1 text-sm text-sumi-soft">
-            This section is only visible to admins. Wire up user management,
-            content moderation, or reporting here.
+            This section is only visible to admins.
           </p>
+          <Link
+            href="/dashboard/admin/reset-password"
+            className="mt-3 inline-flex text-sm font-medium text-shu-dark hover:underline"
+          >
+            Reset a user&apos;s password →
+          </Link>
         </div>
       )}
     </div>

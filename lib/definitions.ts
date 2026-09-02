@@ -72,6 +72,27 @@ export type ResetPasswordFormState =
     }
   | undefined;
 
+export const AdminResetPasswordFormSchema = z.object({
+  email: z.email({ error: "Please enter a valid email." }).trim(),
+  password: z
+    .string()
+    .min(8, { error: "Be at least 8 characters long." })
+    .regex(/[a-zA-Z]/, { error: "Contain at least one letter." })
+    .regex(/[0-9]/, { error: "Contain at least one number." })
+    .trim(),
+});
+
+export type AdminResetPasswordFormState =
+  | {
+      errors?: {
+        email?: string[];
+        password?: string[];
+      };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
 export type UserRole = "admin" | "user";
 
 export type Profile = {
