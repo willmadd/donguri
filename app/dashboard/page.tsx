@@ -28,7 +28,10 @@ export default async function DashboardPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-sumi-soft">
             Your courses
           </h2>
-          <Link href="/dashboard/courses" className="text-sm text-ai hover:text-ai-dark">
+          <Link
+            href="/dashboard/courses"
+            className="text-sm text-ai hover:text-ai-dark"
+          >
             Browse courses
           </Link>
         </div>
@@ -55,7 +58,9 @@ export default async function DashboardPage() {
               >
                 <h3 className="font-semibold text-sumi">{course.title}</h3>
                 {course.description && (
-                  <p className="mt-1 text-sm text-sumi-soft">{course.description}</p>
+                  <p className="mt-1 text-sm text-sumi-soft">
+                    {course.description}
+                  </p>
                 )}
                 <div className="mt-3 flex items-center gap-3 text-xs text-sumi-soft">
                   <span>
@@ -63,7 +68,9 @@ export default async function DashboardPage() {
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-sakura-soft px-2 py-0.5 font-medium text-sakura-dark">
                     🔥 {course.currentStreak}
-                    <span className="text-sakura-dark/70">· best {course.longestStreak}</span>
+                    <span className="text-sakura-dark/70">
+                      · best {course.longestStreak}
+                    </span>
                   </span>
                 </div>
               </Link>
@@ -73,18 +80,46 @@ export default async function DashboardPage() {
       </div>
 
       {profile.role === "admin" && (
-        <div className="rounded-2xl border border-shu/20 bg-shu/5 p-6">
-          <h2 className="font-semibold text-shu-dark">Admin panel</h2>
-          <p className="mt-1 text-sm text-sumi-soft">
-            This section is only visible to admins.
-          </p>
-          <Link
-            href="/dashboard/admin/reset-password"
-            className="mt-3 inline-flex text-sm font-medium text-shu-dark hover:underline"
-          >
-            Reset a user&apos;s password →
-          </Link>
-        </div>
+        <section className="rounded-2xl border border-shu/20 bg-shu/5 p-6">
+          <div>
+            <h2 className="font-semibold text-shu-dark">Admin panel</h2>
+            <p className="mt-1 text-sm text-sumi-soft">
+              Manage courses, users and other administrative settings.
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <Link
+              href="/dashboard/admin/courses"
+              className="group rounded-xl border border-shu/15 bg-white/70 p-4 transition hover:border-shu/30 hover:bg-white"
+            >
+              <h3 className="text-sm font-semibold text-shu-dark">
+                Course management
+              </h3>
+              <p className="mt-1 text-sm text-sumi-soft">
+                Create courses and manage their vocabulary and content.
+              </p>
+              <span className="mt-3 inline-block text-sm font-medium text-shu-dark group-hover:underline">
+                Manage courses →
+              </span>
+            </Link>
+
+            <Link
+              href="/dashboard/admin/reset-password"
+              className="group rounded-xl border border-shu/15 bg-white/70 p-4 transition hover:border-shu/30 hover:bg-white"
+            >
+              <h3 className="text-sm font-semibold text-shu-dark">
+                User management
+              </h3>
+              <p className="mt-1 text-sm text-sumi-soft">
+                Manage user accounts and reset their passwords.
+              </p>
+              <span className="mt-3 inline-block text-sm font-medium text-shu-dark group-hover:underline">
+                Manage users →
+              </span>
+            </Link>
+          </div>
+        </section>
       )}
     </div>
   );

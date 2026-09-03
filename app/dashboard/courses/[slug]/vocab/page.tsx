@@ -4,6 +4,7 @@ import { getCourseVocabOverview } from "@/lib/dal";
 import { skipLesson } from "@/lib/actions/vocab";
 import { ResetProgressButton } from "@/components/vocab/reset-progress-button";
 import { LessonWords } from "@/components/vocab/lesson-words";
+import { BackLink } from "@/components/ui/back-link";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -24,6 +25,7 @@ export default async function CourseVocabPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div>
+        <BackLink href={`/dashboard/courses/${slug}`} label={course.title} />
         <h1 className="text-2xl font-semibold text-sumi">Vocabulary</h1>
         <p className="mt-1 text-sumi-soft">
           {course.title} — pick a category to practice.

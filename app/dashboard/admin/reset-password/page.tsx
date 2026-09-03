@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { requireProfile } from "@/lib/dal";
+import { requireAdminProfile } from "@/lib/dal";
 import { AdminResetPasswordForm } from "@/components/admin/admin-reset-password-form";
+import { BackLink } from "@/components/ui/back-link";
 
 export const metadata: Metadata = {
   title: "Reset user password — Donguri",
 };
 
 export default async function AdminResetPasswordPage() {
-  const profile = await requireProfile();
-
-  if (profile.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireAdminProfile();
 
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BackLink href="/dashboard" label="Admin" />
         <h1 className="text-2xl font-semibold text-sumi">
           Reset a user&apos;s password
         </h1>

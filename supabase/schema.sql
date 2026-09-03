@@ -802,3 +802,25 @@ cross join (values
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 9
 on conflict (lesson_id, position) do nothing;
+
+-- 16. Word images (bunny.net) ------------------------------------------------
+-- `image_key` is the object path within the `donguri` bunny.net storage zone
+-- (e.g. `words/<uuid>.webp`), not a full URL — the CDN URL is built at read
+-- time from BUNNY_PULL_ZONE_HOST. Null until an admin uploads a picture for
+-- that word; `lib/images.ts` falls back to the legacy filename-convention
+-- lookup when it's absent.
+
+alter table public.words add column if not exists image_key text;
+
+-- 17. Active/inactive toggle for courses and words --------------------------
+-- Lets an admin hide a course or word from the learner-facing app without
+-- deleting it. Defaults to true so every existing row stays visible.
+
+alter table public.courses add column if not exists active boolean not null default true;
+alter table public.words add column if not exists active boolean not null default true;
+
+-- 18. Active/inactive toggle for categories (lessons) -----------------------
+-- Same purpose as section 17, one level down: hides a whole category from
+-- the learner-facing app without deleting it or its words.
+
+alter table public.lessons add column if not exists active boolean not null default true;

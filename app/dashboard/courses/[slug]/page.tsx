@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getCourseHome, getDailyWordCounts } from "@/lib/dal";
 import { StreakChart } from "@/components/vocab/streak-chart";
+import { BackLink } from "@/components/ui/back-link";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -23,6 +24,7 @@ export default async function CourseHomePage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div>
+        <BackLink href="/dashboard/courses" label="Courses" />
         <h1 className="text-2xl font-semibold text-sumi">{course.title}</h1>
         {course.description && (
           <p className="mt-1 text-sumi-soft">{course.description}</p>

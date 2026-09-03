@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getAvailableCourses, getEnrolledCourses } from "@/lib/dal";
 import { enrollInCourse } from "@/lib/actions/courses";
+import { BackLink } from "@/components/ui/back-link";
 
 export const metadata: Metadata = {
   title: "Courses — Donguri",
@@ -16,6 +17,7 @@ export default async function CoursesPage() {
   return (
     <div className="flex flex-col gap-10">
       <div>
+        <BackLink href="/dashboard" label="Dashboard" />
         <h1 className="text-2xl font-semibold text-sumi">Courses</h1>
         <p className="mt-1 text-sumi-soft">
           Sign up for a course to start practicing. You can enroll in as many

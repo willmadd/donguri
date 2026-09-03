@@ -1,38 +1,32 @@
-type TextFieldProps = {
+type TextareaFieldProps = {
   label: string;
   name: string;
-  type?: string;
   placeholder?: string;
-  autoComplete?: string;
+  rows?: number;
   required?: boolean;
   defaultValue?: string;
   errors?: string[];
 };
 
-export function TextField({
+export function TextareaField({
   label,
   name,
-  type = "text",
   placeholder,
-  autoComplete,
-  required = true,
+  rows = 3,
+  required = false,
   defaultValue,
   errors,
-}: TextFieldProps) {
+}: TextareaFieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={name}
-        className="text-sm font-medium text-sumi-soft"
-      >
+      <label htmlFor={name} className="text-sm font-medium text-sumi-soft">
         {label}
       </label>
-      <input
+      <textarea
         id={name}
         name={name}
-        type={type}
         placeholder={placeholder}
-        autoComplete={autoComplete}
+        rows={rows}
         required={required}
         defaultValue={defaultValue}
         aria-invalid={errors && errors.length > 0}

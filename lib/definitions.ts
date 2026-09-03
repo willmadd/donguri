@@ -189,6 +189,132 @@ export type EnrolledCourseSummary = CourseSummary &
     lessonsDone: number;
   };
 
+export const CreateCategoryFormSchema = z.object({
+  courseId: z.uuid({ error: "Missing course." }),
+  title: z
+    .string()
+    .trim()
+    .min(1, { error: "Title is required." })
+    .max(100, { error: "Keep it under 100 characters." }),
+});
+
+export type CreateCategoryFormState =
+  | {
+      errors?: { courseId?: string[]; title?: string[] };
+      message?: string;
+      success?: boolean;
+      lessonId?: string;
+    }
+  | undefined;
+
+const MAX_WORD_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// Shared by create and edit — only the id field (which category vs. which
+// word) differs between the two.
+const WordFieldsSchema = {
+  term: z
+    .string()
+    .trim()
+    .min(1, { error: "Term is required." })
+    .max(200, { error: "Keep it under 200 characters." }),
+  translation: z
+    .string()
+    .trim()
+    .min(1, { error: "Translation is required." })
+    .max(200, { error: "Keep it under 200 characters." }),
+  romanization: z
+    .string()
+    .trim()
+    .max(200, { error: "Keep it under 200 characters." })
+    .optional(),
+  exampleSentence: z
+    .string()
+    .trim()
+    .max(500, { error: "Keep it under 500 characters." })
+    .optional(),
+  image: z
+    .file({ error: "Choose an image." })
+    .max(MAX_WORD_IMAGE_BYTES, { error: "Image must be under 5MB." })
+    .mime(["image/webp", "image/png", "image/jpeg"], {
+      error: "Use a WebP, PNG, or JPEG image.",
+    })
+    .optional(),
+};
+
+type WordFieldErrors = {
+  term?: string[];
+  translation?: string[];
+  romanization?: string[];
+  exampleSentence?: string[];
+  image?: string[];
+};
+
+export const CreateWordFormSchema = z.object({
+  lessonId: z.uuid({ error: "Missing category." }),
+  ...WordFieldsSchema,
+});
+
+export type CreateWordFormState =
+  | {
+      errors?: WordFieldErrors & { lessonId?: string[] };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
+export const UpdateWordFormSchema = z.object({
+  wordId: z.uuid({ error: "Missing word." }),
+  ...WordFieldsSchema,
+});
+
+export type UpdateWordFormState =
+  | {
+      errors?: WordFieldErrors & { wordId?: string[] };
+      message?: string;
+    }
+  | undefined;
+
+export const ImportWordsFormSchema = z.object({
+  targetLessonId: z.uuid({ error: "Missing destination category." }),
+  wordIds: z
+    .array(z.uuid())
+    .min(1, { error: "Select at least one word." }),
+});
+
+export type ImportWordsFormState =
+  | {
+      errors?: { targetLessonId?: string[]; wordIds?: string[] };
+      message?: string;
+    }
+  | undefined;
+
+export type AdminCourseOption = {
+  id: string;
+  slug: string;
+  title: string;
+  active: boolean;
+};
+
+export type AdminCategorySummary = {
+  id: string;
+  title: string;
+  path: string;
+  position: number;
+  wordCount: number;
+  active: boolean;
+};
+
+export type AdminWordSummary = {
+  id: string;
+  term: string;
+  translation: string;
+  romanization: string | null;
+  exampleSentence: string | null;
+  position: number;
+  imageKey: string | null;
+  active: boolean;
+};
+
 export type DailyWordCount = {
   date: string;
   count: number;

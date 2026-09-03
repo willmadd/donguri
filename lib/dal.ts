@@ -5,6 +5,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type {
+  AdminCategorySummary,
+  AdminCourseOption,
+  AdminWordSummary,
   CourseSummary,
   DailyWordCount,
   EnrolledCourseSummary,
@@ -108,11 +111,24 @@ export const requireProfile = cache(async (): Promise<Profile> => {
   return profile;
 });
 
+export const requireAdminProfile = cache(async (): Promise<Profile> => {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    redirect("/dashboard");
+  }
+
+  return profile;
+});
+
 // Unlike the other course reads below, this one is intentionally public —
 // used by the signed-out marketing homepage to list the course catalog, so
 // it does not call `requireUser`.
 export const getPublicCourses = cache(async (): Promise<CourseSummary[]> => {
-  const courses = await prisma.course.findMany({ orderBy: { position: "asc" } });
+  const courses = await prisma.course.findMany({
+    where: { active: true },
+    orderBy: { position: "asc" },
+  });
 
   return courses.map((course) => ({
     id: course.id,
@@ -128,7 +144,7 @@ export const getEnrolledCourses = cache(async (): Promise<EnrolledCourseSummary[
   const user = await requireUser();
 
   const enrollments = await prisma.courseEnrollment.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, course: { active: true } },
     orderBy: { course: { position: "asc" } },
     include: {
       course: {
@@ -179,11 +195,116 @@ export const getEnrolledCourses = cache(async (): Promise<EnrolledCourseSummary[
   });
 });
 
+export const getAdminCourses = cache(async (): Promise<AdminCourseOption[]> => {
+  return prisma.course.findMany({
+    orderBy: { position: "asc" },
+    select: { id: true, slug: true, title: true, active: true },
+  });
+});
+
+// Category (Lesson) list for the admin content-management pages — includes
+// every lesson regardless of `path`/title, unlike `getCourseVocabOverview`'s
+// learner-facing allowlist filter in the vocab page itself.
+export const getAdminCategoryOverview = cache(
+  async (
+    courseSlug: string,
+  ): Promise<{ course: CourseSummary; categories: AdminCategorySummary[] }> => {
+    const course = await prisma.course.findUnique({ where: { slug: courseSlug } });
+
+    if (!course) {
+      redirect("/dashboard/admin/courses");
+    }
+
+    const lessons = await prisma.lesson.findMany({
+      where: { courseId: course.id },
+      orderBy: { position: "asc" },
+      include: { _count: { select: { words: true } } },
+    });
+
+    return {
+      course: toCourseSummary(course),
+      categories: lessons.map((lesson) => ({
+        id: lesson.id,
+        title: lesson.title,
+        path: lesson.path,
+        position: lesson.position,
+        wordCount: lesson._count.words,
+        active: lesson.active,
+      })),
+    };
+  },
+);
+
+// Full word list for one category (Lesson), unfiltered by `active` — used by
+// the admin category-detail page and by the import flow's word-selection
+// step (called with the *source* lesson's id there), both of which need to
+// see and toggle inactive rows rather than have them silently excluded.
+export const getAdminCategoryWords = cache(async (lessonId: string) => {
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    include: {
+      course: { select: { slug: true, title: true } },
+      words: { orderBy: { position: "asc" } },
+    },
+  });
+
+  if (!lesson) {
+    redirect("/dashboard/admin/courses");
+  }
+
+  return {
+    lesson: { id: lesson.id, title: lesson.title },
+    course: lesson.course,
+    words: lesson.words.map(
+      (word): AdminWordSummary => ({
+        id: word.id,
+        term: word.term,
+        translation: word.translation,
+        romanization: word.romanization,
+        exampleSentence: word.exampleSentence,
+        position: word.position,
+        imageKey: word.imageKey,
+        active: word.active,
+      }),
+    ),
+  };
+});
+
+// Single word for the admin edit-word page, with enough lesson/course
+// context to verify the route params and build the "back to category" link.
+export const getAdminWord = cache(async (wordId: string) => {
+  const word = await prisma.word.findUnique({
+    where: { id: wordId },
+    include: {
+      lesson: { select: { id: true, title: true, course: { select: { slug: true, title: true } } } },
+    },
+  });
+
+  if (!word) {
+    redirect("/dashboard/admin/courses");
+  }
+
+  return {
+    word: {
+      id: word.id,
+      term: word.term,
+      translation: word.translation,
+      romanization: word.romanization,
+      exampleSentence: word.exampleSentence,
+      position: word.position,
+      imageKey: word.imageKey,
+      active: word.active,
+    } satisfies AdminWordSummary,
+    lesson: { id: word.lesson.id, title: word.lesson.title },
+    course: word.lesson.course,
+  };
+});
+
 export const getAvailableCourses = cache(async (): Promise<CourseSummary[]> => {
   const user = await requireUser();
 
   const courses = await prisma.course.findMany({
-    where: { enrollments: { none: { userId: user.id } } },
+    where: { active: true, enrollments: { none: { userId: user.id } } },
     orderBy: { position: "asc" },
   });
 
@@ -205,7 +326,7 @@ async function requireEnrolledCourse(courseSlug: string) {
 
   const course = await prisma.course.findUnique({ where: { slug: courseSlug } });
 
-  if (!course) {
+  if (!course || !course.active) {
     redirect("/dashboard/courses");
   }
 
@@ -254,10 +375,11 @@ export const getCourseVocabOverview = cache(async (courseSlug: string) => {
   const { user, course } = await requireEnrolledCourse(courseSlug);
 
   const lessons = await prisma.lesson.findMany({
-    where: { courseId: course.id },
+    where: { courseId: course.id, active: true },
     orderBy: { position: "asc" },
     include: {
       words: {
+        where: { active: true },
         orderBy: { position: "asc" },
         select: {
           id: true,
@@ -359,7 +481,7 @@ export const getPracticeQueue = cache(
     const { user, course } = await requireEnrolledCourse(courseSlug);
 
     const lesson = await prisma.lesson.findFirst({
-      where: { id: lessonId, courseId: course.id },
+      where: { id: lessonId, courseId: course.id, active: true },
       select: { id: true },
     });
 
@@ -372,6 +494,7 @@ export const getPracticeQueue = cache(
     const newWords = await prisma.word.findMany({
       where: {
         lessonId: lesson.id,
+        active: true,
         progress: { none: { userId: user.id } },
       },
       orderBy: { position: "asc" },
@@ -382,7 +505,7 @@ export const getPracticeQueue = cache(
       where: {
         userId: user.id,
         status: "learning",
-        word: { lesson: { courseId: course.id } },
+        word: { lesson: { courseId: course.id, active: true }, active: true },
       },
       include: { word: true },
     });
@@ -422,13 +545,14 @@ export const getPracticeQueue = cache(
     const distractorPool =
       reviewSample.length > 0
         ? await prisma.word.findMany({
-            where: { lesson: { courseId: course.id } },
+            where: { lesson: { courseId: course.id, active: true }, active: true },
             select: {
               id: true,
               term: true,
               translation: true,
               romanization: true,
               lessonId: true,
+              imageKey: true,
             },
           })
         : [];
@@ -478,6 +602,7 @@ type QuestionWord = {
   translation: string;
   romanization: string | null;
   lessonId: string;
+  imageKey?: string | null;
 };
 
 // Distractors lean heavily toward the word's own category: 2 of the 3 come

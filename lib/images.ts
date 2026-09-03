@@ -1,7 +1,10 @@
-// Study-card images are looked up by a naming convention for now
-// (`<word>.png`), not a real asset pipeline — there's no `image` column, and
-// no files are generated here. The `<img>` element that uses this is
-// expected to hide itself gracefully if the file 404s.
+import { wordImageUrl } from "@/lib/bunny";
+
+// Words uploaded through the admin panel have a real `imageKey` pointing at
+// a bunny.net object. Older words with no upload yet fall back to a naming
+// convention (`<word>.webp` under public/vocab-images/) — the `<img>`
+// element that uses this is expected to hide itself gracefully if the file
+// 404s.
 
 function isAsciiWord(value: string): boolean {
   return /^[\x20-\x7e]+$/.test(value);
@@ -21,9 +24,12 @@ function slugify(value: string): string {
 export function wordImagePath(word: {
   term: string;
   translation: string;
+  imageKey?: string | null;
 }): string {
-  const label = isAsciiWord(word.term) ? word.term : word.translation;
+  if (word.imageKey) {
+    return wordImageUrl(word.imageKey);
+  }
 
-  console.log(slugify(label));
+  const label = isAsciiWord(word.term) ? word.term : word.translation;
   return `/vocab-images/${slugify(label)}.webp`;
 }

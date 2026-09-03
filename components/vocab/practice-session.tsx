@@ -5,6 +5,7 @@ import Link from "next/link";
 import { submitAnswer, skipWord } from "@/lib/actions/vocab";
 import type { QuizOption, QuizQuestion, RevealWord } from "@/lib/definitions";
 import { useSpeech } from "@/lib/speech";
+import { WordImage } from "@/components/ui/word-image";
 
 type PracticeSessionProps = {
   reveals: RevealWord[];
@@ -13,28 +14,6 @@ type PracticeSessionProps = {
 };
 
 type Phase = "reveal" | "quiz" | "summary";
-
-type WordImageProps = {
-  src: string;
-  alt: string;
-  className?: string;
-};
-
-const WordImage = ({ src, alt, className = "" }: WordImageProps) => {
-  const [hidden, setHidden] = useState(false);
-
-  if (hidden) return null;
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- images may not exist yet and need to fail gracefully.
-    <img
-      src={src}
-      alt={alt}
-      onError={() => setHidden(true)}
-      className={className}
-    />
-  );
-};
 
 const SpeakButton = ({
   text,
