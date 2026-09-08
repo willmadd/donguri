@@ -1,7 +1,7 @@
 // hellodonguri.com landing page.
 // The original app homepage is preserved below, commented out, so it can be
 // restored by deleting the /* ... */ wrapper and the new code beneath it.
-/*
+
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -137,92 +137,91 @@ export default async function Home() {
     </div>
   );
 }
-*/
 
-import type { Metadata } from "next";
-import Image from "next/image";
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/dal";
+// import type { Metadata } from "next";
+// import Image from "next/image";
+// import { redirect } from "next/navigation";
+// import { getSession } from "@/lib/dal";
 
-// Page-specific metadata (merges with, and overrides, the root layout's
-// metadata for this route only — other pages are unaffected).
-const title = "Hello Donguri — もうすぐ公開！";
-const description =
-  "Hello Donguri is a friendly, character-led way for Japanese speakers to learn everyday English. Launching soon.";
-// OG image file to be added at public/images/og-image.png.
-const ogImage = "/images/og-image.png";
+// // Page-specific metadata (merges with, and overrides, the root layout's
+// // metadata for this route only — other pages are unaffected).
+// const title = "Hello Donguri — もうすぐ公開！";
+// const description =
+//   "Hello Donguri is a friendly, character-led way for Japanese speakers to learn everyday English. Launching soon.";
+// // OG image file to be added at public/images/og-image.png.
+// const ogImage = "/images/og-image.png";
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://hellodonguri.com"),
-  title,
-  description,
-  openGraph: {
-    title,
-    description,
-    url: "https://hellodonguri.com",
-    siteName: "Hello Donguri",
-    images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
-    locale: "ja_JP",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title,
-    description,
-    images: [ogImage],
-  },
-};
+// export const metadata: Metadata = {
+//   metadataBase: new URL("https://hellodonguri.com"),
+//   title,
+//   description,
+//   openGraph: {
+//     title,
+//     description,
+//     url: "https://hellodonguri.com",
+//     siteName: "Hello Donguri",
+//     images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+//     locale: "ja_JP",
+//     type: "website",
+//   },
+//   twitter: {
+//     card: "summary_large_image",
+//     title,
+//     description,
+//     images: [ogImage],
+//   },
+// };
 
-// Brand palette — dark brown / muted red, per the Hello Donguri brief.
-const BROWN = "#4A2414";
-const RED = "#C4312B";
+// // Brand palette — dark brown / muted red, per the Hello Donguri brief.
+// const BROWN = "#4A2414";
+// const RED = "#C4312B";
 
-export default async function Home() {
-  const user = await getSession();
+// export default async function Home() {
+//   const user = await getSession();
 
-  if (user) {
-    redirect("/dashboard");
-  }
+//   if (user) {
+//     redirect("/dashboard");
+//   }
 
-  return (
-    <main className="flex min-h-dvh items-center justify-center bg-washi px-5 py-8 text-center sm:px-8 sm:py-14">
-      <div className="flex w-full max-w-2xl flex-col items-center">
-        <Image
-          src="/images/mascots.webp"
-          alt="Hello Donguri acorn mascot"
-          width={500}
-          height={500}
-          priority
-          sizes="(max-width: 640px) 280px, 500px"
-          className="h-auto w-full max-w-[280px] object-contain xs:max-w-[320px] sm:max-w-[500px]"
-        />
-        <h1
-          className="font-zen-maru mt-5 text-[clamp(2.25rem,12vw,3.75rem)] leading-tight font-bold tracking-tight sm:mt-7"
-          style={{ color: BROWN }}
-        >
-          もうすぐ公開！
-        </h1>
-        <p className="font-fredoka tracking-tight mt-2.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xl font-bold sm:mt-3 sm:gap-3 sm:text-6xl">
-          <span style={{ color: BROWN }}>Hello</span>
-          <span style={{ color: RED }}>Donguri</span>
-        </p>
-        <p className="mt-5 max-w-xl text-[15px] leading-7 text-pretty text-sumi-soft sm:mt-6 sm:text-lg sm:leading-8">
-          Hello
-          Donguriは、かわいいキャラクターたちと一緒に、楽しく英語を学べる新しい学習サービスです。
-          日常で使える英語を、少しずつ、自分のペースで身につけていきましょう。
-          現在、公開に向けて準備中です。もうしばらくお待ちください。
-        </p>
-        <div
-          aria-hidden="true"
-          className="my-4 h-px w-12 bg-current opacity-15 sm:my-5"
-          style={{ color: BROWN }}
-        />
-        <p className="max-w-lg text-sm leading-6 text-pretty text-sumi-soft sm:text-base sm:leading-7">
-          Hello Donguri is a new way for Japanese speakers to learn everyday
-          English with a friendly cast of characters—a little at a time, at your
-          own pace. We&apos;re putting the finishing touches on it now.
-        </p>
-      </div>
-    </main>
-  );
-}
+//   return (
+//     <main className="flex min-h-dvh items-center justify-center bg-washi px-5 py-8 text-center sm:px-8 sm:py-14">
+//       <div className="flex w-full max-w-2xl flex-col items-center">
+//         <Image
+//           src="/images/mascots.webp"
+//           alt="Hello Donguri acorn mascot"
+//           width={500}
+//           height={500}
+//           priority
+//           sizes="(max-width: 640px) 280px, 500px"
+//           className="h-auto w-full max-w-[280px] object-contain xs:max-w-[320px] sm:max-w-[500px]"
+//         />
+//         <h1
+//           className="font-zen-maru mt-5 text-[clamp(2.25rem,12vw,3.75rem)] leading-tight font-bold tracking-tight sm:mt-7"
+//           style={{ color: BROWN }}
+//         >
+//           もうすぐ公開！
+//         </h1>
+//         <p className="font-fredoka tracking-tight mt-2.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xl font-bold sm:mt-3 sm:gap-3 sm:text-6xl">
+//           <span style={{ color: BROWN }}>Hello</span>
+//           <span style={{ color: RED }}>Donguri</span>
+//         </p>
+//         <p className="mt-5 max-w-xl text-[15px] leading-7 text-pretty text-sumi-soft sm:mt-6 sm:text-lg sm:leading-8">
+//           Hello
+//           Donguriは、かわいいキャラクターたちと一緒に、楽しく英語を学べる新しい学習サービスです。
+//           日常で使える英語を、少しずつ、自分のペースで身につけていきましょう。
+//           現在、公開に向けて準備中です。もうしばらくお待ちください。
+//         </p>
+//         <div
+//           aria-hidden="true"
+//           className="my-4 h-px w-12 bg-current opacity-15 sm:my-5"
+//           style={{ color: BROWN }}
+//         />
+//         <p className="max-w-lg text-sm leading-6 text-pretty text-sumi-soft sm:text-base sm:leading-7">
+//           Hello Donguri is a new way for Japanese speakers to learn everyday
+//           English with a friendly cast of characters—a little at a time, at your
+//           own pace. We&apos;re putting the finishing touches on it now.
+//         </p>
+//       </div>
+//     </main>
+//   );
+// }
