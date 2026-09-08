@@ -196,32 +196,27 @@ export default async function Home() {
           sizes="(max-width: 640px) 280px, 500px"
           className="h-auto w-full max-w-[280px] object-contain xs:max-w-[320px] sm:max-w-[500px]"
         />
-
         <h1
           className="font-zen-maru mt-5 text-[clamp(2.25rem,12vw,3.75rem)] leading-tight font-bold tracking-tight sm:mt-7"
           style={{ color: BROWN }}
         >
           もうすぐ公開！
         </h1>
-
         <p className="font-fredoka tracking-tight mt-2.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xl font-bold sm:mt-3 sm:gap-3 sm:text-6xl">
           <span style={{ color: BROWN }}>Hello</span>
           <span style={{ color: RED }}>Donguri</span>
         </p>
-
         <p className="mt-5 max-w-xl text-[15px] leading-7 text-pretty text-sumi-soft sm:mt-6 sm:text-lg sm:leading-8">
           Hello
-          Donguriは、かわいいキャラクターと一緒に楽しく英語を学べる新しい学習サービスです。
-          日常で使える英語を、少しずつ、自分のペースで身につけていきます。
-          ただいま準備中ですので、もうしばらくお待ちください。
+          Donguriは、かわいいキャラクターたちと一緒に、楽しく英語を学べる新しい学習サービスです。
+          日常で使える英語を、少しずつ、自分のペースで身につけていきましょう。
+          現在、公開に向けて準備中です。もうしばらくお待ちください。
         </p>
-
         <div
           aria-hidden="true"
           className="my-4 h-px w-12 bg-current opacity-15 sm:my-5"
           style={{ color: BROWN }}
         />
-
         <p className="max-w-lg text-sm leading-6 text-pretty text-sumi-soft sm:text-base sm:leading-7">
           Hello Donguri is a new way for Japanese speakers to learn everyday
           English with a friendly cast of characters—a little at a time, at your
