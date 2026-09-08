@@ -170,6 +170,7 @@ export const analytics = {
     });
   },
 };
+
 /**
  * Type definitions for gtag (for backward compatibility if needed)
  */
