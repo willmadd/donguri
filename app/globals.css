@@ -44,6 +44,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-fredoka: var(--font-fredoka);
+  --font-zen-maru: var(--font-zen-maru);
 }
 
 @media (prefers-color-scheme: dark) {
