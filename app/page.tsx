@@ -206,12 +206,11 @@ export default async function Home() {
           <span style={{ color: BROWN }}>Hello</span>
           <span style={{ color: RED }}>Donguri</span>
         </p>
-        Develop
         <p className="mt-5 max-w-xl text-[15px] leading-7 text-pretty text-sumi-soft sm:mt-6 sm:text-lg sm:leading-8">
           Hello
-          Donguriは、かわいいキャラクターと一緒に楽しく英語を学べる新しい学習サービスです。
-          日常で使える英語を、少しずつ、自分のペースで身につけていきます。
-          ただいま準備中ですので、もうしばらくお待ちください。
+          Donguriは、かわいいキャラクターたちと一緒に、楽しく英語を学べる新しい学習サービスです。
+          日常で使える英語を、少しずつ、自分のペースで身につけていきましょう。
+          現在、公開に向けて準備中です。もうしばらくお待ちください。
         </p>
         <div
           aria-hidden="true"
