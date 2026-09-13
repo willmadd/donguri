@@ -12,7 +12,7 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { courseSlug } = await params;
   const { course } = await getAdminCategoryOverview(courseSlug);
-  return { title: `Categories — ${course.title}` };
+  return { title: `Decks — ${course.title}` };
 }
 
 export default async function AdminCourseCategoriesPage({ params }: PageProps) {
@@ -26,19 +26,19 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
         <div>
           <BackLink href="/dashboard/admin/courses" label="Course content" />
           <h1 className="text-2xl font-semibold text-sumi">{course.title}</h1>
-          <p className="mt-1 text-sumi-soft">Categories in this course.</p>
+          <p className="mt-1 text-sumi-soft">Decks in this course.</p>
         </div>
         <Link
           href={`/dashboard/admin/courses/${courseSlug}/categories/new`}
           className="inline-flex h-10 items-center justify-center rounded-full bg-ai px-5 text-sm font-medium text-washi transition hover:bg-ai-dark"
         >
-          New category
+          New deck
         </Link>
       </div>
 
       <div className="flex flex-col gap-3">
         {categories.length === 0 && (
-          <p className="text-sumi-soft">No categories yet.</p>
+          <p className="text-sumi-soft">No decks yet.</p>
         )}
         {categories.map((category) => (
           <div

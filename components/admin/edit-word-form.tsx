@@ -7,6 +7,7 @@ import { TextareaField } from "@/components/ui/textarea";
 import { FileField } from "@/components/ui/file-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordImage } from "@/components/ui/word-image";
+import { WordFormsFields } from "@/components/admin/word-forms-fields";
 import type { AdminWordSummary } from "@/lib/definitions";
 
 type EditWordFormProps = {
@@ -47,6 +48,21 @@ export function EditWordForm({ word, currentImageSrc }: EditWordFormProps) {
         defaultValue={word.exampleSentence ?? ""}
         errors={state?.errors?.exampleSentence}
       />
+      <TextareaField
+        label="Explanation (English)"
+        name="explanation"
+        placeholder="Optional — a plain-language definition"
+        defaultValue={word.explanation ?? ""}
+        errors={state?.errors?.explanation}
+      />
+      <TextareaField
+        label="Explanation (Japanese)"
+        name="explanationJa"
+        placeholder="Optional"
+        defaultValue={word.explanationJa ?? ""}
+        errors={state?.errors?.explanationJa}
+      />
+      <WordFormsFields initialForms={word.forms} initialExamples={word.examples} />
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-sumi-soft">Current image</span>

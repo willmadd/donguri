@@ -6,6 +6,7 @@ import { TextField } from "@/components/ui/text-field";
 import { TextareaField } from "@/components/ui/textarea";
 import { FileField } from "@/components/ui/file-field";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { WordFormsFields } from "@/components/admin/word-forms-fields";
 
 type CreateWordFormProps = {
   lessonId: string;
@@ -15,13 +16,19 @@ export function CreateWordForm({ lessonId }: CreateWordFormProps) {
   const [state, action, pending] = useActionState(createWord, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Bumped on every success to remount `WordFormsFields` (via its `key`),
+  // clearing its internal forms/examples rows the same way `formRef.reset()`
+  // clears the plain inputs below — a native form reset alone can't touch
+  // that component's own React state.
+  const [resetCount, setResetCount] = useState(0);
 
   // Clears the form after each successful add so the admin can go straight
   // into the next word without re-navigating.
   useEffect(() => {
     if (state?.success) {
       formRef.current?.reset();
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the local preview must follow the server action's own success signal, which only arrives via this effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the local preview/forms-fields state must follow the server action's own success signal, which only arrives via this effect.
+      setResetCount((count) => count + 1);
       setPreviewUrl((current) => {
         if (current) URL.revokeObjectURL(current);
         return null;
@@ -58,6 +65,19 @@ export function CreateWordForm({ lessonId }: CreateWordFormProps) {
         placeholder="Optional"
         errors={state?.errors?.exampleSentence}
       />
+      <TextareaField
+        label="Explanation (English)"
+        name="explanation"
+        placeholder="Optional — a plain-language definition"
+        errors={state?.errors?.explanation}
+      />
+      <TextareaField
+        label="Explanation (Japanese)"
+        name="explanationJa"
+        placeholder="Optional"
+        errors={state?.errors?.explanationJa}
+      />
+      <WordFormsFields key={resetCount} />
       <FileField
         label="Picture"
         name="image"

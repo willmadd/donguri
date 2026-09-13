@@ -16,7 +16,7 @@ export function CreateCategoryForm({ courseId }: CreateCategoryFormProps) {
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="courseId" value={courseId} />
       <TextField
-        label="Category title"
+        label="Deck title"
         name="title"
         placeholder="e.g. Weather"
         errors={state?.errors?.title}
@@ -27,7 +27,7 @@ export function CreateCategoryForm({ courseId }: CreateCategoryFormProps) {
         </p>
       )}
       <SubmitButton pending={pending} pendingText="Creating…">
-        Create category
+        Create deck
       </SubmitButton>
     </form>
   );

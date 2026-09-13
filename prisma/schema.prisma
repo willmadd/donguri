@@ -77,16 +77,60 @@ model Word {
   term            String
   translation     String
   exampleSentence String?            @map("example_sentence")
+  explanation     String?
+  explanationJa   String?            @map("explanation_ja")
   position        Int
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   romanization    String?
   active          Boolean            @default(true)
   imageKey        String?            @map("image_key")
   progress        UserWordProgress[]
+  forms           WordForm[]
+  examples        WordExample[]
   lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([lessonId, position])
   @@map("words")
+}
+
+// A word's inflected/conjugated forms (e.g. go/goes/went/gone/going). Generic
+// on purpose — labels are free text set by the admin — so it also covers
+// non-verb inflections (noun plurals, adjective comparatives) without a
+// schema change.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model WordForm {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wordId    String        @map("word_id") @db.Uuid
+  labelEn   String        @map("label_en")
+  labelJa   String        @map("label_ja")
+  value     String
+  position  Int
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  word      Word          @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  examples  WordExample[]
+
+  @@unique([wordId, position])
+  @@map("word_forms")
+}
+
+// Example sentence pairs for a word. `formId` optionally ties an example to
+// the specific form it demonstrates (used to build "type the form" quiz
+// questions from the Japanese side); null means a general example not tied
+// to one form.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model WordExample {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wordId    String    @map("word_id") @db.Uuid
+  formId    String?   @map("form_id") @db.Uuid
+  en        String
+  ja        String
+  position  Int
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  word      Word      @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  form      WordForm? @relation(fields: [formId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([wordId, position])
+  @@map("word_examples")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

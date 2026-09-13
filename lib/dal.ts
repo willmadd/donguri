@@ -12,11 +12,11 @@ import type {
   DailyWordCount,
   EnrolledCourseSummary,
   LessonSummary,
-  PracticeQueue,
   Profile,
   QuizDirection,
   QuizOption,
   QuizQuestion,
+  RevealWord,
   UserRole,
 } from "@/lib/definitions";
 import {
@@ -203,8 +203,8 @@ export const getAdminCourses = cache(async (): Promise<AdminCourseOption[]> => {
 });
 
 // Category (Lesson) list for the admin content-management pages — includes
-// every lesson regardless of `path`/title, unlike `getCourseVocabOverview`'s
-// learner-facing allowlist filter in the vocab page itself.
+// every lesson regardless of `path`, unlike `getCourseDecks`'s learner-facing
+// filter to active `path: 'vocab'` lessons only.
 export const getAdminCategoryOverview = cache(
   async (
     courseSlug: string,
@@ -244,7 +244,13 @@ export const getAdminCategoryWords = cache(async (lessonId: string) => {
     where: { id: lessonId },
     include: {
       course: { select: { slug: true, title: true } },
-      words: { orderBy: { position: "asc" } },
+      words: {
+        orderBy: { position: "asc" },
+        include: {
+          forms: { orderBy: { position: "asc" } },
+          examples: { orderBy: { position: "asc" } },
+        },
+      },
     },
   });
 
@@ -255,18 +261,7 @@ export const getAdminCategoryWords = cache(async (lessonId: string) => {
   return {
     lesson: { id: lesson.id, title: lesson.title },
     course: lesson.course,
-    words: lesson.words.map(
-      (word): AdminWordSummary => ({
-        id: word.id,
-        term: word.term,
-        translation: word.translation,
-        romanization: word.romanization,
-        exampleSentence: word.exampleSentence,
-        position: word.position,
-        imageKey: word.imageKey,
-        active: word.active,
-      }),
-    ),
+    words: lesson.words.map((word): AdminWordSummary => toAdminWordSummary(word)),
   };
 });
 
@@ -277,6 +272,8 @@ export const getAdminWord = cache(async (wordId: string) => {
     where: { id: wordId },
     include: {
       lesson: { select: { id: true, title: true, course: { select: { slug: true, title: true } } } },
+      forms: { orderBy: { position: "asc" } },
+      examples: { orderBy: { position: "asc" } },
     },
   });
 
@@ -285,20 +282,51 @@ export const getAdminWord = cache(async (wordId: string) => {
   }
 
   return {
-    word: {
-      id: word.id,
-      term: word.term,
-      translation: word.translation,
-      romanization: word.romanization,
-      exampleSentence: word.exampleSentence,
-      position: word.position,
-      imageKey: word.imageKey,
-      active: word.active,
-    } satisfies AdminWordSummary,
+    word: toAdminWordSummary(word),
     lesson: { id: word.lesson.id, title: word.lesson.title },
     course: word.lesson.course,
   };
 });
+
+function toAdminWordSummary(word: {
+  id: string;
+  term: string;
+  translation: string;
+  romanization: string | null;
+  exampleSentence: string | null;
+  explanation: string | null;
+  explanationJa: string | null;
+  position: number;
+  imageKey: string | null;
+  active: boolean;
+  forms: { id: string; labelEn: string; labelJa: string; value: string }[];
+  examples: { id: string; formId: string | null; en: string; ja: string }[];
+}): AdminWordSummary {
+  return {
+    id: word.id,
+    term: word.term,
+    translation: word.translation,
+    romanization: word.romanization,
+    exampleSentence: word.exampleSentence,
+    explanation: word.explanation,
+    explanationJa: word.explanationJa,
+    position: word.position,
+    imageKey: word.imageKey,
+    active: word.active,
+    forms: word.forms.map((form) => ({
+      id: form.id,
+      labelEn: form.labelEn,
+      labelJa: form.labelJa,
+      value: form.value,
+    })),
+    examples: word.examples.map((example) => ({
+      id: example.id,
+      formId: example.formId,
+      en: example.en,
+      ja: example.ja,
+    })),
+  };
+}
 
 export const getAvailableCourses = cache(async (): Promise<CourseSummary[]> => {
   const user = await requireUser();
@@ -371,11 +399,15 @@ export const getCourseHome = cache(async (courseSlug: string) => {
   };
 });
 
-export const getCourseVocabOverview = cache(async (courseSlug: string) => {
+// A "deck" is a `path: 'vocab'` Lesson — see the note in supabase/schema.sql
+// section 19 and the plan behind this function: `lessons.path` was already
+// laid out for a `(vocab, grammar)` pair sharing one `position`, but no
+// grammar content exists yet, so a deck is just this vocab lesson for now.
+export const getCourseDecks = cache(async (courseSlug: string) => {
   const { user, course } = await requireEnrolledCourse(courseSlug);
 
   const lessons = await prisma.lesson.findMany({
-    where: { courseId: course.id, active: true },
+    where: { courseId: course.id, path: "vocab", active: true },
     orderBy: { position: "asc" },
     include: {
       words: {
@@ -395,7 +427,7 @@ export const getCourseVocabOverview = cache(async (courseSlug: string) => {
     },
   });
 
-  const lessonSummaries: LessonSummary[] = lessons.map((lesson) => {
+  const deckSummaries: LessonSummary[] = lessons.map((lesson) => {
     const words = lesson.words.map((word) => ({
       id: word.id,
       term: word.term,
@@ -417,8 +449,23 @@ export const getCourseVocabOverview = cache(async (courseSlug: string) => {
 
   return {
     course: toCourseSummary(course),
-    lessons: lessonSummaries,
+    decks: deckSummaries,
   };
+});
+
+// Single deck's stats/words for the deck detail page (Grammar placeholder +
+// Vocab section header). Redirects to the deck list if the id doesn't
+// resolve to an active vocab lesson in this course.
+export const getDeckDetail = cache(async (courseSlug: string, deckId: string) => {
+  const { course, decks } = await getCourseDecks(courseSlug);
+
+  const deck = decks.find((candidate) => candidate.id === deckId);
+
+  if (!deck) {
+    redirect(`/dashboard/courses/${courseSlug}`);
+  }
+
+  return { course, deck };
 });
 
 // One entry per day in the current streak's date range (zero-filled for a
@@ -458,56 +505,44 @@ export const getDailyWordCounts = cache(async (courseSlug: string): Promise<Dail
   return days;
 });
 
-// This is a read-heavy function that also writes: introducing a new set's
-// words and bumping the streak both need to happen exactly when the queue
-// is built, not as separate steps a caller could forget.
-// `requireEnrolledCourse` still derives identity from the verified session
-// and gates on enrollment, so the same authorization guarantee applies as
-// everywhere else in this file.
-//
-// There's no daily cap — a "set" is just SET_SIZE new words, and a user can
-// run as many sets as they want in a day. New words come only from the
-// chosen category (`lessonId`); quiz questions are drawn from every word
-// that is `learning` (including this set's brand-new words — a reveal is
-// immediately followed by a quiz on it, not held back to the next session),
-// across the whole course, weighted by `weightForBox` (newer/weaker words
-// come up more often) times `CATEGORY_BOOST` for words in the chosen
-// category (they dominate the sample without excluding the rest of the
-// course). The quiz always aims for QUIZ_SIZE questions — when someone has
-// only learnt a handful of words, `weightedSampleWithRepeats` repeats them
-// rather than shipping a short quiz.
-export const getPracticeQueue = cache(
-  async (courseSlug: string, lessonId: string): Promise<PracticeQueue> => {
+// Finds the deck (a `path: 'vocab'` Lesson) and redirects to the course's
+// deck list if it doesn't resolve — shared by `getLearnQueue`/`getTestQueue`
+// so a stale/bad `deckId` in the URL can't reach either queue.
+async function requireDeck(courseSlug: string, courseId: string, deckId: string) {
+  const deck = await prisma.lesson.findFirst({
+    where: { id: deckId, courseId, path: "vocab", active: true },
+    select: { id: true },
+  });
+
+  if (!deck) {
+    redirect(`/dashboard/courses/${courseSlug}`);
+  }
+
+  return deck;
+}
+
+// Introduces up to SET_SIZE new words from this deck (creating their
+// `UserWordProgress` rows and bumping the streak) — the "Learn" half of what
+// used to be one combined practice queue. Read-heavy but also writes:
+// introducing the set has to happen exactly when the queue is built, not as
+// a separate step a caller could forget.
+export const getLearnQueue = cache(
+  async (courseSlug: string, deckId: string): Promise<RevealWord[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-
-    const lesson = await prisma.lesson.findFirst({
-      where: { id: lessonId, courseId: course.id, active: true },
-      select: { id: true },
-    });
-
-    if (!lesson) {
-      redirect(`/dashboard/courses/${courseSlug}/vocab`);
-    }
-
-    const now = new Date();
+    const deck = await requireDeck(courseSlug, course.id, deckId);
 
     const newWords = await prisma.word.findMany({
       where: {
-        lessonId: lesson.id,
+        lessonId: deck.id,
         active: true,
         progress: { none: { userId: user.id } },
       },
       orderBy: { position: "asc" },
       take: SET_SIZE,
-    });
-
-    const activePool = await prisma.userWordProgress.findMany({
-      where: {
-        userId: user.id,
-        status: "learning",
-        word: { lesson: { courseId: course.id, active: true }, active: true },
+      include: {
+        forms: { orderBy: { position: "asc" } },
+        examples: { orderBy: { position: "asc" } },
       },
-      include: { word: true },
     });
 
     if (newWords.length > 0) {
@@ -519,58 +554,89 @@ export const getPracticeQueue = cache(
         })),
         skipDuplicates: true,
       });
+
+      await bumpStreak(user.id, course.id, new Date());
     }
 
-    if (newWords.length > 0 || activePool.length > 0) {
-      await bumpStreak(user.id, course.id, now);
+    return newWords.map((word) => ({
+      id: word.id,
+      term: word.term,
+      translation: word.translation,
+      romanization: word.romanization,
+      exampleSentence: word.exampleSentence,
+      explanation: word.explanation,
+      explanationJa: word.explanationJa,
+      forms: word.forms.map((form) => ({
+        id: form.id,
+        labelEn: form.labelEn,
+        labelJa: form.labelJa,
+        value: form.value,
+      })),
+      examples: word.examples.map((example) => ({
+        id: example.id,
+        formId: example.formId,
+        en: example.en,
+        ja: example.ja,
+      })),
+      image: wordImagePath(word),
+      targetLanguage: course.targetLanguage,
+    }));
+  },
+);
+
+// The "Test yourself" half: quiz-only, never introduces new words. Draws
+// from every word already `learning` across the whole course — weighted by
+// `weightForBox` (so recently-introduced/weaker words dominate) times
+// `CATEGORY_BOOST` for words in this deck. Bumps the streak only when
+// there's actually something to review.
+export const getTestQueue = cache(
+  async (courseSlug: string, deckId: string): Promise<QuizQuestion[]> => {
+    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const deck = await requireDeck(courseSlug, course.id, deckId);
+
+    const activePool = await prisma.userWordProgress.findMany({
+      where: {
+        userId: user.id,
+        status: "learning",
+        word: { lesson: { courseId: course.id, active: true }, active: true },
+      },
+      include: {
+        word: {
+          include: {
+            forms: { orderBy: { position: "asc" } },
+            examples: { orderBy: { position: "asc" } },
+          },
+        },
+      },
+    });
+
+    if (activePool.length === 0) {
+      return [];
     }
 
-    const quizCandidates = [
-      ...activePool.map((progress) => ({
-        item: progress.word,
-        weight:
-          weightForBox(progress.box) *
-          (progress.word.lessonId === lesson.id ? CATEGORY_BOOST : 1),
-      })),
-      // This set's newly introduced words are always in the chosen lesson,
-      // so they always get the category boost too.
-      ...newWords.map((word) => ({
-        item: word,
-        weight: weightForBox(1) * CATEGORY_BOOST,
-      })),
-    ];
+    await bumpStreak(user.id, course.id, new Date());
+
+    const quizCandidates = activePool.map((progress) => ({
+      item: progress.word,
+      weight:
+        weightForBox(progress.box) * (progress.word.lessonId === deck.id ? CATEGORY_BOOST : 1),
+    }));
 
     const reviewSample = weightedSampleWithRepeats(quizCandidates, QUIZ_SIZE);
 
-    const distractorPool =
-      reviewSample.length > 0
-        ? await prisma.word.findMany({
-            where: { lesson: { courseId: course.id, active: true }, active: true },
-            select: {
-              id: true,
-              term: true,
-              translation: true,
-              romanization: true,
-              lessonId: true,
-              imageKey: true,
-            },
-          })
-        : [];
+    const distractorPool = await prisma.word.findMany({
+      where: { lesson: { courseId: course.id, active: true }, active: true },
+      select: {
+        id: true,
+        term: true,
+        translation: true,
+        romanization: true,
+        lessonId: true,
+        imageKey: true,
+      },
+    });
 
-    return {
-      reveals: newWords.map((word) => ({
-        id: word.id,
-        term: word.term,
-        translation: word.translation,
-        romanization: word.romanization,
-        exampleSentence: word.exampleSentence,
-        image: wordImagePath(word),
-        targetLanguage: course.targetLanguage,
-      })),
-      quiz: shuffle(
-        reviewSample.map((word) => buildQuestion(word, distractorPool, course)),
-      ),
-    };
+    return shuffle(reviewSample.map((word) => buildQuestion(word, distractorPool, course)));
   },
 );
 
@@ -603,6 +669,11 @@ type QuestionWord = {
   romanization: string | null;
   lessonId: string;
   imageKey?: string | null;
+  // Only populated for the reviewed word itself (never for distractor-pool
+  // candidates) — cross-referenced against `examples` to build fill-in-the-
+  // blank "cloze" questions.
+  forms?: { id: string; value: string }[];
+  examples?: { en: string }[];
 };
 
 // Distractors lean heavily toward the word's own category: 2 of the 3 come
@@ -614,11 +685,82 @@ type QuestionWord = {
 const SAME_CATEGORY_DISTRACTORS = 2;
 const OTHER_CATEGORY_DISTRACTORS = 1;
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Whole-word, case-insensitive — so a form value like "you" doesn't match
+// inside "yourself", and "Went" still matches "went".
+function wholeWordPattern(value: string): RegExp {
+  return new RegExp(`\\b${escapeRegExp(value)}\\b`, "i");
+}
+
+type ClozeCandidate = { formId: string; clozeSentence: string };
+
+// Cross-references every form against every example sentence — no admin
+// tagging required — and blanks out the form's value wherever an example
+// literally contains it as a whole word. Because the match is verified
+// against the actual sentence text, there's no risk of asking the learner
+// to fill in a form the sentence doesn't really demonstrate.
+function findClozeCandidates(word: QuestionWord): ClozeCandidate[] {
+  const forms = word.forms ?? [];
+  const examples = word.examples ?? [];
+  const candidates: ClozeCandidate[] = [];
+
+  for (const form of forms) {
+    const pattern = wholeWordPattern(form.value);
+    for (const example of examples) {
+      if (pattern.test(example.en)) {
+        candidates.push({ formId: form.id, clozeSentence: example.en.replace(pattern, "___") });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+// A word with at least one (form, example) cloze match gets this chance,
+// per question, to be asked as a fill-in-the-blank form question instead of
+// the usual term/translation multiple choice — split evenly between typing
+// the answer and choosing it from the word's own forms (the latter only
+// when there are at least 2 distinct forms to choose between). Words with
+// no qualifying forms are unaffected and always fall through to multiple
+// choice.
+const FORM_QUESTION_CHANCE = 2 / 3;
+
 function buildQuestion(
   word: QuestionWord,
   pool: QuestionWord[],
   course: { targetLanguage: string; sourceLanguage: string },
 ): QuizQuestion {
+  const clozeCandidates = findClozeCandidates(word);
+
+  if (clozeCandidates.length > 0 && Math.random() < FORM_QUESTION_CHANCE) {
+    const candidate = clozeCandidates[Math.floor(Math.random() * clozeCandidates.length)];
+    const uniqueFormValues = [...new Set((word.forms ?? []).map((form) => form.value))];
+
+    if (uniqueFormValues.length >= 2 && Math.random() < 0.5) {
+      return {
+        kind: "form-choice",
+        wordId: word.id,
+        formId: candidate.formId,
+        clozeSentence: candidate.clozeSentence,
+        baseTerm: word.term,
+        targetLanguage: course.targetLanguage,
+        options: shuffle(uniqueFormValues),
+      };
+    }
+
+    return {
+      kind: "type-form",
+      wordId: word.id,
+      formId: candidate.formId,
+      clozeSentence: candidate.clozeSentence,
+      baseTerm: word.term,
+      targetLanguage: course.targetLanguage,
+    };
+  }
+
   const direction: QuizDirection =
     Math.random() < 0.5 ? "term-to-translation" : "translation-to-term";
   const showingTerm = direction === "translation-to-term";
@@ -654,6 +796,7 @@ function buildQuestion(
   const distractors = picked.map(toOption);
 
   return {
+    kind: "multiple-choice",
     wordId: word.id,
     direction,
     prompt: direction === "term-to-translation" ? word.term : word.translation,

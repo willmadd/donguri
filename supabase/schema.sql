@@ -824,3 +824,52 @@ alter table public.words add column if not exists active boolean not null defaul
 -- the learner-facing app without deleting it or its words.
 
 alter table public.lessons add column if not exists active boolean not null default true;
+
+-- 19. Word explanations, forms, and example sentences -----------------------
+-- Richer word content for the Learn/Test split: `explanation`/`explanation_ja`
+-- are a plain-language definition of the word in each language. `word_forms`
+-- holds a word's inflected/conjugated forms (e.g. go/goes/went/gone/going) —
+-- generic on purpose (labels are free text set by the admin), so it also
+-- covers non-verb inflections without a schema change. `word_examples` holds
+-- example sentence pairs; `form_id` optionally ties an example to the form it
+-- demonstrates (used to build "type the form" quiz questions from the
+-- Japanese side) — null means a general example not tied to one form.
+
+alter table public.words add column if not exists explanation text;
+alter table public.words add column if not exists explanation_ja text;
+
+create table if not exists public.word_forms (
+  id uuid primary key default gen_random_uuid(),
+  word_id uuid not null references public.words (id) on delete cascade,
+  label_en text not null,
+  label_ja text not null,
+  value text not null,
+  position integer not null,
+  created_at timestamptz not null default now(),
+  unique (word_id, position)
+);
+
+alter table public.word_forms enable row level security;
+
+drop policy if exists "Authenticated users can view word forms" on public.word_forms;
+create policy "Authenticated users can view word forms"
+  on public.word_forms for select
+  using (auth.role() = 'authenticated');
+
+create table if not exists public.word_examples (
+  id uuid primary key default gen_random_uuid(),
+  word_id uuid not null references public.words (id) on delete cascade,
+  form_id uuid references public.word_forms (id) on delete set null,
+  en text not null,
+  ja text not null,
+  position integer not null,
+  created_at timestamptz not null default now(),
+  unique (word_id, position)
+);
+
+alter table public.word_examples enable row level security;
+
+drop policy if exists "Authenticated users can view word examples" on public.word_examples;
+create policy "Authenticated users can view word examples"
+  on public.word_examples for select
+  using (auth.role() = 'authenticated');

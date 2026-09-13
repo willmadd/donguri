@@ -8,7 +8,7 @@ type PageProps = {
 };
 
 export const metadata: Metadata = {
-  title: "New category — Donguri",
+  title: "New deck — Donguri",
 };
 
 export default async function NewCategoryPage({ params }: PageProps) {
@@ -20,7 +20,7 @@ export default async function NewCategoryPage({ params }: PageProps) {
     <div className="flex flex-col gap-6">
       <div>
         <BackLink href={`/dashboard/admin/courses/${courseSlug}`} label={course.title} />
-        <h1 className="text-2xl font-semibold text-sumi">New category</h1>
+        <h1 className="text-2xl font-semibold text-sumi">New deck</h1>
         <p className="mt-1 text-sumi-soft">{course.title}</p>
       </div>
 

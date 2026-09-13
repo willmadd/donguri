@@ -114,12 +114,30 @@ export type CourseStreak = {
 // learner's base language. Generic across every course/language pair.
 export type QuizDirection = "term-to-translation" | "translation-to-term";
 
+export type WordFormSummary = {
+  id: string;
+  labelEn: string;
+  labelJa: string;
+  value: string;
+};
+
+export type WordExampleSummary = {
+  id: string;
+  formId: string | null;
+  en: string;
+  ja: string;
+};
+
 export type RevealWord = {
   id: string;
   term: string;
   translation: string;
   romanization: string | null;
   exampleSentence: string | null;
+  explanation: string | null;
+  explanationJa: string | null;
+  forms: WordFormSummary[];
+  examples: WordExampleSummary[];
   image: string;
   targetLanguage: string;
 };
@@ -130,7 +148,8 @@ export type QuizOption = {
   image?: string | null;
 };
 
-export type QuizQuestion = {
+export type MultipleChoiceQuestion = {
+  kind: "multiple-choice";
   wordId: string;
   direction: QuizDirection;
   prompt: string;
@@ -147,10 +166,29 @@ export type QuizQuestion = {
   image: string;
 };
 
-export type PracticeQueue = {
-  reveals: RevealWord[];
-  quiz: QuizQuestion[];
+// A cloze/fill-in-the-blank exercise built from one of the word's own
+// example sentences with the tested form blanked out (e.g. "Yesterday I
+// ___ to the shops." for "went") — only generated for a (form, example)
+// pair where the form's value actually appears in that example's English
+// text. `baseTerm` is shown as a small hint, the way textbook conjugation
+// exercises show the infinitive/root in parentheses.
+type FormClozeQuestion = {
+  wordId: string;
+  formId: string;
+  clozeSentence: string;
+  baseTerm: string;
+  targetLanguage: string;
 };
+
+// Free-text version: the learner types the missing form.
+export type TypeFormQuestion = FormClozeQuestion & { kind: "type-form" };
+
+// Multiple-choice version: the options are the word's own forms (e.g.
+// go/goes/went/gone/going) rather than other words — only generated for
+// words with 2+ forms, so there's something to choose between.
+export type FormChoiceQuestion = FormClozeQuestion & { kind: "form-choice"; options: string[] };
+
+export type QuizQuestion = MultipleChoiceQuestion | TypeFormQuestion | FormChoiceQuestion;
 
 export type LessonWordSummary = {
   id: string;
@@ -232,6 +270,16 @@ const WordFieldsSchema = {
     .trim()
     .max(500, { error: "Keep it under 500 characters." })
     .optional(),
+  explanation: z
+    .string()
+    .trim()
+    .max(500, { error: "Keep it under 500 characters." })
+    .optional(),
+  explanationJa: z
+    .string()
+    .trim()
+    .max(500, { error: "Keep it under 500 characters." })
+    .optional(),
   image: z
     .file({ error: "Choose an image." })
     .max(MAX_WORD_IMAGE_BYTES, { error: "Image must be under 5MB." })
@@ -246,8 +294,33 @@ type WordFieldErrors = {
   translation?: string[];
   romanization?: string[];
   exampleSentence?: string[];
+  explanation?: string[];
+  explanationJa?: string[];
   image?: string[];
 };
+
+// One row of a word's inflected forms, submitted from a repeatable admin-form
+// section as indexed fields (`forms[0].labelEn`, `forms[0].value`, ...).
+// `clientId` round-trips whichever example rows in the same submission
+// reference this form (see `WordExampleInputSchema.formClientId`) — it never
+// reaches the database, just correlates the two arrays for one request.
+export const WordFormInputSchema = z.object({
+  clientId: z.string().min(1),
+  labelEn: z.string().trim().min(1, { error: "Label is required." }).max(100),
+  labelJa: z.string().trim().min(1, { error: "Japanese label is required." }).max(100),
+  value: z.string().trim().min(1, { error: "Value is required." }).max(200),
+});
+
+export const WordExampleInputSchema = z.object({
+  en: z.string().trim().min(1, { error: "English sentence is required." }).max(500),
+  ja: z.string().trim().min(1, { error: "Japanese sentence is required." }).max(500),
+  // Empty string means "not tied to a form" — the browser <select> submits
+  // "" for its blank option, so this stays a string rather than an optional.
+  formClientId: z.string(),
+});
+
+export type WordFormInput = z.infer<typeof WordFormInputSchema>;
+export type WordExampleInput = z.infer<typeof WordExampleInputSchema>;
 
 export const CreateWordFormSchema = z.object({
   lessonId: z.uuid({ error: "Missing category." }),
@@ -310,9 +383,13 @@ export type AdminWordSummary = {
   translation: string;
   romanization: string | null;
   exampleSentence: string | null;
+  explanation: string | null;
+  explanationJa: string | null;
   position: number;
   imageKey: string | null;
   active: boolean;
+  forms: WordFormSummary[];
+  examples: WordExampleSummary[];
 };
 
 export type DailyWordCount = {

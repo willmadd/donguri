@@ -7,6 +7,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { getPublicCourses, getSession } from "@/lib/dal";
+import DonguriMascot from "@/components/icons/DonguriMascot";
 
 const ACCENTS = [
   "bg-ai-soft text-ai-dark",
@@ -29,6 +30,7 @@ export default async function Home() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
           <Logo />
 
+          <DonguriMascot />
           <nav className="flex items-center gap-1 sm:gap-3">
             <Link
               href="/login"

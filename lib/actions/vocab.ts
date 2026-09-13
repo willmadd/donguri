@@ -6,6 +6,37 @@ import { prisma } from "@/lib/prisma";
 import { nextBoxAfterAnswer, MAX_BOX } from "@/lib/srs";
 import type { QuizDirection } from "@/lib/definitions";
 
+// Shared by `submitAnswer` and `submitFormAnswer`: applies one answer's
+// result to a word's `UserWordProgress` (box transition, mastery status,
+// counts, `lastSeenAt`). No `revalidatePath` here — this is invoked from the
+// test route itself, and any revalidatePath call, no matter which path it
+// targets, makes Next.js re-render *this* route in the same response (see
+// node_modules/next/dist/docs/01-app/02-guides/server-actions.md). Since
+// `getTestQueue` reshuffles the quiz randomly on every render, that would
+// swap the current question out from under the user mid-session. The
+// dashboard/decks pages read the session via cookies() and are already fully
+// dynamic (staleTimes.dynamic defaults to 0), so they pick up the updated
+// progress on their own next visit without on-demand revalidation.
+async function recordAnswer(userId: string, wordId: string, correct: boolean): Promise<void> {
+  const progress = await prisma.userWordProgress.findUniqueOrThrow({
+    where: { userId_wordId: { userId, wordId } },
+    select: { box: true, correctCount: true, incorrectCount: true },
+  });
+
+  const box = nextBoxAfterAnswer(progress.box, correct);
+
+  await prisma.userWordProgress.update({
+    where: { userId_wordId: { userId, wordId } },
+    data: {
+      box,
+      status: box >= MAX_BOX && correct ? "known" : "learning",
+      correctCount: correct ? progress.correctCount + 1 : progress.correctCount,
+      incorrectCount: correct ? progress.incorrectCount : progress.incorrectCount + 1,
+      lastSeenAt: new Date(),
+    },
+  });
+}
+
 export async function submitAnswer(
   wordId: string,
   direction: QuizDirection,
@@ -21,36 +52,34 @@ export async function submitAnswer(
   const correctAnswer = direction === "term-to-translation" ? word.translation : word.term;
   const correct = selectedAnswer === correctAnswer;
 
-  const progress = await prisma.userWordProgress.findUniqueOrThrow({
-    where: { userId_wordId: { userId: user.id, wordId } },
-    select: { box: true, correctCount: true, incorrectCount: true },
-  });
-
-  const box = nextBoxAfterAnswer(progress.box, correct);
-  const now = new Date();
-
-  await prisma.userWordProgress.update({
-    where: { userId_wordId: { userId: user.id, wordId } },
-    data: {
-      box,
-      status: box >= MAX_BOX && correct ? "known" : "learning",
-      correctCount: correct ? progress.correctCount + 1 : progress.correctCount,
-      incorrectCount: correct ? progress.incorrectCount : progress.incorrectCount + 1,
-      lastSeenAt: now,
-    },
-  });
-
-  // No revalidatePath here: this action is invoked from the practice route
-  // itself, and any revalidatePath call — no matter which path it targets —
-  // makes Next.js re-render *this* route in the same response (see
-  // node_modules/next/dist/docs/01-app/02-guides/server-actions.md). Since
-  // `getPracticeQueue` reshuffles the quiz randomly on every render, that
-  // swapped the current question out from under the user mid-session. The
-  // dashboard/vocab pages read the session via cookies() and are already
-  // fully dynamic (staleTimes.dynamic defaults to 0), so they pick up the
-  // updated progress on their own next visit without on-demand revalidation.
+  await recordAnswer(user.id, wordId, correct);
 
   return { correct, correctAnswer };
+}
+
+// Checks a typed answer against a word form's value — trimmed and
+// case-insensitive, so "Went"/"went "/"WENT" all count.
+export async function submitFormAnswer(
+  wordId: string,
+  formId: string,
+  typedAnswer: string,
+): Promise<{ correct: boolean; correctAnswer: string }> {
+  const user = await requireUser();
+
+  const form = await prisma.wordForm.findUniqueOrThrow({
+    where: { id: formId },
+    select: { value: true, wordId: true },
+  });
+
+  if (form.wordId !== wordId) {
+    throw new Error("Form does not belong to the given word.");
+  }
+
+  const correct = typedAnswer.trim().toLowerCase() === form.value.trim().toLowerCase();
+
+  await recordAnswer(user.id, wordId, correct);
+
+  return { correct, correctAnswer: form.value };
 }
 
 export async function skipWord(wordId: string): Promise<void> {

@@ -68,7 +68,7 @@ export default async function ImportWordsPage({ params, searchParams }: PageProp
     );
   }
 
-  // Step 2: choose a source category within that course.
+  // Step 2: choose a source deck within that course.
   if (!sourceLessonId) {
     const { categories } = await getAdminCategoryOverview(sourceCourseSlug);
 
@@ -78,7 +78,7 @@ export default async function ImportWordsPage({ params, searchParams }: PageProp
         <form className="max-w-sm rounded-2xl border border-sumi/10 bg-washi-soft p-8">
           <input type="hidden" name="sourceCourseSlug" value={sourceCourseSlug} />
           <SelectField
-            label="Source category"
+            label="Source deck"
             name="sourceLessonId"
             options={categories.map((category) => ({
               value: category.id,
@@ -104,7 +104,7 @@ export default async function ImportWordsPage({ params, searchParams }: PageProp
       {heading}
       <div className="max-w-sm rounded-2xl border border-sumi/10 bg-washi-soft p-8">
         {words.length === 0 ? (
-          <p className="text-sumi-soft">That category has no words.</p>
+          <p className="text-sumi-soft">That deck has no words.</p>
         ) : (
           <ImportWordsForm
             targetLessonId={lessonId}

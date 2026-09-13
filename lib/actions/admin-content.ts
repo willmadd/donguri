@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/dal";
@@ -10,11 +11,91 @@ import {
   CreateWordFormSchema,
   ImportWordsFormSchema,
   UpdateWordFormSchema,
+  WordExampleInputSchema,
+  WordFormInputSchema,
   type CreateCategoryFormState,
   type CreateWordFormState,
   type ImportWordsFormState,
   type UpdateWordFormState,
 } from "@/lib/definitions";
+
+// Reconstructs repeatable "forms" / "examples" rows from indexed FormData
+// keys (`forms.0.labelEn`, `examples.0.formClientId`, ...) — the admin word
+// form renders one input group per array row under that naming convention.
+function collectIndexedRows(formData: FormData, prefix: string): Record<string, string>[] {
+  const rowPattern = new RegExp(`^${prefix}\\.(\\d+)\\.(.+)$`);
+  const rows = new Map<number, Record<string, string>>();
+
+  for (const [key, value] of formData.entries()) {
+    const match = rowPattern.exec(key);
+    if (!match || typeof value !== "string") continue;
+
+    const index = Number(match[1]);
+    const row = rows.get(index) ?? {};
+    row[match[2]] = value;
+    rows.set(index, row);
+  }
+
+  return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row);
+}
+
+// A row the admin added but left entirely blank (e.g. clicked "Add form"
+// then changed their mind) is silently dropped rather than rejected.
+function isBlankRow(row: Record<string, string>, ignoreKeys: string[]): boolean {
+  return Object.entries(row).every(([key, value]) => ignoreKeys.includes(key) || value.trim() === "");
+}
+
+// Validates the submitted forms/examples rows and replaces every existing
+// row for this word with them, inside one transaction. Forms don't have real
+// ids yet at submit time (especially on create), so each form row carries a
+// client-generated `clientId` that examples reference via `formClientId` —
+// this maps that to the real generated `WordForm.id` before inserting.
+// Silent best-effort validation (drop invalid/blank rows) fits this
+// admin-only, low-frequency tool the same way image-upload failures here are
+// handled with a plain message rather than field-level errors.
+async function replaceWordFormsAndExamples(wordId: string, formData: FormData): Promise<void> {
+  const formRows = collectIndexedRows(formData, "forms")
+    .filter((row) => !isBlankRow(row, ["clientId"]))
+    .map((row) => WordFormInputSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+
+  const exampleRows = collectIndexedRows(formData, "examples")
+    .filter((row) => !isBlankRow(row, ["formClientId"]))
+    .map((row) => WordExampleInputSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+
+  const formIdByClientId = new Map<string, string>();
+  const formsData = formRows.map((form, index) => {
+    const id = randomUUID();
+    formIdByClientId.set(form.clientId, id);
+    return {
+      id,
+      wordId,
+      labelEn: form.labelEn,
+      labelJa: form.labelJa,
+      value: form.value,
+      position: index + 1,
+    };
+  });
+
+  const examplesData = exampleRows.map((example, index) => ({
+    id: randomUUID(),
+    wordId,
+    formId: example.formClientId ? (formIdByClientId.get(example.formClientId) ?? null) : null,
+    en: example.en,
+    ja: example.ja,
+    position: index + 1,
+  }));
+
+  await prisma.$transaction([
+    prisma.wordExample.deleteMany({ where: { wordId } }),
+    prisma.wordForm.deleteMany({ where: { wordId } }),
+    ...(formsData.length > 0 ? [prisma.wordForm.createMany({ data: formsData })] : []),
+    ...(examplesData.length > 0 ? [prisma.wordExample.createMany({ data: examplesData })] : []),
+  ]);
+}
 
 // Same asymmetry as `lib/actions/admin.ts`: the *page* guard redirects a
 // non-admin away, but an action is directly callable regardless of which
@@ -63,7 +144,7 @@ export async function createCategory(
   });
 
   revalidatePath(`/dashboard/admin/courses/${course.slug}`);
-  revalidatePath(`/dashboard/courses/${course.slug}/vocab`);
+  revalidatePath(`/dashboard/courses/${course.slug}`);
 
   return { success: true, message: `"${title}" created.`, lessonId: lesson.id };
 }
@@ -89,6 +170,8 @@ export async function createWord(
     translation: formData.get("translation"),
     romanization: formData.get("romanization") || undefined,
     exampleSentence: formData.get("exampleSentence") || undefined,
+    explanation: formData.get("explanation") || undefined,
+    explanationJa: formData.get("explanationJa") || undefined,
     image,
   });
 
@@ -96,8 +179,16 @@ export async function createWord(
     return { errors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { lessonId, term, translation, romanization, exampleSentence, image: validImage } =
-    validatedFields.data;
+  const {
+    lessonId,
+    term,
+    translation,
+    romanization,
+    exampleSentence,
+    explanation,
+    explanationJa,
+    image: validImage,
+  } = validatedFields.data;
 
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
@@ -126,20 +217,24 @@ export async function createWord(
     }
   }
 
-  await prisma.word.create({
+  const word = await prisma.word.create({
     data: {
       lessonId,
       term,
       translation,
       romanization: romanization || null,
       exampleSentence: exampleSentence || null,
+      explanation: explanation || null,
+      explanationJa: explanationJa || null,
       position: (_max.position ?? 0) + 1,
       imageKey,
     },
   });
 
+  await replaceWordFormsAndExamples(word.id, formData);
+
   revalidatePath(`/dashboard/admin/courses/${lesson.course.slug}/categories/${lessonId}/words/new`);
-  revalidatePath(`/dashboard/courses/${lesson.course.slug}/vocab`);
+  revalidatePath(`/dashboard/courses/${lesson.course.slug}/decks/${lessonId}`);
 
   return { success: true, message: `"${term}" added.` };
 }
@@ -166,6 +261,8 @@ export async function updateWord(
     translation: formData.get("translation"),
     romanization: formData.get("romanization") || undefined,
     exampleSentence: formData.get("exampleSentence") || undefined,
+    explanation: formData.get("explanation") || undefined,
+    explanationJa: formData.get("explanationJa") || undefined,
     image,
   });
 
@@ -173,8 +270,16 @@ export async function updateWord(
     return { errors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { wordId, term, translation, romanization, exampleSentence, image: validImage } =
-    validatedFields.data;
+  const {
+    wordId,
+    term,
+    translation,
+    romanization,
+    exampleSentence,
+    explanation,
+    explanationJa,
+    image: validImage,
+  } = validatedFields.data;
 
   const existing = await prisma.word.findUnique({
     where: { id: wordId },
@@ -205,13 +310,17 @@ export async function updateWord(
       translation,
       romanization: romanization || null,
       exampleSentence: exampleSentence || null,
+      explanation: explanation || null,
+      explanationJa: explanationJa || null,
       imageKey,
     },
   });
 
+  await replaceWordFormsAndExamples(wordId, formData);
+
   const courseSlug = existing.lesson.course.slug;
   revalidatePath(`/dashboard/admin/courses/${courseSlug}/categories/${existing.lessonId}`);
-  revalidatePath(`/dashboard/courses/${courseSlug}/vocab`);
+  revalidatePath(`/dashboard/courses/${courseSlug}/decks/${existing.lessonId}`);
 
   redirect(`/dashboard/admin/courses/${courseSlug}/categories/${existing.lessonId}`);
 }
@@ -230,7 +339,7 @@ export async function setWordActive(wordId: string, active: boolean): Promise<vo
   });
 
   revalidatePath(`/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}`);
-  revalidatePath(`/dashboard/courses/${word.lesson.course.slug}/vocab`);
+  revalidatePath(`/dashboard/courses/${word.lesson.course.slug}/decks/${word.lessonId}`);
 }
 
 export async function setCategoryActive(lessonId: string, active: boolean): Promise<void> {
@@ -247,7 +356,7 @@ export async function setCategoryActive(lessonId: string, active: boolean): Prom
   });
 
   revalidatePath(`/dashboard/admin/courses/${lesson.course.slug}`);
-  revalidatePath(`/dashboard/courses/${lesson.course.slug}/vocab`);
+  revalidatePath(`/dashboard/courses/${lesson.course.slug}`);
 }
 
 export async function setCourseActive(courseId: string, active: boolean): Promise<void> {
@@ -304,7 +413,10 @@ export async function importWords(
     return { message: "That category no longer exists." };
   }
 
-  const sourceWords = await prisma.word.findMany({ where: { id: { in: wordIds } } });
+  const sourceWords = await prisma.word.findMany({
+    where: { id: { in: wordIds } },
+    include: { forms: { orderBy: { position: "asc" } }, examples: { orderBy: { position: "asc" } } },
+  });
 
   if (sourceWords.length === 0) {
     return { message: "Those words no longer exist." };
@@ -315,18 +427,63 @@ export async function importWords(
     _max: { position: true },
   });
 
-  await prisma.word.createMany({
-    data: sourceWords.map((word, index) => ({
-      lessonId: targetLessonId,
-      term: word.term,
-      translation: word.translation,
-      romanization: word.romanization,
-      exampleSentence: word.exampleSentence,
-      imageKey: word.imageKey,
-      position: (_max.position ?? 0) + 1 + index,
-    })),
-  });
+  const basePosition = _max.position ?? 0;
 
-  revalidatePath(`/dashboard/courses/${targetLesson.course.slug}/vocab`);
+  // Each new word needs its own id up front so its cloned forms/examples can
+  // reference it, and (for examples tied to a form) the form's *new* id —
+  // mirrored the same way `replaceWordFormsAndExamples` maps client ids to
+  // freshly generated ones.
+  await prisma.$transaction(
+    sourceWords.flatMap((word, wordIndex) => {
+      const newWordId = randomUUID();
+      const formIdBySourceId = new Map(word.forms.map((form) => [form.id, randomUUID()]));
+
+      return [
+        prisma.word.create({
+          data: {
+            id: newWordId,
+            lessonId: targetLessonId,
+            term: word.term,
+            translation: word.translation,
+            romanization: word.romanization,
+            exampleSentence: word.exampleSentence,
+            explanation: word.explanation,
+            explanationJa: word.explanationJa,
+            imageKey: word.imageKey,
+            position: basePosition + 1 + wordIndex,
+          },
+        }),
+        ...(word.forms.length > 0
+          ? [
+              prisma.wordForm.createMany({
+                data: word.forms.map((form) => ({
+                  id: formIdBySourceId.get(form.id)!,
+                  wordId: newWordId,
+                  labelEn: form.labelEn,
+                  labelJa: form.labelJa,
+                  value: form.value,
+                  position: form.position,
+                })),
+              }),
+            ]
+          : []),
+        ...(word.examples.length > 0
+          ? [
+              prisma.wordExample.createMany({
+                data: word.examples.map((example) => ({
+                  wordId: newWordId,
+                  formId: example.formId ? (formIdBySourceId.get(example.formId) ?? null) : null,
+                  en: example.en,
+                  ja: example.ja,
+                  position: example.position,
+                })),
+              }),
+            ]
+          : []),
+      ];
+    }),
+  );
+
+  revalidatePath(`/dashboard/courses/${targetLesson.course.slug}/decks/${targetLessonId}`);
   redirect(`/dashboard/admin/courses/${targetLesson.course.slug}/categories/${targetLessonId}`);
 }
