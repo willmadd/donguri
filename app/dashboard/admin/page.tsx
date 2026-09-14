@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdminProfile } from "@/lib/dal";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Admin — Donguri",
@@ -13,7 +13,7 @@ export default async function AdminHubPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BackLink href="/dashboard" label="Dashboard" />
+        <Breadcrumbs items={[{ href: "/dashboard", label: "Dashboard" }, { label: "Admin" }]} />
         <h1 className="text-2xl font-semibold text-sumi">Admin</h1>
         <p className="mt-1 text-sumi-soft">Manage users and course content.</p>
       </div>

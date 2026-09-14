@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getDeckDetail } from "@/lib/dal";
 import { LessonWords } from "@/components/vocab/lesson-words";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ slug: string; deckId: string }>;
@@ -27,7 +27,14 @@ export default async function DeckPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <BackLink href={`/dashboard/courses/${slug}`} label={course.title} />
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/courses", label: "Courses" },
+            { href: `/dashboard/courses/${slug}`, label: course.title },
+            { label: deck.title },
+          ]}
+        />
         <h1 className="text-2xl font-semibold text-sumi">{deck.title}</h1>
       </div>
 

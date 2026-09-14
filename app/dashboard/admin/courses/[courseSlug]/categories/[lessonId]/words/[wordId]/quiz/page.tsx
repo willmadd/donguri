@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireAdminProfile, getAdminWordQuizQuestions } from "@/lib/dal";
 import { QuizQuestionsForm } from "@/components/admin/quiz-questions-form";
 import { BulkImportQuizQuestionsForm } from "@/components/admin/bulk-import-quiz-questions-form";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseSlug: string; lessonId: string; wordId: string }>;
@@ -23,9 +23,18 @@ export default async function AdminWordQuizPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BackLink
-          href={`/dashboard/admin/courses/${courseSlug}/categories/${lessonId}`}
-          label={lesson.title}
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/admin", label: "Admin" },
+            { href: "/dashboard/admin/courses", label: "Course content" },
+            { href: `/dashboard/admin/courses/${courseSlug}`, label: course.title },
+            {
+              href: `/dashboard/admin/courses/${courseSlug}/categories/${lessonId}`,
+              label: lesson.title,
+            },
+            { label: word.term },
+          ]}
         />
         <h1 className="text-2xl font-semibold text-sumi">Quiz questions</h1>
         <p className="mt-1 text-sumi-soft">

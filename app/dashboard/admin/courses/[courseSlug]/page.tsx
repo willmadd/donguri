@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireAdminProfile, getAdminCategoryOverview } from "@/lib/dal";
 import { setCategoryActive } from "@/lib/actions/admin-content";
 import { VisibilityToggle } from "@/components/ui/visibility-toggle";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseSlug: string }>;
@@ -24,7 +24,14 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <BackLink href="/dashboard/admin/courses" label="Course content" />
+          <Breadcrumbs
+            items={[
+              { href: "/dashboard", label: "Dashboard" },
+              { href: "/dashboard/admin", label: "Admin" },
+              { href: "/dashboard/admin/courses", label: "Course content" },
+              { label: course.title },
+            ]}
+          />
           <h1 className="text-2xl font-semibold text-sumi">{course.title}</h1>
           <p className="mt-1 text-sumi-soft">Decks in this course.</p>
         </div>

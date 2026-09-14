@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdminProfile } from "@/lib/dal";
 import { AdminResetPasswordForm } from "@/components/admin/admin-reset-password-form";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Reset user password — Donguri",
@@ -13,7 +13,13 @@ export default async function AdminResetPasswordPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BackLink href="/dashboard" label="Admin" />
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/admin", label: "Admin" },
+            { label: "Reset user password" },
+          ]}
+        />
         <h1 className="text-2xl font-semibold text-sumi">
           Reset a user&apos;s password
         </h1>

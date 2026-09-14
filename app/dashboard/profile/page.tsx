@@ -3,7 +3,7 @@ import { requireProfile } from "@/lib/dal";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { DonguriCharacterCard } from "@/components/donguri/donguri-character-card";
 import { XpCounter } from "@/components/xp/xp-counter";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { levelForXp, parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export default async function ProfilePage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <BackLink href="/dashboard" label="Dashboard" />
+        <Breadcrumbs items={[{ href: "/dashboard", label: "Dashboard" }, { label: "Profile" }]} />
         <h1 className="text-2xl font-semibold text-sumi">Your profile</h1>
       </div>
 

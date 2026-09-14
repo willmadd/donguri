@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireAdminProfile, getAdminCourses } from "@/lib/dal";
 import { setCourseActive } from "@/lib/actions/admin-content";
 import { VisibilityToggle } from "@/components/ui/visibility-toggle";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Manage courses — Donguri",
@@ -16,7 +16,13 @@ export default async function AdminCoursesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BackLink href="/dashboard" label="Admin" />
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/admin", label: "Admin" },
+            { label: "Course content" },
+          ]}
+        />
         <h1 className="text-2xl font-semibold text-sumi">Course content</h1>
         <p className="mt-1 text-sumi-soft">
           Pick a course to manage its categories and words.

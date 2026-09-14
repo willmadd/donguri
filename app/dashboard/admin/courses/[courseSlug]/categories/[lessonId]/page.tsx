@@ -5,7 +5,7 @@ import { requireAdminProfile, getAdminCategoryWords } from "@/lib/dal";
 import { setWordActive } from "@/lib/actions/admin-content";
 import { WordImage } from "@/components/ui/word-image";
 import { VisibilityToggle } from "@/components/ui/visibility-toggle";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { wordImagePath } from "@/lib/images";
 
 type PageProps = {
@@ -31,7 +31,15 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <BackLink href={`/dashboard/admin/courses/${courseSlug}`} label={course.title} />
+          <Breadcrumbs
+            items={[
+              { href: "/dashboard", label: "Dashboard" },
+              { href: "/dashboard/admin", label: "Admin" },
+              { href: "/dashboard/admin/courses", label: "Course content" },
+              { href: `/dashboard/admin/courses/${courseSlug}`, label: course.title },
+              { label: lesson.title },
+            ]}
+          />
           <h1 className="text-2xl font-semibold text-sumi">{lesson.title}</h1>
           <p className="mt-1 text-sumi-soft">{course.title}</p>
         </div>

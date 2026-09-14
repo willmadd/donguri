@@ -7,7 +7,7 @@ import { ResetProgressButton } from "@/components/vocab/reset-progress-button";
 import { LessonWords } from "@/components/vocab/lesson-words";
 import { TopLeaderboardCard } from "@/components/leaderboard/top-leaderboard-card";
 import { FriendsLeaderboardCard } from "@/components/leaderboard/friends-leaderboard-card";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -32,7 +32,13 @@ export default async function CourseHomePage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <BackLink href="/dashboard/courses" label="Courses" />
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/courses", label: "Courses" },
+            { label: course.title },
+          ]}
+        />
         <h1 className="text-2xl font-semibold text-sumi">{course.title}</h1>
         {course.description && (
           <p className="mt-1 text-sumi-soft">{course.description}</p>

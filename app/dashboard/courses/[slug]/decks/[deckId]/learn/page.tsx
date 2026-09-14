@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getDeckDetail, getLearnQueue } from "@/lib/dal";
 import { LearnSession } from "@/components/vocab/learn-session";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ slug: string; deckId: string }>;
@@ -16,13 +16,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function LearnPage({ params }: PageProps) {
   const { slug, deckId } = await params;
-  const { deck } = await getDeckDetail(slug, deckId);
+  const { course, deck } = await getDeckDetail(slug, deckId);
   const words = await getLearnQueue(slug, deckId);
+
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/dashboard/courses", label: "Courses" },
+    { href: `/dashboard/courses/${slug}`, label: course.title },
+    { href: `/dashboard/courses/${slug}/decks/${deckId}`, label: deck.title },
+    { label: "Learn" },
+  ];
 
   if (words.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <BackLink href={`/dashboard/courses/${slug}/decks/${deckId}`} label={deck.title} />
+        <Breadcrumbs items={breadcrumbItems} />
 
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-sumi/10 bg-washi-soft px-6 py-24 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ai-soft text-xl font-semibold text-ai-dark">
@@ -54,7 +62,7 @@ export default async function LearnPage({ params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href={`/dashboard/courses/${slug}/decks/${deckId}`} label={deck.title} />
+      <Breadcrumbs items={breadcrumbItems} />
       <LearnSession words={words} courseSlug={slug} deckId={deckId} />
     </div>
   );

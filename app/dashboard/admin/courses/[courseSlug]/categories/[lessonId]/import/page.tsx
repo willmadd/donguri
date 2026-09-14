@@ -8,7 +8,7 @@ import {
 } from "@/lib/dal";
 import { SelectField } from "@/components/ui/select";
 import { ImportWordsForm } from "@/components/admin/import-words-form";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { wordImagePath } from "@/lib/images";
 
 type PageProps = {
@@ -33,9 +33,18 @@ export default async function ImportWordsPage({ params, searchParams }: PageProp
 
   const heading = (
     <div>
-      <BackLink
-        href={`/dashboard/admin/courses/${courseSlug}/categories/${lessonId}`}
-        label={targetLesson.title}
+      <Breadcrumbs
+        items={[
+          { href: "/dashboard", label: "Dashboard" },
+          { href: "/dashboard/admin", label: "Admin" },
+          { href: "/dashboard/admin/courses", label: "Course content" },
+          { href: `/dashboard/admin/courses/${courseSlug}`, label: targetCourse.title },
+          {
+            href: `/dashboard/admin/courses/${courseSlug}/categories/${lessonId}`,
+            label: targetLesson.title,
+          },
+          { label: "Import words" },
+        ]}
       />
       <h1 className="text-2xl font-semibold text-sumi">Import words</h1>
       <p className="mt-1 text-sumi-soft">

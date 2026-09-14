@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdminProfile, getAdminCategoryOverview } from "@/lib/dal";
 import { CreateCategoryForm } from "@/components/admin/create-category-form";
-import { BackLink } from "@/components/ui/back-link";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
   params: Promise<{ courseSlug: string }>;
@@ -19,7 +19,15 @@ export default async function NewCategoryPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <BackLink href={`/dashboard/admin/courses/${courseSlug}`} label={course.title} />
+        <Breadcrumbs
+          items={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/dashboard/admin", label: "Admin" },
+            { href: "/dashboard/admin/courses", label: "Course content" },
+            { href: `/dashboard/admin/courses/${courseSlug}`, label: course.title },
+            { label: "New deck" },
+          ]}
+        />
         <h1 className="text-2xl font-semibold text-sumi">New deck</h1>
         <p className="mt-1 text-sumi-soft">{course.title}</p>
       </div>
