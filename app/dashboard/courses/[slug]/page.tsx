@@ -13,7 +13,9 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const { course } = await getCourseDecks(slug);
   return { title: `${course.title} — Donguri` };
@@ -38,7 +40,7 @@ export default async function CourseHomePage({ params }: PageProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {dailyCounts.length > 0 && <StreakChart data={dailyCounts} />}
+        {<StreakChart data={dailyCounts} />}
         <TopLeaderboardCard entries={leaderboards.top} />
         <FriendsLeaderboardCard initialFriends={leaderboards.friends} />
       </div>
@@ -49,11 +51,16 @@ export default async function CourseHomePage({ params }: PageProps) {
         )}
 
         {decks.map((deck) => {
-          const complete = deck.totalWords > 0 && deck.knownWords === deck.totalWords;
+          const complete =
+            deck.totalWords > 0 && deck.knownWords === deck.totalWords;
           const learntPercent =
-            deck.totalWords > 0 ? Math.round((deck.learntWords / deck.totalWords) * 100) : 0;
+            deck.totalWords > 0
+              ? Math.round((deck.learntWords / deck.totalWords) * 100)
+              : 0;
           const knownPercent =
-            deck.totalWords > 0 ? Math.round((deck.knownWords / deck.totalWords) * 100) : 0;
+            deck.totalWords > 0
+              ? Math.round((deck.knownWords / deck.totalWords) * 100)
+              : 0;
 
           return (
             <div
@@ -90,7 +97,9 @@ export default async function CourseHomePage({ params }: PageProps) {
 
                   <div>
                     <p className="text-sm text-sumi-soft">
-                      {complete ? "All words known" : `${deck.knownWords} / ${deck.totalWords} words known`}
+                      {complete
+                        ? "All words known"
+                        : `${deck.knownWords} / ${deck.totalWords} words known`}
                     </p>
                     <div
                       role="progressbar"
