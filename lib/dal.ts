@@ -32,6 +32,7 @@ import {
   weightedSampleWithRepeats,
 } from "@/lib/srs";
 import { wordImagePath } from "@/lib/images";
+import { findClozeMatchesByForm, pickRandomClozeMatch } from "@/lib/cloze";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 export const getSession = cache(async () => {
@@ -344,8 +345,8 @@ export const getAdminWordQuizQuestions = cache(async (wordId: string) => {
     where: { id: wordId },
     include: {
       lesson: { select: { id: true, title: true, course: { select: { slug: true, title: true } } } },
-      forms: { orderBy: { position: "asc" }, include: { examples: { select: { id: true } } } },
-      examples: { select: { id: true } },
+      forms: { orderBy: { position: "asc" } },
+      examples: { orderBy: { position: "asc" } },
       quizQuestions: { orderBy: { position: "asc" } },
     },
   });
@@ -354,6 +355,12 @@ export const getAdminWordQuizQuestions = cache(async (wordId: string) => {
     redirect("/dashboard/admin/courses");
   }
 
+  // The actual sentences the real quiz would draw from for each form — not
+  // just a count — so an admin can see (and fix, via the forms/examples
+  // editor) a form that's under-represented, like "hottest" only ever
+  // having one demonstrating example against "hot"'s six.
+  const clozeByForm = findClozeMatchesByForm(word.forms, word.examples);
+
   return {
     word: { id: word.id, term: word.term, translation: word.translation },
     lesson: { id: word.lesson.id, title: word.lesson.title },
@@ -361,10 +368,10 @@ export const getAdminWordQuizQuestions = cache(async (wordId: string) => {
     autoForms: word.forms.map((form) => ({
       id: form.id,
       labelEn: form.labelEn,
+      labelJa: form.labelJa,
       value: form.value,
-      exampleCount: form.examples.length,
+      examples: (clozeByForm.get(form.id) ?? []).map((match) => ({ en: match.en, ja: match.ja })),
     })),
-    autoExampleCount: word.examples.length,
     questions: word.quizQuestions.map(
       (question): AdminQuizQuestionSummary => ({
         id: question.id,
@@ -756,9 +763,55 @@ export const getTestQueue = cache(
       },
     });
 
-    return shuffle(reviewSample.map((word) => buildQuestion(word, distractorPool, course)));
+    return shuffle(buildQuizQuestions(reviewSample, distractorPool, course));
   },
 );
+
+// Builds one question per sampled word, retrying a bounded number of times
+// whenever a question would repeat something already asked this quiz (the
+// same word tested in the same direction, the same form, or the same
+// hand-authored question) — `buildQuestion` is pure randomness with no DB
+// calls, so re-rolling is cheap. Repeated *words* are intentional (spaced
+// repetition), just not repeated *questions*; a word sampled more than once
+// with nothing else to ask about it will still repeat once retries run out,
+// rather than shipping a shorter quiz.
+const MAX_DEDUP_ATTEMPTS = 8;
+
+function buildQuizQuestions(
+  words: QuestionWord[],
+  pool: QuestionWord[],
+  course: { targetLanguage: string; sourceLanguage: string },
+): QuizQuestion[] {
+  const used = new Set<string>();
+
+  return words.map((word) => {
+    let question = buildQuestion(word, pool, course);
+
+    for (let attempt = 0; attempt < MAX_DEDUP_ATTEMPTS && used.has(questionSignature(question)); attempt++) {
+      question = buildQuestion(word, pool, course);
+    }
+
+    used.add(questionSignature(question));
+    return question;
+  });
+}
+
+// Identifies "the same fact being tested" rather than "the exact same
+// rendered question" — e.g. two different example sentences both testing
+// "went" still count as one repeat, since the underlying quizzed fact
+// (past tense of "go") is identical either way.
+function questionSignature(question: QuizQuestion): string {
+  switch (question.kind) {
+    case "multiple-choice":
+      return `mc-${question.wordId}-${question.direction}`;
+    case "type-form":
+    case "form-choice":
+      return `cloze-${question.wordId}-${question.formId}`;
+    case "custom-choice":
+    case "custom-type":
+      return `custom-${question.questionId}`;
+  }
+}
 
 async function bumpStreak(userId: string, courseId: string, now: Date) {
   const enrollment = await prisma.courseEnrollment.findUniqueOrThrow({
@@ -808,57 +861,21 @@ type QuestionWord = {
 const SAME_CATEGORY_DISTRACTORS = 2;
 const OTHER_CATEGORY_DISTRACTORS = 1;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// Whole-word, case-insensitive — so a form value like "you" doesn't match
-// inside "yourself", and "Went" still matches "went".
-function wholeWordPattern(value: string): RegExp {
-  return new RegExp(`\\b${escapeRegExp(value)}\\b`, "i");
-}
-
-type ClozeCandidate = { formId: string; clozeSentence: string; clozeSentenceJa: string };
-
-// Cross-references every form against every example sentence — no admin
-// tagging required — and blanks out the form's value wherever an example
-// literally contains it as a whole word. Because the match is verified
-// against the actual sentence text, there's no risk of asking the learner
-// to fill in a form the sentence doesn't really demonstrate.
-function findClozeCandidates(word: QuestionWord): ClozeCandidate[] {
-  const forms = word.forms ?? [];
-  const examples = word.examples ?? [];
-  const candidates: ClozeCandidate[] = [];
-
-  for (const form of forms) {
-    const pattern = wholeWordPattern(form.value);
-    for (const example of examples) {
-      if (pattern.test(example.en)) {
-        candidates.push({
-          formId: form.id,
-          clozeSentence: example.en.replace(pattern, "___"),
-          clozeSentenceJa: example.ja,
-        });
-      }
-    }
-  }
-
-  return candidates;
-}
-
 // A word with at least one (form, example) cloze match gets this chance,
 // per question, to be asked as a fill-in-the-blank form question instead of
-// the usual term/translation multiple choice — split evenly between typing
-// the answer and choosing it from the word's own forms (the latter only
-// when there are at least 2 distinct forms to choose between). Words with
-// no qualifying forms are unaffected and always fall through to multiple
-// choice.
+// the usual term/translation multiple choice. Both this and
+// CUSTOM_TYPE_CHANCE below favor typing the answer over picking it from
+// options — free recall is the harder, more useful skill, multiple choice
+// is the fallback when there's nothing else to offer (a single-form word,
+// or a 1-option custom question).
 const FORM_QUESTION_CHANCE = 2 / 3;
+const FORM_TYPE_CHANCE = 0.65;
 
 // A word with at least one hand-authored question gets this chance, per
 // question, to surface one of those instead of an auto-generated question —
 // mixed in alongside the other kinds, never replacing them entirely.
 const CUSTOM_QUESTION_CHANCE = 0.3;
+const CUSTOM_TYPE_CHANCE = 0.65;
 
 function buildQuestion(
   word: QuestionWord,
@@ -870,8 +887,19 @@ function buildQuestion(
   if (customQuestions.length > 0 && Math.random() < CUSTOM_QUESTION_CHANCE) {
     const question = customQuestions[Math.floor(Math.random() * customQuestions.length)];
 
+    if (Math.random() < CUSTOM_TYPE_CHANCE) {
+      return {
+        kind: "custom-type",
+        wordId: word.id,
+        questionId: question.id,
+        prompt: question.prompt,
+        promptJa: question.promptJa,
+        targetLanguage: course.targetLanguage,
+      };
+    }
+
     return {
-      kind: "custom",
+      kind: "custom-choice",
       wordId: word.id,
       questionId: question.id,
       prompt: question.prompt,
@@ -881,19 +909,19 @@ function buildQuestion(
     };
   }
 
-  const clozeCandidates = findClozeCandidates(word);
+  const clozeByForm = findClozeMatchesByForm(word.forms ?? [], word.examples ?? []);
 
-  if (clozeCandidates.length > 0 && Math.random() < FORM_QUESTION_CHANCE) {
-    const candidate = clozeCandidates[Math.floor(Math.random() * clozeCandidates.length)];
+  if (clozeByForm.size > 0 && Math.random() < FORM_QUESTION_CHANCE) {
+    const match = pickRandomClozeMatch(clozeByForm)!;
     const uniqueFormValues = [...new Set((word.forms ?? []).map((form) => form.value))];
 
-    if (uniqueFormValues.length >= 2 && Math.random() < 0.5) {
+    if (uniqueFormValues.length >= 2 && Math.random() >= FORM_TYPE_CHANCE) {
       return {
         kind: "form-choice",
         wordId: word.id,
-        formId: candidate.formId,
-        clozeSentence: candidate.clozeSentence,
-        clozeSentenceJa: candidate.clozeSentenceJa,
+        formId: match.formId,
+        clozeSentence: match.en,
+        clozeSentenceJa: match.ja,
         targetLanguage: course.targetLanguage,
         options: shuffle(uniqueFormValues),
       };
@@ -902,9 +930,9 @@ function buildQuestion(
     return {
       kind: "type-form",
       wordId: word.id,
-      formId: candidate.formId,
-      clozeSentence: candidate.clozeSentence,
-      clozeSentenceJa: candidate.clozeSentenceJa,
+      formId: match.formId,
+      clozeSentence: match.en,
+      clozeSentenceJa: match.ja,
       targetLanguage: course.targetLanguage,
     };
   }

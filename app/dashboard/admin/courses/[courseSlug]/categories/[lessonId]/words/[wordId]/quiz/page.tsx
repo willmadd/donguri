@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdminProfile, getAdminWordQuizQuestions } from "@/lib/dal";
 import { QuizQuestionsForm } from "@/components/admin/quiz-questions-form";
+import { BulkImportQuizQuestionsForm } from "@/components/admin/bulk-import-quiz-questions-form";
 import { BackLink } from "@/components/ui/back-link";
 
 type PageProps = {
@@ -41,22 +42,32 @@ export default async function AdminWordQuizPage({ params }: PageProps) {
         {autoForms.length > 0 && (
           <>
             <p className="mt-4 text-sm text-sumi-soft">
-              Fill-in-the-blank, built from this word&apos;s forms and examples:
+              Fill-in-the-blank, built from this word&apos;s forms and examples — each form is
+              picked equally often regardless of how many examples it has, but a form with only
+              one or two is still worth balancing out below:
             </p>
-            <ul className="mt-2 flex flex-col gap-1 text-sm text-sumi">
+            <div className="mt-2 flex flex-col gap-3">
               {autoForms.map((form) => (
-                <li key={form.id}>
-                  {form.labelEn} ({form.value}) —{" "}
-                  {form.exampleCount > 0 ? (
-                    <>
-                      {form.exampleCount} example{form.exampleCount === 1 ? "" : "s"}
-                    </>
+                <div key={form.id} className="rounded-lg border border-sumi/10 bg-washi p-3">
+                  <p className="text-sm font-medium text-sumi">
+                    {form.labelEn} <span className="text-sumi-soft">({form.value})</span>
+                  </p>
+                  {form.examples.length > 0 ? (
+                    <ul className="mt-1 flex flex-col gap-0.5 text-sm text-sumi-soft">
+                      {form.examples.map((example, index) => (
+                        <li key={index}>
+                          {example.en} <span className="opacity-70">— {example.ja}</span>
+                        </li>
+                      ))}
+                    </ul>
                   ) : (
-                    <span className="text-sumi-soft">no matching example yet, won&apos;t be asked</span>
+                    <p className="mt-1 text-sm text-shu">
+                      No matching example yet — won&apos;t be asked. Add one below.
+                    </p>
                   )}
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           </>
         )}
 
@@ -70,7 +81,16 @@ export default async function AdminWordQuizPage({ params }: PageProps) {
 
       <section className="rounded-2xl border border-sumi/10 bg-washi-soft p-6">
         <h2 className="mb-4 font-semibold text-sumi">Custom questions</h2>
+        <p className="mb-4 text-sm text-sumi-soft">
+          Mixed into the quiz pool alongside the auto-generated ones — shown either as multiple
+          choice or as a type-the-answer question, at random.
+        </p>
         <QuizQuestionsForm wordId={wordId} initialQuestions={questions} />
+      </section>
+
+      <section className="rounded-2xl border border-sumi/10 bg-washi-soft p-6">
+        <h2 className="mb-4 font-semibold text-sumi">Bulk import</h2>
+        <BulkImportQuizQuestionsForm wordId={wordId} />
       </section>
     </div>
   );

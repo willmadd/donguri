@@ -7,6 +7,7 @@ import { requireProfile } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { buildWordImageKey, uploadWordImage } from "@/lib/bunny";
 import {
+  BulkQuizQuestionsSchema,
   CreateCategoryFormSchema,
   CreateWordFormSchema,
   ImportWordsFormSchema,
@@ -14,6 +15,7 @@ import {
   WordExampleInputSchema,
   WordFormInputSchema,
   WordQuizQuestionInputSchema,
+  type BulkImportQuizQuestionsFormState,
   type CreateCategoryFormState,
   type CreateWordFormState,
   type ImportWordsFormState,
@@ -164,6 +166,85 @@ export async function saveQuizQuestions(
   );
 
   return { success: true, message: "Quiz questions saved." };
+}
+
+// Parses a pasted JSON array and appends it to this word's existing custom
+// questions (unlike `saveQuizQuestions` above, this never deletes anything —
+// it's additive, so it's safe to paste the same batch into several words in
+// a row without re-typing the repeatable-row form each time).
+export async function bulkImportQuizQuestions(
+  _state: BulkImportQuizQuestionsFormState,
+  formData: FormData,
+): Promise<BulkImportQuizQuestionsFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const wordId = formData.get("wordId");
+  const json = formData.get("json");
+
+  if (typeof wordId !== "string" || wordId === "") {
+    return { message: "Missing word." };
+  }
+
+  if (typeof json !== "string" || json.trim() === "") {
+    return { message: "Paste some JSON first." };
+  }
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { message: "That isn't valid JSON." };
+  }
+
+  const validated = BulkQuizQuestionsSchema.safeParse(parsed);
+
+  if (!validated.success) {
+    const firstIssue = validated.error.issues[0];
+    return {
+      message: firstIssue
+        ? `Invalid at item ${String(firstIssue.path[0])}: ${firstIssue.message}`
+        : "That JSON doesn't match the expected shape.",
+    };
+  }
+
+  const word = await prisma.word.findUnique({
+    where: { id: wordId },
+    select: { lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+  });
+
+  if (!word) {
+    return { message: "That word no longer exists." };
+  }
+
+  const { _max } = await prisma.wordQuizQuestion.aggregate({
+    where: { wordId },
+    _max: { position: true },
+  });
+
+  await prisma.wordQuizQuestion.createMany({
+    data: validated.data.map((entry, index) => ({
+      wordId,
+      prompt: entry.prompt,
+      promptJa: entry.promptJa || null,
+      options: entry.options,
+      correctIndex: entry.correctIndex,
+      position: (_max.position ?? 0) + 1 + index,
+    })),
+  });
+
+  revalidatePath(
+    `/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}/words/${wordId}/quiz`,
+  );
+
+  return {
+    success: true,
+    message: `Imported ${validated.data.length} question${validated.data.length === 1 ? "" : "s"}.`,
+  };
 }
 
 // Same asymmetry as `lib/actions/admin.ts`: the *page* guard redirects a

@@ -129,7 +129,10 @@ export async function submitCustomAnswer(
   }
 
   const correctAnswer = question.options[question.correctIndex];
-  const correct = selectedOption === correctAnswer;
+  // Trimmed and case-insensitive: this same check backs both the
+  // multiple-choice presentation (an exact click, so this is a no-op) and
+  // the free-typed one, where "Correct"/"correct "/"CORRECT" should all count.
+  const correct = selectedOption.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
   const { xp } = await recordAnswer(user.id, wordId, correct);
 

@@ -191,25 +191,31 @@ export type TypeFormQuestion = FormClozeQuestion & { kind: "type-form" };
 // words with 2+ forms, so there's something to choose between.
 export type FormChoiceQuestion = FormClozeQuestion & { kind: "form-choice"; options: string[] };
 
-// A hand-authored multiple-choice question an admin added for this specific
-// word (see AdminQuizQuestionSummary/WordQuizQuestionInputSchema below) —
-// mixed into the quiz pool alongside the auto-generated question kinds
-// above, never replacing them.
-export type CustomQuestion = {
-  kind: "custom";
+// A hand-authored question an admin added for this specific word (see
+// AdminQuizQuestionSummary/WordQuizQuestionInputSchema below) — mixed into
+// the quiz pool alongside the auto-generated question kinds above, never
+// replacing them. Presented either way at random, the same split as the
+// auto-generated form questions: as multiple choice among the admin's own
+// options, or as a free-text typed answer (never both for the same
+// occurrence) — `correctAnswer` is deliberately omitted from the type-in
+// variant so it isn't sent to the client before it's answered.
+type CustomQuestionBase = {
   wordId: string;
   questionId: string;
   prompt: string;
   promptJa: string | null;
-  options: string[];
   targetLanguage: string;
 };
+
+export type CustomChoiceQuestion = CustomQuestionBase & { kind: "custom-choice"; options: string[] };
+export type CustomTypeQuestion = CustomQuestionBase & { kind: "custom-type" };
 
 export type QuizQuestion =
   | MultipleChoiceQuestion
   | TypeFormQuestion
   | FormChoiceQuestion
-  | CustomQuestion;
+  | CustomChoiceQuestion
+  | CustomTypeQuestion;
 
 export type LessonWordSummary = {
   id: string;
@@ -369,6 +375,36 @@ export type AdminQuizQuestionSummary = {
 };
 
 export type SaveQuizQuestionsFormState =
+  | {
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
+// One entry of a bulk-imported JSON array (see BulkImportQuizQuestionsForm) —
+// a plainer shape than WordQuizQuestionInputSchema above (a real array of
+// options rather than 4 named slots) since this is meant to be easy to
+// generate outside the app, not tied to the repeatable-row form fields.
+export const BulkQuizQuestionSchema = z
+  .object({
+    prompt: z.string().trim().min(1, { error: "prompt is required" }).max(300),
+    promptJa: z.string().trim().max(300).optional(),
+    options: z
+      .array(z.string().trim().min(1).max(150))
+      .min(2, { error: "options needs at least 2 entries" })
+      .max(4, { error: "options allows at most 4 entries" }),
+    correctIndex: z.number().int().min(0),
+  })
+  .refine((entry) => entry.correctIndex < entry.options.length, {
+    error: "correctIndex is out of range for options",
+  });
+
+export const BulkQuizQuestionsSchema = z
+  .array(BulkQuizQuestionSchema)
+  .min(1, { error: "Paste at least one question." })
+  .max(200, { error: "Keep it to 200 questions or fewer per import." });
+
+export type BulkImportQuizQuestionsFormState =
   | {
       message?: string;
       success?: boolean;

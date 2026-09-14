@@ -101,14 +101,29 @@ export const TestSession = ({
     }
   };
 
-  const handleCustomAnswer = async (optionValue: string) => {
-    if (feedback || pending || question.kind !== "custom") return;
+  const handleCustomChoiceAnswer = async (optionValue: string) => {
+    if (feedback || pending || question.kind !== "custom-choice") return;
 
     setPending(true);
 
     try {
       const result = await submitCustomAnswer(question.wordId, question.questionId, optionValue);
       setFeedback({ selected: optionValue, correct: result.correct, correctAnswer: result.correctAnswer });
+      recordResult(result.correct);
+      setXp(result.xp);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleCustomTypeSubmit = async () => {
+    if (feedback || pending || question.kind !== "custom-type" || typedAnswer.trim() === "") return;
+
+    setPending(true);
+
+    try {
+      const result = await submitCustomAnswer(question.wordId, question.questionId, typedAnswer);
+      setFeedback({ selected: typedAnswer, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
       setXp(result.xp);
     } finally {
@@ -295,7 +310,7 @@ export const TestSession = ({
             </div>
           )}
         </>
-      ) : question.kind === "custom" ? (
+      ) : question.kind === "custom-choice" || question.kind === "custom-type" ? (
         <>
           <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">Quiz question</p>
@@ -303,35 +318,68 @@ export const TestSession = ({
             {question.promptJa && <p className="mt-2 text-sumi-soft">{question.promptJa}</p>}
           </div>
 
-          <div className="mt-5 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-            {question.options.map((option) => {
-              const isSelected = feedback?.selected === option;
-              const isCorrectOption = feedback && option === feedback.correctAnswer;
+          {question.kind === "custom-type" ? (
+            <form
+              className="mt-5 flex w-full flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCustomTypeSubmit();
+              }}
+            >
+              <input
+                type="text"
+                value={typedAnswer}
+                onChange={(event) => setTypedAnswer(event.target.value)}
+                disabled={pending || Boolean(feedback)}
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder="Type your answer"
+                className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
+              />
 
-              let style =
-                "border-sumi/10 bg-washi hover:-translate-y-0.5 hover:border-ai/40 hover:bg-ai-soft/30 hover:shadow-sm";
-
-              if (feedback && isCorrectOption) {
-                style = "border-matcha bg-matcha-soft text-matcha-dark shadow-sm";
-              } else if (feedback && isSelected && !feedback.correct) {
-                style = "border-shu bg-shu/5 text-shu-dark";
-              } else if (feedback) {
-                style = "border-sumi/10 bg-washi opacity-60";
-              }
-
-              return (
+              {!feedback && (
                 <button
-                  key={option}
-                  type="button"
-                  disabled={pending || Boolean(feedback)}
-                  onClick={() => handleCustomAnswer(option)}
-                  className={`flex min-h-16 items-center justify-center rounded-2xl border p-3 text-center font-medium transition disabled:cursor-not-allowed ${style}`}
+                  type="submit"
+                  disabled={pending || typedAnswer.trim() === ""}
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
                 >
-                  {option}
+                  Check
                 </button>
-              );
-            })}
-          </div>
+              )}
+            </form>
+          ) : (
+            <div className="mt-5 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+              {question.options.map((option) => {
+                const isSelected = feedback?.selected === option;
+                const isCorrectOption = feedback && option === feedback.correctAnswer;
+
+                let style =
+                  "border-sumi/10 bg-washi hover:-translate-y-0.5 hover:border-ai/40 hover:bg-ai-soft/30 hover:shadow-sm";
+
+                if (feedback && isCorrectOption) {
+                  style = "border-matcha bg-matcha-soft text-matcha-dark shadow-sm";
+                } else if (feedback && isSelected && !feedback.correct) {
+                  style = "border-shu bg-shu/5 text-shu-dark";
+                } else if (feedback) {
+                  style = "border-sumi/10 bg-washi opacity-60";
+                }
+
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={pending || Boolean(feedback)}
+                    onClick={() => handleCustomChoiceAnswer(option)}
+                    className={`flex min-h-16 items-center justify-center rounded-2xl border p-3 text-center font-medium transition disabled:cursor-not-allowed ${style}`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </>
       ) : (
         <>

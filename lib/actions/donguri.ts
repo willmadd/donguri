@@ -35,6 +35,14 @@ export async function equipAccessory(accessoryId: AccessoryId | null): Promise<v
     data: { donguriConfig: { ...config, equippedAccessory: accessoryId, canChooseOutfit: false } },
   });
 
+  // "page" scope only, and only the profile page — this action is also
+  // called from inside the level-up modal, which is shown *on top of* an
+  // active test session. A "layout" scope revalidation there would re-render
+  // the currently-displayed test route in the same response (same reasoning
+  // as the note on `submitAnswer` in lib/actions/vocab.ts), which re-runs
+  // `getTestQueue` and can knock the learner back to its empty state mid
+  // celebration. The header's avatar/costume badge goes briefly stale until
+  // the next `completeQuiz` (which does revalidate the layout) — an
+  // acceptable trade-off for not breaking the flow it's shown inside.
   revalidatePath("/dashboard/profile");
-  revalidatePath("/dashboard", "layout");
 }
