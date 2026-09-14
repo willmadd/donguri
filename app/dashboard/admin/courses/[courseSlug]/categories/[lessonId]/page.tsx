@@ -78,6 +78,12 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <Link
+                href={`/dashboard/admin/courses/${courseSlug}/categories/${lessonId}/words/${word.id}/quiz`}
+                className="inline-flex h-9 items-center justify-center rounded-full border border-sumi/15 px-4 text-sm font-medium text-sumi-soft transition hover:border-sumi/30 hover:text-sumi"
+              >
+                Quiz
+              </Link>
+              <Link
                 href={`/dashboard/admin/courses/${courseSlug}/categories/${lessonId}/words/${word.id}/edit`}
                 className="inline-flex h-9 items-center justify-center rounded-full border border-sumi/15 px-4 text-sm font-medium text-sumi-soft transition hover:border-sumi/30 hover:text-sumi"
               >

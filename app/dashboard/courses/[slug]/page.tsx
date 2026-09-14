@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCourseDecks, getDailyWordCounts } from "@/lib/dal";
+import { getCourseDecks, getDailyWordCounts, getLeaderboards } from "@/lib/dal";
 import { skipLesson } from "@/lib/actions/vocab";
 import { StreakChart } from "@/components/vocab/streak-chart";
 import { ResetProgressButton } from "@/components/vocab/reset-progress-button";
 import { LessonWords } from "@/components/vocab/lesson-words";
+import { TopLeaderboardCard } from "@/components/leaderboard/top-leaderboard-card";
+import { FriendsLeaderboardCard } from "@/components/leaderboard/friends-leaderboard-card";
 import { BackLink } from "@/components/ui/back-link";
 
 type PageProps = {
@@ -19,9 +21,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function CourseHomePage({ params }: PageProps) {
   const { slug } = await params;
-  const [{ course, decks }, dailyCounts] = await Promise.all([
+  const [{ course, decks }, dailyCounts, leaderboards] = await Promise.all([
     getCourseDecks(slug),
     getDailyWordCounts(slug),
+    getLeaderboards(),
   ]);
 
   return (
@@ -34,7 +37,11 @@ export default async function CourseHomePage({ params }: PageProps) {
         )}
       </div>
 
-      {dailyCounts.length > 0 && <StreakChart data={dailyCounts} />}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {dailyCounts.length > 0 && <StreakChart data={dailyCounts} />}
+        <TopLeaderboardCard entries={leaderboards.top} />
+        <FriendsLeaderboardCard initialFriends={leaderboards.friends} />
+      </div>
 
       <div className="flex flex-col gap-4">
         {decks.length === 0 && (

@@ -55,7 +55,13 @@ export default async function TestPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <BackLink href={`/dashboard/courses/${slug}/decks/${deckId}`} label={deck.title} />
-      <TestSession quiz={quiz} courseSlug={slug} deckId={deckId} initialXp={profile.xp} />
+      <TestSession
+        quiz={quiz}
+        courseSlug={slug}
+        deckId={deckId}
+        initialXp={profile.xp}
+        initialDonguriConfig={profile.donguriConfig}
+      />
     </div>
   );
 }

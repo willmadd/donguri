@@ -2,22 +2,37 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { submitAnswer, submitFormAnswer, completeQuiz } from "@/lib/actions/vocab";
+import { submitAnswer, submitFormAnswer, submitCustomAnswer, completeQuiz } from "@/lib/actions/vocab";
 import type { QuizOption, QuizQuestion } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
 import { XpCounter } from "@/components/xp/xp-counter";
+import { LevelUpModal } from "@/components/donguri/level-up-modal";
+import { parseDonguriConfig, formatXp, type AccessoryId } from "@/lib/levels";
 
 type TestSessionProps = {
   quiz: QuizQuestion[];
   courseSlug: string;
   deckId: string;
   initialXp: number;
+  initialDonguriConfig: unknown;
 };
 
 type Feedback = { correct: boolean; correctAnswer: string; selected: string };
 
-export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSessionProps) => {
+type LevelUpInfo = {
+  newLevel: number;
+  newlyUnlockedAccessories: AccessoryId[];
+  unlockedAccessories: AccessoryId[];
+};
+
+export const TestSession = ({
+  quiz,
+  courseSlug,
+  deckId,
+  initialXp,
+  initialDonguriConfig,
+}: TestSessionProps) => {
   const [quizIndex, setQuizIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -26,6 +41,11 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
   const [finished, setFinished] = useState(false);
   const [xp, setXp] = useState(initialXp);
   const [bonusAwarded, setBonusAwarded] = useState(false);
+  const [streakBonus, setStreakBonus] = useState(0);
+  const [equippedAccessory, setEquippedAccessory] = useState<AccessoryId | null>(
+    (parseDonguriConfig(initialDonguriConfig).equippedAccessory as AccessoryId | undefined) ?? null,
+  );
+  const [levelUpInfo, setLevelUpInfo] = useState<LevelUpInfo | null>(null);
 
   const question = quiz[quizIndex];
 
@@ -81,6 +101,21 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
     }
   };
 
+  const handleCustomAnswer = async (optionValue: string) => {
+    if (feedback || pending || question.kind !== "custom") return;
+
+    setPending(true);
+
+    try {
+      const result = await submitCustomAnswer(question.wordId, question.questionId, optionValue);
+      setFeedback({ selected: optionValue, correct: result.correct, correctAnswer: result.correctAnswer });
+      recordResult(result.correct);
+      setXp(result.xp);
+    } finally {
+      setPending(false);
+    }
+  };
+
   const advance = () => {
     setFeedback(null);
     setTypedAnswer("");
@@ -89,9 +124,17 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
       setQuizIndex((current) => current + 1);
     } else {
       setFinished(true);
-      completeQuiz(quiz.length, score.correct).then((result) => {
+      completeQuiz(courseSlug, initialXp, quiz.length, score.correct).then((result) => {
         setXp(result.xp);
         setBonusAwarded(result.bonusAwarded);
+        setStreakBonus(result.streakBonus);
+        if (result.newLevel > result.previousLevel) {
+          setLevelUpInfo({
+            newLevel: result.newLevel,
+            newlyUnlockedAccessories: result.newlyUnlockedAccessories,
+            unlockedAccessories: result.unlockedAccessories,
+          });
+        }
       });
     }
   };
@@ -119,6 +162,11 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
           {bonusAwarded && (
             <span className="text-sm font-medium text-matcha-dark">+5 bonus for a perfect quiz!</span>
           )}
+          {streakBonus > 0 && (
+            <span className="text-sm font-medium text-matcha-dark">
+              +{formatXp(streakBonus)} streak bonus!
+            </span>
+          )}
         </div>
 
         <div className="mt-7 grid w-full grid-cols-2 gap-3">
@@ -139,6 +187,19 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
         >
           Back to deck
         </Link>
+
+        {levelUpInfo && (
+          <LevelUpModal
+            newLevel={levelUpInfo.newLevel}
+            newlyUnlockedAccessories={levelUpInfo.newlyUnlockedAccessories}
+            unlockedAccessories={levelUpInfo.unlockedAccessories}
+            equippedAccessory={equippedAccessory}
+            onDone={(id) => {
+              setEquippedAccessory(id);
+              setLevelUpInfo(null);
+            }}
+          />
+        )}
       </section>
     );
   }
@@ -233,6 +294,44 @@ export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSession
               })}
             </div>
           )}
+        </>
+      ) : question.kind === "custom" ? (
+        <>
+          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+            <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">Quiz question</p>
+            <p className="mt-3 text-2xl font-semibold text-sumi">{question.prompt}</p>
+            {question.promptJa && <p className="mt-2 text-sumi-soft">{question.promptJa}</p>}
+          </div>
+
+          <div className="mt-5 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+            {question.options.map((option) => {
+              const isSelected = feedback?.selected === option;
+              const isCorrectOption = feedback && option === feedback.correctAnswer;
+
+              let style =
+                "border-sumi/10 bg-washi hover:-translate-y-0.5 hover:border-ai/40 hover:bg-ai-soft/30 hover:shadow-sm";
+
+              if (feedback && isCorrectOption) {
+                style = "border-matcha bg-matcha-soft text-matcha-dark shadow-sm";
+              } else if (feedback && isSelected && !feedback.correct) {
+                style = "border-shu bg-shu/5 text-shu-dark";
+              } else if (feedback) {
+                style = "border-sumi/10 bg-washi opacity-60";
+              }
+
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={pending || Boolean(feedback)}
+                  onClick={() => handleCustomAnswer(option)}
+                  className={`flex min-h-16 items-center justify-center rounded-2xl border p-3 text-center font-medium transition disabled:cursor-not-allowed ${style}`}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
         </>
       ) : (
         <>

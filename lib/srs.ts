@@ -66,8 +66,17 @@ export function addDays(date: Date, days: number): Date {
   return result;
 }
 
-function toUTCDateString(date: Date): string {
+export function toUTCDateString(date: Date): string {
   return startOfUTCDay(date).toISOString().slice(0, 10);
+}
+
+// Extra XP for sustaining a streak: nothing on day 1, then +0.5 more per
+// consecutive day after that (day 2 = 0.5, day 3 = 1, day 4 = 1.5, ...).
+// Awarded once per UTC day per course (see `lastStreakBonusDate` in
+// `completeQuiz`), not per quiz, so finishing several quizzes in a day
+// doesn't stack it.
+export function streakBonusXp(currentStreak: number): number {
+  return currentStreak >= 2 ? (currentStreak - 1) * 0.5 : 0;
 }
 
 type StreakFields = {

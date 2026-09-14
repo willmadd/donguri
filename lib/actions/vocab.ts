@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { nextBoxAfterAnswer, MAX_BOX } from "@/lib/srs";
+import { nextBoxAfterAnswer, MAX_BOX, streakBonusXp, toUTCDateString } from "@/lib/srs";
+import { ACCESSORIES, levelForXp, parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 import type { QuizDirection } from "@/lib/definitions";
 
 // +1 XP per correct quiz answer (both multiple-choice and fill-in-the-form
@@ -110,19 +111,122 @@ export async function submitFormAnswer(
   return { correct, correctAnswer: form.value, xp };
 }
 
+// Checks a selected option against a hand-authored question's correct index.
+export async function submitCustomAnswer(
+  wordId: string,
+  questionId: string,
+  selectedOption: string,
+): Promise<{ correct: boolean; correctAnswer: string; xp: number }> {
+  const user = await requireUser();
+
+  const question = await prisma.wordQuizQuestion.findUniqueOrThrow({
+    where: { id: questionId },
+    select: { options: true, correctIndex: true, wordId: true },
+  });
+
+  if (question.wordId !== wordId) {
+    throw new Error("Question does not belong to the given word.");
+  }
+
+  const correctAnswer = question.options[question.correctIndex];
+  const correct = selectedOption === correctAnswer;
+
+  const { xp } = await recordAnswer(user.id, wordId, correct);
+
+  return { correct, correctAnswer, xp };
+}
+
 // Called once when a test session's summary screen is reached. Awards a +5
 // bonus only when every question in that session was answered correctly —
 // the per-question +1 XP was already awarded (and server-verified) by
 // `submitAnswer`/`submitFormAnswer` as each question was answered, so this
-// only ever adds the bonus on top, never re-awards the base points.
+// only ever adds the bonus on top, never re-awards the base points. Also
+// awards the streak bonus (see `streakBonusXp`) — once per UTC day per
+// course, tracked via `lastStreakBonusDate` on the enrollment, so finishing
+// several quizzes the same day only pays it out once.
+// `initialXp` is the XP the learner had when the test session *started*
+// (passed back from the client, which got it from the page that fetched the
+// session) — comparing its level against the level after this quiz's XP
+// (including both bonuses below) is how a level-up crossed during the
+// session is detected, regardless of which bonus tipped it over.
 export async function completeQuiz(
+  courseSlug: string,
+  initialXp: number,
   totalQuestions: number,
   correctCount: number,
-): Promise<{ xp: number; bonusAwarded: boolean }> {
+): Promise<{
+  xp: number;
+  bonusAwarded: boolean;
+  streakBonus: number;
+  previousLevel: number;
+  newLevel: number;
+  newlyUnlockedAccessories: AccessoryId[];
+  unlockedAccessories: AccessoryId[];
+}> {
   const user = await requireUser();
 
   const perfect = totalQuestions > 0 && correctCount === totalQuestions;
-  const xp = await awardXp(user.id, perfect ? 5 : 0);
+
+  const course = await prisma.course.findUniqueOrThrow({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+  const enrollment = await prisma.courseEnrollment.findUniqueOrThrow({
+    where: { userId_courseId: { userId: user.id, courseId: course.id } },
+    select: { currentStreak: true, lastStreakBonusDate: true },
+  });
+
+  const today = new Date();
+  const alreadyAwardedToday =
+    enrollment.lastStreakBonusDate !== null &&
+    toUTCDateString(enrollment.lastStreakBonusDate) === toUTCDateString(today);
+  const streakBonus = alreadyAwardedToday ? 0 : streakBonusXp(enrollment.currentStreak);
+
+  if (streakBonus > 0) {
+    await prisma.courseEnrollment.update({
+      where: { userId_courseId: { userId: user.id, courseId: course.id } },
+      data: { lastStreakBonusDate: today },
+    });
+  }
+
+  const xp = await awardXp(user.id, (perfect ? 5 : 0) + streakBonus);
+
+  const previousLevel = levelForXp(initialXp);
+  const newLevel = levelForXp(xp);
+
+  let newlyUnlockedAccessories: AccessoryId[] = [];
+  let unlockedAccessories: AccessoryId[] = [];
+
+  if (newLevel > previousLevel) {
+    const profile = await prisma.profile.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { donguriConfig: true },
+    });
+
+    const config = parseDonguriConfig(profile.donguriConfig);
+    const alreadyUnlocked = new Set(config.unlockedAccessories ?? []);
+
+    // Every accessory whose own threshold has been reached is unlocked at
+    // once — not one-at-a-time in list order, so a level that has several
+    // accessories sharing its threshold (e.g. level 2's set) all become
+    // available together for free choice, without pulling in a later
+    // level's costumes early.
+    const earnedIds = ACCESSORIES.filter((accessory) => accessory.threshold <= xp).map(
+      (accessory) => accessory.id,
+    );
+    newlyUnlockedAccessories = earnedIds.filter((id) => !alreadyUnlocked.has(id));
+    unlockedAccessories = earnedIds;
+
+    // Every level-up reopens the outfit choice — `equipAccessory` locks it
+    // again the moment the learner actually picks something (in the
+    // level-up modal or later from their profile), so this only needs to
+    // flip it back open here, unconditionally, every time a level is
+    // crossed — including later ones where nothing new unlocks.
+    await prisma.profile.update({
+      where: { id: user.id },
+      data: { donguriConfig: { ...config, unlockedAccessories: earnedIds, canChooseOutfit: true } },
+    });
+  }
 
   // Unlike submitAnswer/submitFormAnswer above, it's safe to revalidate here:
   // the quiz has already finished (the client has moved to its local
@@ -132,7 +236,15 @@ export async function completeQuiz(
   // shared dashboard layout) correct once the learner navigates away.
   revalidatePath("/dashboard", "layout");
 
-  return { xp, bonusAwarded: perfect };
+  return {
+    xp,
+    bonusAwarded: perfect,
+    streakBonus,
+    previousLevel,
+    newLevel,
+    newlyUnlockedAccessories,
+    unlockedAccessories,
+  };
 }
 
 export async function skipWord(wordId: string): Promise<void> {
@@ -204,9 +316,33 @@ export async function resetCourseProgress(courseId: string): Promise<void> {
 
   await prisma.courseEnrollment.update({
     where: { userId_courseId: { userId: user.id, courseId } },
-    data: { currentStreak: 0, longestStreak: 0, lastActivityDate: null },
+    data: {
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActivityDate: null,
+      lastStreakBonusDate: null,
+    },
   });
 
-  // "page" scope only — see the note on `skipLesson` above.
-  revalidatePath("/dashboard");
+  const profile = await prisma.profile.findUniqueOrThrow({
+    where: { id: user.id },
+    select: { donguriConfig: true },
+  });
+  const config = parseDonguriConfig(profile.donguriConfig);
+
+  await prisma.profile.update({
+    where: { id: user.id },
+    data: {
+      xp: 0,
+      // Accessories are gated by XP/level, so resetting back to 0 XP also
+      // clears which ones are unlocked/equipped — otherwise the header
+      // would show "Lv 0" while still wearing a costume that requires
+      // Lv 1+. Other hand-edited keys in the JSON blob are left alone.
+      donguriConfig: { ...config, unlockedAccessories: [], equippedAccessory: null },
+    },
+  });
+
+  // "layout" scope too: the header's XP/level badge lives in the shared
+  // dashboard layout, not just the vocab pages under this exact path.
+  revalidatePath("/dashboard", "layout");
 }

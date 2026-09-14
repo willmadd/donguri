@@ -13,9 +13,11 @@ import {
   UpdateWordFormSchema,
   WordExampleInputSchema,
   WordFormInputSchema,
+  WordQuizQuestionInputSchema,
   type CreateCategoryFormState,
   type CreateWordFormState,
   type ImportWordsFormState,
+  type SaveQuizQuestionsFormState,
   type UpdateWordFormState,
 } from "@/lib/definitions";
 
@@ -95,6 +97,73 @@ async function replaceWordFormsAndExamples(wordId: string, formData: FormData): 
     ...(formsData.length > 0 ? [prisma.wordForm.createMany({ data: formsData })] : []),
     ...(examplesData.length > 0 ? [prisma.wordExample.createMany({ data: examplesData })] : []),
   ]);
+}
+
+// Validates the submitted hand-authored quiz-question rows and replaces
+// every existing custom question for this word with them — same
+// replace-all-in-one-transaction shape as `replaceWordFormsAndExamples`
+// above, for the same reason (admin-only, low-frequency, no per-row
+// ordering/identity worth preserving across a save). Blank option2/option3
+// slots are dropped, so a question can have 2, 3, or 4 options; if the
+// admin marked a now-missing slot as correct, this falls back to the last
+// remaining option rather than pointing past the end of the array.
+export async function saveQuizQuestions(
+  _state: SaveQuizQuestionsFormState,
+  formData: FormData,
+): Promise<SaveQuizQuestionsFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const wordId = formData.get("wordId");
+
+  if (typeof wordId !== "string" || wordId === "") {
+    return { message: "Missing word." };
+  }
+
+  const word = await prisma.word.findUnique({
+    where: { id: wordId },
+    select: { lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+  });
+
+  if (!word) {
+    return { message: "That word no longer exists." };
+  }
+
+  const rows = collectIndexedRows(formData, "questions")
+    .filter((row) => !isBlankRow(row, ["correctIndex"]))
+    .map((row) => WordQuizQuestionInputSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+
+  const questionsData = rows.map((row, index) => {
+    const options = [row.option0, row.option1, row.option2, row.option3].filter(
+      (option): option is string => Boolean(option && option.trim() !== ""),
+    );
+    const correctIndex = Math.min(Math.max(row.correctIndex, 0), options.length - 1);
+
+    return {
+      wordId,
+      prompt: row.prompt,
+      promptJa: row.promptJa || null,
+      options,
+      correctIndex,
+      position: index + 1,
+    };
+  });
+
+  await prisma.$transaction([
+    prisma.wordQuizQuestion.deleteMany({ where: { wordId } }),
+    ...(questionsData.length > 0 ? [prisma.wordQuizQuestion.createMany({ data: questionsData })] : []),
+  ]);
+
+  revalidatePath(
+    `/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}/words/${wordId}/quiz`,
+  );
+
+  return { success: true, message: "Quiz questions saved." };
 }
 
 // Same asymmetry as `lib/actions/admin.ts`: the *page* guard redirects a

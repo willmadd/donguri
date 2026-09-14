@@ -1,4 +1,5 @@
 import * as z from "zod";
+import type { AccessoryId } from "@/lib/levels";
 
 export const LoginFormSchema = z.object({
   email: z.email({ error: "Please enter a valid email." }).trim(),
@@ -190,7 +191,25 @@ export type TypeFormQuestion = FormClozeQuestion & { kind: "type-form" };
 // words with 2+ forms, so there's something to choose between.
 export type FormChoiceQuestion = FormClozeQuestion & { kind: "form-choice"; options: string[] };
 
-export type QuizQuestion = MultipleChoiceQuestion | TypeFormQuestion | FormChoiceQuestion;
+// A hand-authored multiple-choice question an admin added for this specific
+// word (see AdminQuizQuestionSummary/WordQuizQuestionInputSchema below) —
+// mixed into the quiz pool alongside the auto-generated question kinds
+// above, never replacing them.
+export type CustomQuestion = {
+  kind: "custom";
+  wordId: string;
+  questionId: string;
+  prompt: string;
+  promptJa: string | null;
+  options: string[];
+  targetLanguage: string;
+};
+
+export type QuizQuestion =
+  | MultipleChoiceQuestion
+  | TypeFormQuestion
+  | FormChoiceQuestion
+  | CustomQuestion;
 
 export type LessonWordSummary = {
   id: string;
@@ -324,6 +343,38 @@ export const WordExampleInputSchema = z.object({
 export type WordFormInput = z.infer<typeof WordFormInputSchema>;
 export type WordExampleInput = z.infer<typeof WordExampleInputSchema>;
 
+// One row of a word's hand-authored quiz questions, submitted the same
+// indexed-field way as forms/examples above (`questions.0.prompt`, ...).
+// Fixed option0-3 slots (rather than a nested array) so it fits the same
+// flat-row parser; only the first two are required, so a 2- or 3-option
+// question is fine too.
+export const WordQuizQuestionInputSchema = z.object({
+  prompt: z.string().trim().min(1, { error: "Prompt is required." }).max(300),
+  promptJa: z.string().trim().max(300).optional(),
+  option0: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
+  option1: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
+  option2: z.string().trim().max(150).optional(),
+  option3: z.string().trim().max(150).optional(),
+  correctIndex: z.coerce.number().int().min(0).max(3),
+});
+
+export type WordQuizQuestionInput = z.infer<typeof WordQuizQuestionInputSchema>;
+
+export type AdminQuizQuestionSummary = {
+  id: string;
+  prompt: string;
+  promptJa: string | null;
+  options: string[];
+  correctIndex: number;
+};
+
+export type SaveQuizQuestionsFormState =
+  | {
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
 export const CreateWordFormSchema = z.object({
   lessonId: z.uuid({ error: "Missing category." }),
   ...WordFieldsSchema,
@@ -434,3 +485,11 @@ export type UpdateProfileFormState =
       success?: boolean;
     }
   | undefined;
+
+export type LeaderboardEntry = {
+  id: string;
+  name: string;
+  xp: number;
+  equippedAccessory: AccessoryId | null;
+  isSelf: boolean;
+};

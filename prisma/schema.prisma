@@ -14,8 +14,10 @@ model Profile {
   role          String             @default("user")
   // Total experience points — incremented only by the vocab quiz actions in
   // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
-  // quiz), never set directly from a user-editable form field.
-  xp            Int                @default(0)
+  // quiz, plus a half-point-per-day streak bonus), never set directly from
+  // a user-editable form field. A float (not Int) because the streak bonus
+  // is awarded in 0.5 increments.
+  xp            Float              @default(0)
   // Free-form settings blob the user can view/edit as raw JSON from their
   // profile page — no fixed shape yet, deliberately generic.
   donguriConfig Json?              @map("donguri_config")
@@ -23,8 +25,26 @@ model Profile {
   updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
   enrollments   CourseEnrollment[]
   wordProgress  UserWordProgress[]
+  friendsAdded  Friendship[]       @relation("FriendshipsAsUser")
+  addedByOthers Friendship[]       @relation("FriendshipsAsFriend")
 
   @@map("profiles")
+}
+
+// One-directional: `userId` added `friendId` to their own friends list, no
+// acceptance step needed — just enough for a personal "friends leaderboard"
+// alongside the global top-10.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Friendship {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  friendId  String   @map("friend_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      Profile  @relation("FriendshipsAsUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  friend    Profile  @relation("FriendshipsAsFriend", fields: [friendId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, friendId])
+  @@map("friendships")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -53,6 +73,9 @@ model CourseEnrollment {
   currentStreak    Int       @default(0) @map("current_streak")
   longestStreak    Int       @default(0) @map("longest_streak")
   lastActivityDate DateTime? @map("last_activity_date") @db.Date
+  // The last UTC date this course's streak XP bonus was awarded — so
+  // completing a second quiz on the same day doesn't award it again.
+  lastStreakBonusDate DateTime? @map("last_streak_bonus_date") @db.Date
   course           Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   profile          Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -94,10 +117,31 @@ model Word {
   progress        UserWordProgress[]
   forms           WordForm[]
   examples        WordExample[]
+  quizQuestions   WordQuizQuestion[]
   lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([lessonId, position])
   @@map("words")
+}
+
+// Hand-authored multiple-choice questions an admin adds for a specific word
+// — mixed into that word's quiz pool alongside the auto-generated
+// term/translation and fill-in-the-blank questions (see
+// `CUSTOM_QUESTION_CHANCE` in lib/dal.ts), not a replacement for them.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model WordQuizQuestion {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wordId       String   @map("word_id") @db.Uuid
+  prompt       String
+  promptJa     String?  @map("prompt_ja")
+  options      String[]
+  correctIndex Int      @map("correct_index")
+  position     Int
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  word         Word     @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([wordId, position])
+  @@map("word_quiz_questions")
 }
 
 // A word's inflected/conjugated forms (e.g. go/goes/went/gone/going). Generic

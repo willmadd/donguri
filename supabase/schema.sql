@@ -883,3 +883,71 @@ create policy "Authenticated users can view word examples"
 
 alter table public.profiles add column if not exists xp integer not null default 0;
 alter table public.profiles add column if not exists donguri_config jsonb;
+
+-- 21. Friendships (for the friends leaderboard) ------------------------------
+-- One-directional: `user_id` added `friend_id` to their own friends list, no
+-- acceptance step — just enough for a personal "friends leaderboard"
+-- alongside the global top-10. The app queries this through Prisma (which
+-- bypasses RLS, same as every other table here), so these policies are a
+-- safety net for any future direct Supabase-client access, not something the
+-- app currently relies on.
+
+create table if not exists public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  friend_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, friend_id)
+);
+
+alter table public.friendships enable row level security;
+
+drop policy if exists "Users can view own friendships" on public.friendships;
+create policy "Users can view own friendships"
+  on public.friendships for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can add own friendships" on public.friendships;
+create policy "Users can add own friendships"
+  on public.friendships for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can remove own friendships" on public.friendships;
+create policy "Users can remove own friendships"
+  on public.friendships for delete
+  using (auth.uid() = user_id);
+
+-- 22. Fractional XP (streak bonus) -------------------------------------------
+-- `profiles.xp` becomes a float so the streak bonus can award half-points —
+-- a lossless int-to-float widening, existing whole-number totals are
+-- unchanged. `last_streak_bonus_date` records the last UTC date this
+-- course's streak bonus was awarded, so finishing a second quiz the same
+-- day doesn't award it again.
+
+alter table public.profiles alter column xp type double precision using xp::double precision;
+alter table public.course_enrollments add column if not exists last_streak_bonus_date date;
+
+-- 23. Hand-authored quiz questions per word -----------------------------------
+-- Admin-authored multiple-choice questions, mixed into a word's quiz pool
+-- alongside the auto-generated term/translation and fill-in-the-blank
+-- questions (see `CUSTOM_QUESTION_CHANCE` in lib/dal.ts) — not a replacement
+-- for them. `correct_index` is a 0-based index into `options`.
+
+create table if not exists public.word_quiz_questions (
+  id uuid primary key default gen_random_uuid(),
+  word_id uuid not null references public.words (id) on delete cascade,
+  prompt text not null,
+  prompt_ja text,
+  options text[] not null,
+  correct_index integer not null,
+  position integer not null,
+  created_at timestamptz not null default now(),
+  unique (word_id, position)
+);
+
+alter table public.word_quiz_questions enable row level security;
+
+drop policy if exists "Authenticated users can view word quiz questions" on public.word_quiz_questions;
+create policy "Authenticated users can view word quiz questions"
+  on public.word_quiz_questions for select
+  using (auth.role() = 'authenticated');

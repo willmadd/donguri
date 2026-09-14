@@ -7,10 +7,12 @@ import { prisma } from "@/lib/prisma";
 import type {
   AdminCategorySummary,
   AdminCourseOption,
+  AdminQuizQuestionSummary,
   AdminWordSummary,
   CourseSummary,
   DailyWordCount,
   EnrolledCourseSummary,
+  LeaderboardEntry,
   LessonSummary,
   Profile,
   QuizDirection,
@@ -30,6 +32,7 @@ import {
   weightedSampleWithRepeats,
 } from "@/lib/srs";
 import { wordImagePath } from "@/lib/images";
+import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 export const getSession = cache(async () => {
   const supabase = await createClient();
@@ -332,6 +335,48 @@ function toAdminWordSummary(word: {
   };
 }
 
+// Powers the admin "Quiz questions" page for one word: a summary of what
+// the auto-generated question kinds currently produce (so the admin can see
+// what's already covered before adding more) plus the full list of
+// hand-authored questions to edit.
+export const getAdminWordQuizQuestions = cache(async (wordId: string) => {
+  const word = await prisma.word.findUnique({
+    where: { id: wordId },
+    include: {
+      lesson: { select: { id: true, title: true, course: { select: { slug: true, title: true } } } },
+      forms: { orderBy: { position: "asc" }, include: { examples: { select: { id: true } } } },
+      examples: { select: { id: true } },
+      quizQuestions: { orderBy: { position: "asc" } },
+    },
+  });
+
+  if (!word) {
+    redirect("/dashboard/admin/courses");
+  }
+
+  return {
+    word: { id: word.id, term: word.term, translation: word.translation },
+    lesson: { id: word.lesson.id, title: word.lesson.title },
+    course: word.lesson.course,
+    autoForms: word.forms.map((form) => ({
+      id: form.id,
+      labelEn: form.labelEn,
+      value: form.value,
+      exampleCount: form.examples.length,
+    })),
+    autoExampleCount: word.examples.length,
+    questions: word.quizQuestions.map(
+      (question): AdminQuizQuestionSummary => ({
+        id: question.id,
+        prompt: question.prompt,
+        promptJa: question.promptJa,
+        options: question.options,
+        correctIndex: question.correctIndex,
+      }),
+    ),
+  };
+});
+
 export const getAvailableCourses = cache(async (): Promise<CourseSummary[]> => {
   const user = await requireUser();
 
@@ -509,6 +554,76 @@ export const getDailyWordCounts = cache(async (courseSlug: string): Promise<Dail
   return days;
 });
 
+type LeaderboardProfile = {
+  id: string;
+  fullName: string | null;
+  email: string;
+  xp: number;
+  donguriConfig: unknown;
+};
+
+const LEADERBOARD_PROFILE_SELECT = {
+  id: true,
+  fullName: true,
+  email: true,
+  xp: true,
+  donguriConfig: true,
+} as const;
+
+function toLeaderboardEntry(profile: LeaderboardProfile, selfId: string): LeaderboardEntry {
+  return {
+    id: profile.id,
+    name: profile.fullName ?? profile.email.split("@")[0],
+    xp: profile.xp,
+    equippedAccessory:
+      (parseDonguriConfig(profile.donguriConfig).equippedAccessory as AccessoryId | undefined) ?? null,
+    isSelf: profile.id === selfId,
+  };
+}
+
+// Every friend the user has added, plus themselves (so you can see your own
+// rank among friends) — sorted by XP, highest first. Deliberately not
+// wrapped in `cache()`: this is also called fresh from the add/remove-friend
+// actions right after a mutation, where a memoized read would be stale.
+export async function getFriendsLeaderboard(userId: string): Promise<LeaderboardEntry[]> {
+  const [friendships, self] = await Promise.all([
+    prisma.friendship.findMany({
+      where: { userId },
+      include: { friend: { select: LEADERBOARD_PROFILE_SELECT } },
+    }),
+    prisma.profile.findUniqueOrThrow({ where: { id: userId }, select: LEADERBOARD_PROFILE_SELECT }),
+  ]);
+
+  const entries = [self, ...friendships.map((friendship) => friendship.friend)].map((profile) =>
+    toLeaderboardEntry(profile, userId),
+  );
+
+  return entries.sort((a, b) => b.xp - a.xp);
+}
+
+// Global top 10 by XP, plus the viewer's own friends leaderboard (which
+// always includes themselves) — XP is an app-wide stat, not per-course, so
+// this isn't scoped to whichever course happens to display it.
+export const getLeaderboards = cache(
+  async (): Promise<{ top: LeaderboardEntry[]; friends: LeaderboardEntry[] }> => {
+    const user = await requireUser();
+
+    const [topProfiles, friends] = await Promise.all([
+      prisma.profile.findMany({
+        orderBy: { xp: "desc" },
+        take: 10,
+        select: LEADERBOARD_PROFILE_SELECT,
+      }),
+      getFriendsLeaderboard(user.id),
+    ]);
+
+    return {
+      top: topProfiles.map((profile) => toLeaderboardEntry(profile, user.id)),
+      friends,
+    };
+  },
+);
+
 // Finds the deck (a `path: 'vocab'` Lesson) and redirects to the course's
 // deck list if it doesn't resolve — shared by `getLearnQueue`/`getTestQueue`
 // so a stale/bad `deckId` in the URL can't reach either queue.
@@ -609,6 +724,7 @@ export const getTestQueue = cache(
           include: {
             forms: { orderBy: { position: "asc" } },
             examples: { orderBy: { position: "asc" } },
+            quizQuestions: { orderBy: { position: "asc" } },
           },
         },
       },
@@ -678,6 +794,9 @@ type QuestionWord = {
   // blank "cloze" questions.
   forms?: { id: string; value: string }[];
   examples?: { en: string; ja: string }[];
+  // Hand-authored questions an admin added for this word — also only
+  // populated for the reviewed word itself.
+  quizQuestions?: { id: string; prompt: string; promptJa: string | null; options: string[] }[];
 };
 
 // Distractors lean heavily toward the word's own category: 2 of the 3 come
@@ -736,11 +855,32 @@ function findClozeCandidates(word: QuestionWord): ClozeCandidate[] {
 // choice.
 const FORM_QUESTION_CHANCE = 2 / 3;
 
+// A word with at least one hand-authored question gets this chance, per
+// question, to surface one of those instead of an auto-generated question —
+// mixed in alongside the other kinds, never replacing them entirely.
+const CUSTOM_QUESTION_CHANCE = 0.3;
+
 function buildQuestion(
   word: QuestionWord,
   pool: QuestionWord[],
   course: { targetLanguage: string; sourceLanguage: string },
 ): QuizQuestion {
+  const customQuestions = word.quizQuestions ?? [];
+
+  if (customQuestions.length > 0 && Math.random() < CUSTOM_QUESTION_CHANCE) {
+    const question = customQuestions[Math.floor(Math.random() * customQuestions.length)];
+
+    return {
+      kind: "custom",
+      wordId: word.id,
+      questionId: question.id,
+      prompt: question.prompt,
+      promptJa: question.promptJa,
+      options: question.options,
+      targetLanguage: course.targetLanguage,
+    };
+  }
+
   const clozeCandidates = findClozeCandidates(word);
 
   if (clozeCandidates.length > 0 && Math.random() < FORM_QUESTION_CHANCE) {

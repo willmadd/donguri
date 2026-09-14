@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { HeaderXp } from "@/components/dashboard/header-xp";
+import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
 import { requireProfile } from "@/lib/dal";
+import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 export default async function DashboardLayout({
   children,
@@ -10,6 +12,8 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const profile = await requireProfile();
+  const equippedAccessory = (parseDonguriConfig(profile.donguriConfig).equippedAccessory ??
+    null) as AccessoryId | null;
 
   return (
     <div className="min-h-screen bg-washi">
@@ -18,19 +22,30 @@ export default async function DashboardLayout({
           <Logo />
           <div className="flex items-center gap-4">
             <HeaderXp xp={profile.xp} />
-            <Link href="/dashboard/profile" className="text-right transition hover:opacity-80">
-              <p className="text-sm font-medium text-sumi">
-                {profile.full_name ?? profile.email}
-              </p>
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                  profile.role === "admin"
-                    ? "bg-shu/10 text-shu-dark"
-                    : "bg-matcha-soft text-matcha-dark"
-                }`}
-              >
-                {profile.role === "admin" ? "Admin" : "Member"}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 shrink-0">
+                <DonguriAvatar equippedAccessory={equippedAccessory} className="h-10 w-10" />
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-medium text-sumi">
+                  {profile.full_name ?? profile.email}
+                </p>
+                <span
+                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                    profile.role === "admin"
+                      ? "bg-shu/10 text-shu-dark"
+                      : "bg-matcha-soft text-matcha-dark"
+                  }`}
+                >
+                  {profile.role === "admin" ? "Admin" : "Member"}
+                </span>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/profile"
+              className="inline-flex h-9 items-center justify-center rounded-full border border-sumi/15 px-4 text-sm font-medium text-sumi-soft transition hover:border-sumi/30 hover:text-sumi"
+            >
+              Profile
             </Link>
             <LogoutButton />
           </div>
