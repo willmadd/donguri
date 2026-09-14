@@ -8,14 +8,21 @@ datasource db {
 }
 
 model Profile {
-  id           String             @id @db.Uuid
-  email        String
-  fullName     String?            @map("full_name")
-  role         String             @default("user")
-  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
-  enrollments  CourseEnrollment[]
-  wordProgress UserWordProgress[]
+  id            String             @id @db.Uuid
+  email         String
+  fullName      String?            @map("full_name")
+  role          String             @default("user")
+  // Total experience points — incremented only by the vocab quiz actions in
+  // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
+  // quiz), never set directly from a user-editable form field.
+  xp            Int                @default(0)
+  // Free-form settings blob the user can view/edit as raw JSON from their
+  // profile page — no fixed shape yet, deliberately generic.
+  donguriConfig Json?              @map("donguri_config")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  enrollments   CourseEnrollment[]
+  wordProgress  UserWordProgress[]
 
   @@map("profiles")
 }

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { LogoutButton } from "@/components/dashboard/logout-button";
+import { HeaderXp } from "@/components/dashboard/header-xp";
 import { requireProfile } from "@/lib/dal";
 
 export default async function DashboardLayout({
@@ -15,7 +17,8 @@ export default async function DashboardLayout({
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Logo />
           <div className="flex items-center gap-4">
-            <div className="text-right">
+            <HeaderXp xp={profile.xp} />
+            <Link href="/dashboard/profile" className="text-right transition hover:opacity-80">
               <p className="text-sm font-medium text-sumi">
                 {profile.full_name ?? profile.email}
               </p>
@@ -28,7 +31,7 @@ export default async function DashboardLayout({
               >
                 {profile.role === "admin" ? "Admin" : "Member"}
               </span>
-            </div>
+            </Link>
             <LogoutButton />
           </div>
         </div>

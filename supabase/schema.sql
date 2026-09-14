@@ -873,3 +873,13 @@ drop policy if exists "Authenticated users can view word examples" on public.wor
 create policy "Authenticated users can view word examples"
   on public.word_examples for select
   using (auth.role() = 'authenticated');
+
+-- 20. Profile XP and Donguri configuration -----------------------------------
+-- `xp` is the learner's total experience points, incremented only by the
+-- vocab quiz server actions (+1 per correct answer, +5 bonus for a perfect
+-- quiz) — never written from a user-editable form field. `donguri_config` is
+-- a free-form JSON settings blob the user can view/edit as raw JSON from
+-- their profile page; no fixed shape yet, deliberately generic.
+
+alter table public.profiles add column if not exists xp integer not null default 0;
+alter table public.profiles add column if not exists donguri_config jsonb;

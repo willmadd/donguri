@@ -2,26 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { submitAnswer, submitFormAnswer } from "@/lib/actions/vocab";
+import { submitAnswer, submitFormAnswer, completeQuiz } from "@/lib/actions/vocab";
 import type { QuizOption, QuizQuestion } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
+import { XpCounter } from "@/components/xp/xp-counter";
 
 type TestSessionProps = {
   quiz: QuizQuestion[];
   courseSlug: string;
   deckId: string;
+  initialXp: number;
 };
 
 type Feedback = { correct: boolean; correctAnswer: string; selected: string };
 
-export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
+export const TestSession = ({ quiz, courseSlug, deckId, initialXp }: TestSessionProps) => {
   const [quizIndex, setQuizIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [score, setScore] = useState({ correct: 0, incorrect: 0 });
   const [finished, setFinished] = useState(false);
+  const [xp, setXp] = useState(initialXp);
+  const [bonusAwarded, setBonusAwarded] = useState(false);
 
   const question = quiz[quizIndex];
 
@@ -41,6 +45,7 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
       const result = await submitAnswer(question.wordId, question.direction, option.text);
       setFeedback({ selected: option.text, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
+      setXp(result.xp);
     } finally {
       setPending(false);
     }
@@ -55,6 +60,7 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
       const result = await submitFormAnswer(question.wordId, question.formId, typedAnswer);
       setFeedback({ selected: typedAnswer, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
+      setXp(result.xp);
     } finally {
       setPending(false);
     }
@@ -69,6 +75,7 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
       const result = await submitFormAnswer(question.wordId, question.formId, optionValue);
       setFeedback({ selected: optionValue, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
+      setXp(result.xp);
     } finally {
       setPending(false);
     }
@@ -82,6 +89,10 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
       setQuizIndex((current) => current + 1);
     } else {
       setFinished(true);
+      completeQuiz(quiz.length, score.correct).then((result) => {
+        setXp(result.xp);
+        setBonusAwarded(result.bonusAwarded);
+      });
     }
   };
 
@@ -102,6 +113,13 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
         <p className="mt-2 max-w-sm text-sumi-soft">
           Every practice session helps these words stick a little better.
         </p>
+
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <XpCounter value={xp} />
+          {bonusAwarded && (
+            <span className="text-sm font-medium text-matcha-dark">+5 bonus for a perfect quiz!</span>
+          )}
+        </div>
 
         <div className="mt-7 grid w-full grid-cols-2 gap-3">
           <div className="rounded-2xl bg-matcha-soft px-4 py-5">
@@ -127,6 +145,10 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col items-center">
+      <div className="mb-4 flex w-full justify-center">
+        <XpCounter value={xp} />
+      </div>
+
       <div className="mb-7 flex flex-col items-center gap-3 text-center">
         <span className="rounded-full bg-ai-soft px-4 py-1.5 text-sm font-medium text-ai-dark">
           Quick review
@@ -143,10 +165,10 @@ export const TestSession = ({ quiz, courseSlug, deckId }: TestSessionProps) => {
         <>
           <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
-              Fill in the blank{" "}
-              <span className="normal-case text-sumi-soft/70">({question.baseTerm})</span>
+              Fill in the blank
             </p>
             <p className="mt-3 text-2xl font-semibold text-sumi">{question.clozeSentence}</p>
+            <p className="mt-2 text-sumi-soft">{question.clozeSentenceJa}</p>
           </div>
 
           {question.kind === "type-form" ? (

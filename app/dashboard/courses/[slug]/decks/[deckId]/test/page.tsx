@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getDeckDetail, getTestQueue } from "@/lib/dal";
+import { getDeckDetail, getTestQueue, requireProfile } from "@/lib/dal";
 import { TestSession } from "@/components/vocab/test-session";
 import { BackLink } from "@/components/ui/back-link";
 
@@ -16,8 +16,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function TestPage({ params }: PageProps) {
   const { slug, deckId } = await params;
-  const { deck } = await getDeckDetail(slug, deckId);
-  const quiz = await getTestQueue(slug, deckId);
+  const [{ deck }, quiz, profile] = await Promise.all([
+    getDeckDetail(slug, deckId),
+    getTestQueue(slug, deckId),
+    requireProfile(),
+  ]);
 
   if (quiz.length === 0) {
     return (
@@ -52,7 +55,7 @@ export default async function TestPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <BackLink href={`/dashboard/courses/${slug}/decks/${deckId}`} label={deck.title} />
-      <TestSession quiz={quiz} courseSlug={slug} deckId={deckId} />
+      <TestSession quiz={quiz} courseSlug={slug} deckId={deckId} initialXp={profile.xp} />
     </div>
   );
 }

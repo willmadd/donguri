@@ -83,6 +83,8 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
       email: true,
       fullName: true,
       role: true,
+      xp: true,
+      donguriConfig: true,
     },
   });
 
@@ -95,6 +97,8 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     email: profile.email,
     full_name: profile.fullName,
     role: profile.role as UserRole,
+    xp: profile.xp,
+    donguriConfig: profile.donguriConfig,
   };
 });
 
@@ -673,7 +677,7 @@ type QuestionWord = {
   // candidates) — cross-referenced against `examples` to build fill-in-the-
   // blank "cloze" questions.
   forms?: { id: string; value: string }[];
-  examples?: { en: string }[];
+  examples?: { en: string; ja: string }[];
 };
 
 // Distractors lean heavily toward the word's own category: 2 of the 3 come
@@ -695,7 +699,7 @@ function wholeWordPattern(value: string): RegExp {
   return new RegExp(`\\b${escapeRegExp(value)}\\b`, "i");
 }
 
-type ClozeCandidate = { formId: string; clozeSentence: string };
+type ClozeCandidate = { formId: string; clozeSentence: string; clozeSentenceJa: string };
 
 // Cross-references every form against every example sentence — no admin
 // tagging required — and blanks out the form's value wherever an example
@@ -711,7 +715,11 @@ function findClozeCandidates(word: QuestionWord): ClozeCandidate[] {
     const pattern = wholeWordPattern(form.value);
     for (const example of examples) {
       if (pattern.test(example.en)) {
-        candidates.push({ formId: form.id, clozeSentence: example.en.replace(pattern, "___") });
+        candidates.push({
+          formId: form.id,
+          clozeSentence: example.en.replace(pattern, "___"),
+          clozeSentenceJa: example.ja,
+        });
       }
     }
   }
@@ -745,7 +753,7 @@ function buildQuestion(
         wordId: word.id,
         formId: candidate.formId,
         clozeSentence: candidate.clozeSentence,
-        baseTerm: word.term,
+        clozeSentenceJa: candidate.clozeSentenceJa,
         targetLanguage: course.targetLanguage,
         options: shuffle(uniqueFormValues),
       };
@@ -756,7 +764,7 @@ function buildQuestion(
       wordId: word.id,
       formId: candidate.formId,
       clozeSentence: candidate.clozeSentence,
-      baseTerm: word.term,
+      clozeSentenceJa: candidate.clozeSentenceJa,
       targetLanguage: course.targetLanguage,
     };
   }

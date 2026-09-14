@@ -100,6 +100,8 @@ export type Profile = {
   email: string;
   full_name: string | null;
   role: UserRole;
+  xp: number;
+  donguriConfig: unknown;
 };
 
 // Streaks live on the enrollment, not the profile — each course is its own
@@ -170,13 +172,13 @@ export type MultipleChoiceQuestion = {
 // example sentences with the tested form blanked out (e.g. "Yesterday I
 // ___ to the shops." for "went") — only generated for a (form, example)
 // pair where the form's value actually appears in that example's English
-// text. `baseTerm` is shown as a small hint, the way textbook conjugation
-// exercises show the infinitive/root in parentheses.
+// text. `clozeSentenceJa` is that same example's Japanese sentence, shown
+// underneath as context/translation.
 type FormClozeQuestion = {
   wordId: string;
   formId: string;
   clozeSentence: string;
-  baseTerm: string;
+  clozeSentenceJa: string;
   targetLanguage: string;
 };
 
@@ -396,3 +398,39 @@ export type DailyWordCount = {
   date: string;
   count: number;
 };
+
+// `donguriConfig` is submitted as raw JSON text from a textarea — validated
+// here (must parse, or be empty to clear it) and parsed to a JS value by the
+// action before writing to the `Json` column.
+export const UpdateProfileFormSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(1, { error: "Name is required." })
+    .max(100, { error: "Keep it under 100 characters." }),
+  donguriConfig: z
+    .string()
+    .trim()
+    .max(10000, { error: "Keep it under 10,000 characters." })
+    .optional()
+    .refine(
+      (value) => {
+        if (!value) return true;
+        try {
+          JSON.parse(value);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { error: "Must be valid JSON." },
+    ),
+});
+
+export type UpdateProfileFormState =
+  | {
+      errors?: { fullName?: string[]; donguriConfig?: string[] };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
