@@ -4,7 +4,19 @@
 // thresholds (see LEVEL_THRESHOLDS), not one-per-accessory. Add another
 // entry here (with a matching image in public/costumes/) to add a costume;
 // give it a new threshold value to also add a new level.
-export type AccessoryId = "beard" | "mohawk" | "high-vis" | "unicycle" | "stilts" | "hair";
+export type AccessoryId =
+  | "beard"
+  | "mohawk"
+  | "high-vis"
+  | "unicycle"
+  | "stilts"
+  | "hair"
+  | "flower"
+  | "juggle"
+  | "viking"
+  | "dinosaur"
+  | "shark"
+  | "pirate";
 
 export type Accessory = {
   id: AccessoryId;
@@ -20,6 +32,12 @@ export const ACCESSORIES: Accessory[] = [
   { id: "unicycle", label: "Unicycle", threshold: 50, image: "/costumes/unicycle.webp" },
   { id: "stilts", label: "Stilts", threshold: 50, image: "/costumes/stilts.webp" },
   { id: "hair", label: "Flowing hair", threshold: 120, image: "/costumes/hair.webp" },
+  { id: "flower", label: "Flower", threshold: 120, image: "/costumes/flower.webp" },
+  { id: "juggle", label: "Juggle", threshold: 120, image: "/costumes/juggle.webp" },
+  { id: "viking", label: "Viking", threshold: 120, image: "/costumes/viking.webp" },
+  { id: "dinosaur", label: "Dinosaur", threshold: 250, image: "/costumes/dinosaur.webp" },
+  { id: "shark", label: "Shark", threshold: 250, image: "/costumes/shark.webp" },
+  { id: "pirate", label: "Pirate", threshold: 250, image: "/costumes/pirate.webp" },
 ];
 
 const LEVEL_THRESHOLDS = [...new Set(ACCESSORIES.map((accessory) => accessory.threshold))].sort(
