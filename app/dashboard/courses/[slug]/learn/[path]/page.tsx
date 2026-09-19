@@ -1,33 +1,46 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getDeckDetail, getLearnQueue } from "@/lib/dal";
+import { notFound } from "next/navigation";
+import { getCourseHome, getLearnQueueForCourse } from "@/lib/dal";
 import { LearnSession } from "@/components/vocab/learn-session";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
-  params: Promise<{ slug: string; deckId: string }>;
+  params: Promise<{ slug: string; path: string }>;
 };
 
+function parsePath(path: string): "vocab" | "grammar" | null {
+  return path === "vocab" || path === "grammar" ? path : null;
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug, deckId } = await params;
-  const { course, deck } = await getDeckDetail(slug, deckId);
-  return { title: `Learn — ${deck.title} — ${course.title}` };
+  const { slug, path } = await params;
+  const kind = parsePath(path);
+  const { course } = await getCourseHome(slug);
+  return { title: `Learn ${kind === "grammar" ? "grammar" : "vocabulary"} — ${course.title}` };
 }
 
 export default async function LearnPage({ params }: PageProps) {
-  const { slug, deckId } = await params;
-  const { course, deck } = await getDeckDetail(slug, deckId);
-  const words = await getLearnQueue(slug, deckId);
+  const { slug, path } = await params;
+  const kind = parsePath(path);
+
+  if (!kind) {
+    notFound();
+  }
+
+  const [{ course }, words] = await Promise.all([
+    getCourseHome(slug),
+    getLearnQueueForCourse(slug, kind),
+  ]);
+
+  const label = kind === "grammar" ? "grammar" : "vocabulary";
 
   const breadcrumbItems: BreadcrumbItem[] = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/dashboard/courses", label: "Courses" },
     { href: `/dashboard/courses/${slug}`, label: course.title },
-    { href: `/dashboard/courses/${slug}/decks/${deckId}`, label: deck.title },
-    { label: "Learn" },
+    { label: `Learn ${label}` },
   ];
-
-  const kind = deck.path === "grammar" ? "grammar" : "vocab";
 
   if (words.length === 0) {
     return (
@@ -40,24 +53,24 @@ export default async function LearnPage({ params }: PageProps) {
           </span>
           <h1 className="text-xl font-semibold text-sumi">
             {kind === "grammar"
-              ? "You've learnt every point in this deck"
-              : "You've learnt every word in this deck"}
+              ? "You've learnt every point in your active decks"
+              : "You've learnt every word in your active decks"}
           </h1>
           <p className="max-w-sm text-sm text-sumi-soft">
-            Head over to Test yourself to keep them fresh, or check back once
-            more {kind === "grammar" ? "points are" : "words are"} added here.
+            Activate more decks on the course page, or head over to Test yourself to keep these
+            fresh.
           </p>
           <Link
-            href={`/dashboard/courses/${slug}/decks/${deckId}/test`}
+            href={`/dashboard/courses/${slug}/test/${kind}`}
             className="mt-2 inline-flex h-11 items-center justify-center rounded-full bg-ai px-6 font-medium text-washi transition hover:bg-ai-dark"
           >
             Test yourself
           </Link>
           <Link
-            href={`/dashboard/courses/${slug}/decks/${deckId}`}
+            href={`/dashboard/courses/${slug}`}
             className="text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
-            Back to deck
+            Back to course
           </Link>
         </div>
       </div>
@@ -71,7 +84,6 @@ export default async function LearnPage({ params }: PageProps) {
         key={words.map((word) => word.id).join(",")}
         words={words}
         courseSlug={slug}
-        deckId={deckId}
         kind={kind}
       />
     </div>

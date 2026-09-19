@@ -8,13 +8,23 @@ type VisibilityToggleProps = {
   // remaining `active` argument — e.g. `setWordActive.bind(null, word.id)`.
   toggleAction: (active: boolean) => Promise<void>;
   label: string;
+  // Status text shown next to the switch — defaults to the admin
+  // show/hide wording this was written for; pass e.g. {on: "Active", off:
+  // "Inactive"} for a different meaning of "on" (see the course home
+  // page's deck-activation toggle).
+  statusLabels?: { on: string; off: string };
 };
 
 // A switch, not a button-with-text: flips instantly via `useOptimistic` while
 // the server action runs in the background, then reconciles with whatever
 // the server actually persisted once `revalidatePath` refreshes this page's
 // data (or reverts on failure, since the base `active` prop never changed).
-export function VisibilityToggle({ active, toggleAction, label }: VisibilityToggleProps) {
+export function VisibilityToggle({
+  active,
+  toggleAction,
+  label,
+  statusLabels = { on: "Visible", off: "Hidden" },
+}: VisibilityToggleProps) {
   const [optimisticActive, setOptimisticActive] = useOptimistic(active);
   const [pending, startTransition] = useTransition();
 
@@ -29,7 +39,7 @@ export function VisibilityToggle({ active, toggleAction, label }: VisibilityTogg
   return (
     <div className="flex shrink-0 items-center gap-2">
       <span className="text-sm text-sumi-soft">
-        {optimisticActive ? "Visible" : "Hidden"}
+        {optimisticActive ? statusLabels.on : statusLabels.off}
       </span>
       <button
         type="button"

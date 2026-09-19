@@ -8,25 +8,26 @@ datasource db {
 }
 
 model Profile {
-  id            String             @id @db.Uuid
-  email         String
-  fullName      String?            @map("full_name")
-  role          String             @default("user")
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id              String               @id @db.Uuid
+  email           String
+  fullName        String?              @map("full_name")
+  role            String               @default("user")
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
   // Total experience points — incremented only by the vocab quiz actions in
   // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
   // quiz, plus a half-point-per-day streak bonus), never set directly from
   // a user-editable form field. A float (not Int) because the streak bonus
   // is awarded in 0.5 increments.
-  xp            Float              @default(0)
+  xp              Float                @default(0)
   // Free-form settings blob the user can view/edit as raw JSON from their
   // profile page — no fixed shape yet, deliberately generic.
-  donguriConfig Json?              @map("donguri_config")
-  enrollments   CourseEnrollment[]
-  addedByOthers Friendship[]       @relation("FriendshipsAsFriend")
-  friendsAdded  Friendship[]       @relation("FriendshipsAsUser")
-  wordProgress  UserWordProgress[]
+  donguriConfig   Json?                @map("donguri_config")
+  enrollments     CourseEnrollment[]
+  addedByOthers   Friendship[]         @relation("FriendshipsAsFriend")
+  friendsAdded    Friendship[]         @relation("FriendshipsAsUser")
+  deckActivations UserDeckActivation[]
+  wordProgress    UserWordProgress[]
 
   @@map("profiles")
 }
@@ -86,18 +87,42 @@ model CourseEnrollment {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Lesson {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  path      String
-  title     String
-  position  Int
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  courseId  String   @map("course_id") @db.Uuid
-  active    Boolean  @default(true)
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  words     Word[]
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  path        String
+  title       String
+  position    Int
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  courseId    String               @map("course_id") @db.Uuid
+  active      Boolean              @default(true)
+  course      Course               @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  activations UserDeckActivation[]
+  words       Word[]
 
   @@unique([courseId, path, position])
   @@map("lessons")
+}
+
+// A user's personal "active decks" list within a course — which decks
+// currently feed the Learn/Test pool (see getActiveDeckIds/
+// getLearnQueueForCourse in lib/dal.ts). Only ever keyed by a `path: 'vocab'`
+// Lesson (a "deck"); its grammar sibling, if any, activates implicitly along
+// with it. `active` is a real column (not row presence/absence) so
+// "explicitly deactivated" stays distinguishable from "never touched" even
+// after every deck is turned off — getActiveDeckIds needs that distinction
+// to only lazily auto-activate the first deck once, on a brand-new
+// enrollment, never re-activating something the user deliberately turned off.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserDeckActivation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  lessonId  String   @map("lesson_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  active    Boolean  @default(true)
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, lessonId])
+  @@map("user_deck_activations")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -196,10 +221,6 @@ model UserWordProgress {
   // 1-7, see the STAGES table in lib/srs.ts — replaces the old 1-5 "box".
   // Stage 7 is "Mastered" (status flips to 'known', nextReviewAt cleared).
   stage          Int       @default(1)
-  // When this word is next due in the review queue — null until the word's
-  // very first quiz question is answered (see `lastSeenAt`), and null again
-  // once it reaches stage 7 (mastered, no more reviews).
-  nextReviewAt   DateTime? @map("next_review_at") @db.Timestamptz(6)
   correctCount   Int       @default(0) @map("correct_count")
   incorrectCount Int       @default(0) @map("incorrect_count")
   skipped        Boolean   @default(false)
@@ -207,6 +228,10 @@ model UserWordProgress {
   lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  // When this word is next due in the review queue — null until the word's
+  // very first quiz question is answered (see `lastSeenAt`), and null again
+  // once it reaches stage 7 (mastered, no more reviews).
+  nextReviewAt   DateTime? @map("next_review_at") @db.Timestamptz(6)
   profile        Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   word           Word      @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 

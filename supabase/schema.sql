@@ -1168,7 +1168,15 @@ where w.lesson_id = l.id
 -- quiz question is answered (see `last_seen_at`) — it isn't due for review
 -- until it's actually been quizzed once.
 
-alter table public.user_word_progress rename column box to stage;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'user_word_progress' and column_name = 'box'
+  ) then
+    alter table public.user_word_progress rename column box to stage;
+  end if;
+end $$;
 alter table public.user_word_progress add column if not exists next_review_at timestamptz;
 
 alter table public.user_word_progress drop constraint if exists user_word_progress_box_check;
@@ -1200,3 +1208,43 @@ where status = 'learning' and last_seen_at is not null and next_review_at is nul
 update public.user_word_progress
 set stage = 1
 where status = 'learning' and last_seen_at is null and stage <> 1;
+
+-- 26. Per-user deck activation ------------------------------------------------
+-- Which decks currently feed a user's Learn/Test pool (see
+-- getActiveDeckIds/getLearnQueueForCourse in lib/dal.ts) — a personal
+-- selection, not an admin visibility toggle (that's `lessons.active`).
+-- `active` is a real column, not row presence/absence, so "explicitly
+-- deactivated" stays distinguishable from "never touched" even after every
+-- deck is turned off (needed so the app only ever lazily auto-activates the
+-- first deck once, on a brand-new enrollment). A `path: 'grammar'` lesson is
+-- never activated directly, only implicitly via its `path: 'vocab'` sibling
+-- (same course + position).
+
+create table if not exists public.user_deck_activations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  lesson_id uuid not null references public.lessons (id) on delete cascade,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (user_id, lesson_id)
+);
+
+alter table public.user_deck_activations add column if not exists active boolean not null default true;
+
+alter table public.user_deck_activations enable row level security;
+
+drop policy if exists "Users can view own deck activations" on public.user_deck_activations;
+create policy "Users can view own deck activations"
+  on public.user_deck_activations for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can add own deck activations" on public.user_deck_activations;
+create policy "Users can add own deck activations"
+  on public.user_deck_activations for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own deck activations" on public.user_deck_activations;
+create policy "Users can update own deck activations"
+  on public.user_deck_activations for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

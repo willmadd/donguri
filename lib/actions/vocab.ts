@@ -305,14 +305,14 @@ export async function completeQuiz(
     });
   }
 
-  // Unlike submitAnswer/submitFormAnswer above, it's safe to revalidate here:
-  // the quiz has already finished (the client has moved to its local
-  // "finished" summary state, which doesn't render the `quiz` prop), so a
-  // fresh getTestQueue result reaching the still-mounted page underneath it
-  // is invisible. This is what keeps the header's XP badge (read from the
-  // shared dashboard layout) correct once the learner navigates away.
-  revalidatePath("/dashboard", "layout");
-
+  // Deliberately NOT revalidating here (see `refreshDashboardHeader` below)
+  // — a level-up modal may still be showing, and revalidating now was
+  // exactly the bug: `revalidatePath(..., "layout")` invalidates the
+  // *whole* dashboard layout, including the test/review page still mounted
+  // underneath, so Next re-renders it with a fresh (now-empty) `quiz`
+  // array a second or two later, which swaps that page over to its
+  // "nothing left" empty state — unmounting TestSession/ReviewSession, and
+  // the level-up modal along with it, out from under the learner mid-choice.
   return {
     xp,
     bonusAwarded: perfect,
@@ -322,6 +322,16 @@ export async function completeQuiz(
     newlyUnlockedAccessories,
     unlockedAccessories,
   };
+}
+
+// The revalidation `completeQuiz` above deliberately skips — call this once
+// the finished screen is truly done being looked at (immediately, if there
+// was no level-up; from the level-up modal's `onDone`, if there was one).
+// Keeps the header's XP badge (read from the shared dashboard layout)
+// correct once the learner navigates away, without risking unmounting a
+// still-visible modal the way calling it from inside `completeQuiz` did.
+export async function refreshDashboardHeader(): Promise<void> {
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function skipWord(wordId: string): Promise<void> {
@@ -385,6 +395,30 @@ export async function skipLesson(lessonId: string): Promise<void> {
   // whole dashboard subtree — safe even if a practice session happens to be
   // open in another tab.
   revalidatePath("/dashboard");
+}
+
+// Turns a deck on/off in the user's personal "active decks" selection for a
+// course (see getActiveDeckIds in lib/dal.ts) — upserts rather than
+// creating/deleting the row, since `active` being a real column (not row
+// presence) is what lets getActiveDeckIds tell "explicitly deactivated"
+// apart from "never touched" even once every deck is off. `deckId` is
+// always a `path: 'vocab'` lesson id — its grammar sibling, if any,
+// activates implicitly alongside it (see getActiveGrammarLessonIds), not as
+// its own row.
+export async function toggleDeckActivation(
+  courseSlug: string,
+  deckId: string,
+  active: boolean,
+): Promise<void> {
+  const user = await requireUser();
+
+  await prisma.userDeckActivation.upsert({
+    where: { userId_lessonId: { userId: user.id, lessonId: deckId } },
+    create: { userId: user.id, lessonId: deckId, active },
+    update: { active },
+  });
+
+  revalidatePath(`/dashboard/courses/${courseSlug}`);
 }
 
 export async function resetCourseProgress(courseId: string): Promise<void> {

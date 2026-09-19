@@ -8,6 +8,7 @@ import {
   submitCustomAnswer,
   submitTypedAnswer,
   completeQuiz,
+  refreshDashboardHeader,
 } from "@/lib/actions/vocab";
 import type { QuizOption, QuizQuestion } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
@@ -19,7 +20,6 @@ import { parseDonguriConfig, formatXp, type AccessoryId } from "@/lib/levels";
 type TestSessionProps = {
   quiz: QuizQuestion[];
   courseSlug: string;
-  deckId: string;
   initialXp: number;
   initialDonguriConfig: unknown;
 };
@@ -35,7 +35,6 @@ type LevelUpInfo = {
 export const TestSession = ({
   quiz,
   courseSlug,
-  deckId,
   initialXp,
   initialDonguriConfig,
 }: TestSessionProps) => {
@@ -170,6 +169,14 @@ export const TestSession = ({
             newlyUnlockedAccessories: result.newlyUnlockedAccessories,
             unlockedAccessories: result.unlockedAccessories,
           });
+        } else {
+          // No level-up modal to protect — safe to refresh the header now.
+          // When there IS a level-up, this is deferred to the modal's
+          // `onDone` instead (see below), so the dashboard-wide revalidation
+          // it triggers can't unmount this still-visible modal out from
+          // under the learner (that was the bug: revalidating immediately
+          // here reached this page too, whose `quiz` prop was now empty).
+          refreshDashboardHeader();
         }
       });
     }
@@ -218,10 +225,10 @@ export const TestSession = ({
         </div>
 
         <Link
-          href={`/dashboard/courses/${courseSlug}/decks/${deckId}`}
+          href={`/dashboard/courses/${courseSlug}`}
           className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
         >
-          Back to deck
+          Back to course
         </Link>
 
         {levelUpInfo && (
@@ -233,6 +240,7 @@ export const TestSession = ({
             onDone={(id) => {
               setEquippedAccessory(id);
               setLevelUpInfo(null);
+              refreshDashboardHeader();
             }}
           />
         )}

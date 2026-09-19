@@ -1,24 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getDeckDetail, getReviewQueue, requireProfile } from "@/lib/dal";
+import { getCourseHome, getReviewQueue, requireProfile } from "@/lib/dal";
 import { ReviewSession } from "@/components/vocab/review-session";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 
 type PageProps = {
-  params: Promise<{ slug: string; deckId: string }>;
+  params: Promise<{ slug: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { slug, deckId } = await params;
-  const { course, deck } = await getDeckDetail(slug, deckId);
-  return { title: `Review — ${deck.title} — ${course.title}` };
+  const { slug } = await params;
+  const { course } = await getCourseHome(slug);
+  return { title: `Review — ${course.title}` };
 }
 
-export default async function ReviewPage({ params }: PageProps) {
-  const { slug, deckId } = await params;
-  const [{ course, deck }, quiz, profile] = await Promise.all([
-    getDeckDetail(slug, deckId),
-    getReviewQueue(slug, deckId),
+export default async function CourseReviewPage({ params }: PageProps) {
+  const { slug } = await params;
+  const [{ course }, quiz, profile] = await Promise.all([
+    getCourseHome(slug),
+    getReviewQueue(slug),
     requireProfile(),
   ]);
 
@@ -26,7 +26,6 @@ export default async function ReviewPage({ params }: PageProps) {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/dashboard/courses", label: "Courses" },
     { href: `/dashboard/courses/${slug}`, label: course.title },
-    { href: `/dashboard/courses/${slug}/decks/${deckId}`, label: deck.title },
     { label: "Review" },
   ];
 
@@ -41,14 +40,14 @@ export default async function ReviewPage({ params }: PageProps) {
           </span>
           <h1 className="text-xl font-semibold text-sumi">Nothing due right now</h1>
           <p className="max-w-sm text-sm text-sumi-soft">
-            Words show up here on their own schedule as they&apos;re due for review — from this
-            deck&apos;s vocabulary and grammar alike.
+            Words show up here on their own schedule as they&apos;re due for review — from every
+            deck in this course.
           </p>
           <Link
-            href={`/dashboard/courses/${slug}/decks/${deckId}`}
+            href={`/dashboard/courses/${slug}`}
             className="mt-2 text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
-            Back to deck
+            Back to course
           </Link>
         </div>
       </div>
@@ -58,13 +57,7 @@ export default async function ReviewPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs items={breadcrumbItems} />
-      <ReviewSession
-        quiz={quiz}
-        courseSlug={slug}
-        deckId={deckId}
-        initialXp={profile.xp}
-        initialDonguriConfig={profile.donguriConfig}
-      />
+      <ReviewSession quiz={quiz} courseSlug={slug} initialXp={profile.xp} initialDonguriConfig={profile.donguriConfig} />
     </div>
   );
 }

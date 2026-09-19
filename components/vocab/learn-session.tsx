@@ -11,19 +11,20 @@ import { WordImage } from "@/components/ui/word-image";
 type LearnSessionProps = {
   words: RevealWord[];
   courseSlug: string;
-  deckId: string;
-  // 'grammar' drops the image panel (grammar points don't have one) and
-  // adjusts copy — otherwise identical: a grammar point is just a `Word`
-  // row whose term/translation/explanation/examples happen to hold a
-  // structure, its Japanese meaning, its English meaning, and a few
-  // instantiated example sentences instead of a vocabulary word's usual
-  // content (see getGrammarDeck's note in lib/dal.ts). Batched in threes
-  // just like vocab (see SET_SIZE in lib/srs.ts) — one lesson just happens
-  // to be one structure instead of one word.
-  kind?: "vocab" | "grammar";
+  // Doubles as which pool this session pulled from (see
+  // `getLearnQueueForCourse` in lib/dal.ts) and, for grammar, drops the
+  // image panel (grammar points don't have one) and adjusts copy —
+  // otherwise identical: a grammar point is just a `Word` row whose
+  // term/translation/explanation/examples happen to hold a structure, its
+  // Japanese meaning, its English meaning, and a few instantiated example
+  // sentences instead of a vocabulary word's usual content (see
+  // getGrammarDeck's note in lib/dal.ts). Batched in threes just like vocab
+  // (see SET_SIZE in lib/srs.ts) — one lesson just happens to be one
+  // structure instead of one word.
+  kind: "vocab" | "grammar";
 };
 
-export const LearnSession = ({ words, courseSlug, deckId, kind = "vocab" }: LearnSessionProps) => {
+export const LearnSession = ({ words, courseSlug, kind }: LearnSessionProps) => {
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [pending, setPending] = useState(false);
@@ -87,16 +88,16 @@ export const LearnSession = ({ words, courseSlug, deckId, kind = "vocab" }: Lear
             {refreshing ? "Loading…" : kind === "grammar" ? "Learn another point" : "Learn more words"}
           </button>
           <Link
-            href={`/dashboard/courses/${courseSlug}/decks/${deckId}/test`}
+            href={`/dashboard/courses/${courseSlug}/test/${kind}`}
             className="inline-flex h-11 w-full items-center justify-center rounded-full border border-sumi/15 px-6 font-medium text-sumi transition hover:border-sumi/30"
           >
             Test yourself
           </Link>
           <Link
-            href={`/dashboard/courses/${courseSlug}/decks/${deckId}`}
+            href={`/dashboard/courses/${courseSlug}`}
             className="inline-flex h-11 w-full items-center justify-center px-6 text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
-            Back to deck
+            Back to course
           </Link>
         </div>
       </section>

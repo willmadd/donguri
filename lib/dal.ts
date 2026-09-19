@@ -523,30 +523,75 @@ const LESSON_WORDS_SELECT = {
 // sharing one `position`, so a vocab lesson can have a grammar sibling (see
 // `getGrammarDeck`), but the deck *picker* grid this powers only ever shows
 // the vocab side — grammar is presented as a section within a deck, not a
-// separately pickable one.
+// separately pickable one. `activeDeckIds` is this user's personal "active
+// decks" selection (see `getActiveDeckIds`) — which decks currently feed
+// their Learn/Test pool, not an admin visibility toggle.
 export const getCourseDecks = cache(async (courseSlug: string) => {
   const { user, course } = await requireEnrolledCourse(courseSlug);
 
-  const lessons = await prisma.lesson.findMany({
-    where: { courseId: course.id, path: "vocab", active: true },
-    orderBy: { position: "asc" },
-    include: {
-      words: {
-        where: { active: true },
-        orderBy: { position: "asc" },
-        select: {
-          ...LESSON_WORDS_SELECT,
-          progress: { where: { userId: user.id }, select: { status: true } },
+  const [lessons, activeDeckIds] = await Promise.all([
+    prisma.lesson.findMany({
+      where: { courseId: course.id, path: "vocab", active: true },
+      orderBy: { position: "asc" },
+      include: {
+        words: {
+          where: { active: true },
+          orderBy: { position: "asc" },
+          select: {
+            ...LESSON_WORDS_SELECT,
+            progress: { where: { userId: user.id }, select: { status: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    getActiveDeckIds(course.id, user.id),
+  ]);
 
   return {
     course: toCourseSummary(course),
     decks: lessons.map((lesson) => toLessonSummary(lesson)),
+    activeDeckIds,
   };
 });
+
+// This user's personal "active decks" selection within a course — which
+// decks currently feed the Learn/Test pool (see `getLearnQueueForCourse`).
+// A brand-new enrollment has no activation rows yet; rather than leaving
+// Learn with an empty pool (dead on arrival), this lazily activates the
+// first deck (lowest position) the first time it's read, so there's always
+// somewhere to start. From then on it's purely the user's own selection —
+// deactivating that first deck later is respected, not re-activated.
+async function getActiveDeckIds(courseId: string, userId: string): Promise<string[]> {
+  const activations = await prisma.userDeckActivation.findMany({
+    where: { userId, lesson: { courseId, path: "vocab" } },
+    select: { lessonId: true, active: true },
+  });
+
+  // Any row at all (active or not) means the user has touched deck
+  // activation in this course before — respect it exactly, including
+  // "everything's off," rather than second-guessing it.
+  if (activations.length > 0) {
+    return activations.filter((activation) => activation.active).map((activation) => activation.lessonId);
+  }
+
+  // Never touched — auto-activate the first deck so Learn isn't dead on
+  // arrival for a brand-new enrollment.
+  const firstDeck = await prisma.lesson.findFirst({
+    where: { courseId, path: "vocab", active: true },
+    orderBy: { position: "asc" },
+    select: { id: true },
+  });
+
+  if (!firstDeck) {
+    return [];
+  }
+
+  await prisma.userDeckActivation.create({
+    data: { userId, lessonId: firstDeck.id },
+  });
+
+  return [firstDeck.id];
+}
 
 // Single lesson's stats/words for the deck detail and learn/test/review
 // pages — deliberately path-agnostic (unlike `getCourseDecks`), so it
@@ -610,69 +655,51 @@ export const getGrammarDeck = cache(
   },
 );
 
-// A grammar lesson isn't itself "the deck" — it's a section within its
-// vocab sibling's page (see `getGrammarDeck`) — so a direct visit to a
-// grammar lesson's id (e.g. a practice session's "back to deck" link)
-// should land on that vocab sibling's page, not render the grammar lesson
-// as if it were a standalone deck. Returns `deckId` unchanged for a vocab
-// lesson (the common case) or one that no longer resolves at all — the page
-// calling this handles that redirect itself via `getDeckDetail`.
-export const getCanonicalDeckId = cache(async (courseSlug: string, deckId: string): Promise<string> => {
-  const { course } = await requireEnrolledCourse(courseSlug);
-
-  const lesson = await prisma.lesson.findFirst({
-    where: { id: deckId, courseId: course.id, active: true },
-    select: { path: true, position: true },
-  });
-
-  if (!lesson || lesson.path === "vocab") {
-    return deckId;
-  }
-
-  const vocabSibling = await prisma.lesson.findFirst({
-    where: { courseId: course.id, path: "vocab", position: lesson.position, active: true },
-    select: { id: true },
-  });
-
-  return vocabSibling?.id ?? deckId;
-});
-
-// Every lesson id that makes up "this deck" — the vocab lesson at `deckId`
-// plus its `path: 'grammar'` sibling if one exists (same course + position,
-// see `getGrammarDeck`) — so review-queue queries can span both. `deckId`
-// itself is included even if the lookup below finds nothing else, so a
-// caller can pass the result straight into a `lessonId: { in: ... }` filter
-// without a special case for "no grammar content."
-async function getDeckLessonIds(courseId: string, deckId: string): Promise<string[]> {
-  const lesson = await prisma.lesson.findFirst({
-    where: { id: deckId, courseId, active: true },
-    select: { position: true },
-  });
-
-  if (!lesson) {
-    return [deckId];
-  }
-
-  const siblings = await prisma.lesson.findMany({
-    where: { courseId, position: lesson.position, active: true },
-    select: { id: true },
-  });
-
-  return siblings.length > 0 ? siblings.map((sibling) => sibling.id) : [deckId];
-}
-
-// One entry per day in the current streak's date range (zero-filled for a
-// day with no *new* words — a review-only day is still a valid streak day).
-// Empty when there's no active streak to show.
-export const getDailyWordCounts = cache(async (courseSlug: string): Promise<DailyWordCount[]> => {
-  const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
-
-  if (enrollment.currentStreak <= 0 || !enrollment.lastActivityDate) {
+// The `path: 'grammar'` lesson ids sharing a position with any of the given
+// active vocab deck ids (see `getGrammarDeck`) — so `getLearnQueueForCourse`
+// can pool grammar content the same way it pools vocab, from whichever
+// decks are currently active. Decks with no grammar content yet are simply
+// skipped, not padded with anything.
+async function getActiveGrammarLessonIds(courseId: string, activeDeckIds: string[]): Promise<string[]> {
+  if (activeDeckIds.length === 0) {
     return [];
   }
 
-  const rangeEnd = startOfUTCDay(enrollment.lastActivityDate);
-  const rangeStart = addDays(rangeEnd, -(enrollment.currentStreak - 1));
+  const activeVocabLessons = await prisma.lesson.findMany({
+    where: { id: { in: activeDeckIds }, courseId, path: "vocab" },
+    select: { position: true },
+  });
+
+  const positions = activeVocabLessons.map((lesson) => lesson.position);
+
+  if (positions.length === 0) {
+    return [];
+  }
+
+  const grammarLessons = await prisma.lesson.findMany({
+    where: { courseId, path: "grammar", position: { in: positions }, active: true },
+    select: { id: true },
+  });
+
+  return grammarLessons.map((lesson) => lesson.id);
+}
+
+// One entry per day in the current streak's date range (zero-filled for a
+// day with no *new* words — a review-only day is still a valid streak day),
+// always at least the trailing 7 days so a short or empty streak still
+// renders as a proper week-wide chart instead of one or two bars.
+export const getDailyWordCounts = cache(async (courseSlug: string): Promise<DailyWordCount[]> => {
+  const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
+
+  const rangeEnd = enrollment.lastActivityDate
+    ? startOfUTCDay(enrollment.lastActivityDate)
+    : startOfUTCDay(new Date());
+  const streakStart =
+    enrollment.currentStreak > 0
+      ? addDays(rangeEnd, -(enrollment.currentStreak - 1))
+      : rangeEnd;
+  const weekStart = addDays(rangeEnd, -6);
+  const rangeStart = streakStart < weekStart ? streakStart : weekStart;
 
   const progress = await prisma.userWordProgress.findMany({
     where: {
@@ -768,48 +795,37 @@ export const getLeaderboards = cache(
   },
 );
 
-// Finds the lesson and redirects to the course's deck list if it doesn't
-// resolve — shared by `getLearnQueue`/`getTestQueue`/`getReviewQueue` so a
-// stale/bad `deckId` in the URL can't reach any of them. Path-agnostic on
-// purpose — a `path: 'grammar'` lesson runs through the exact same
-// learn/quiz/review-queue mechanics as a vocab one (see `getGrammarDeck`),
-// just addressed by its own id.
-async function requireDeck(courseSlug: string, courseId: string, deckId: string) {
-  const deck = await prisma.lesson.findFirst({
-    where: { id: deckId, courseId, active: true },
-    select: { id: true, path: true },
-  });
-
-  if (!deck) {
-    redirect(`/dashboard/courses/${courseSlug}`);
-  }
-
-  return deck;
-}
-
-// Introduces up to SET_SIZE new words from this deck (creating their
-// `UserWordProgress` rows and bumping the streak) — the "Learn" half of what
-// used to be one combined practice queue. Read-heavy but also writes:
-// introducing the set has to happen exactly when the queue is built, not as
-// a separate step a caller could forget.
-export const getLearnQueue = cache(
-  async (courseSlug: string, deckId: string): Promise<RevealWord[]> => {
+// Introduces up to SET_SIZE new words (creating their `UserWordProgress`
+// rows and bumping the streak) pooled from *every currently active deck*
+// with content for `path` (see `getActiveDeckIds`) — "you can have more
+// than one activated deck," and the words are drawn at random from across
+// all of them, not in position order from a single one. Read-heavy but also
+// writes: introducing the set has to happen exactly when the queue is
+// built, not as a separate step a caller could forget.
+export const getLearnQueueForCourse = cache(
+  async (courseSlug: string, path: "vocab" | "grammar"): Promise<RevealWord[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const deck = await requireDeck(courseSlug, course.id, deckId);
+    const activeDeckIds = await getActiveDeckIds(course.id, user.id);
+    const lessonIds =
+      path === "vocab" ? activeDeckIds : await getActiveGrammarLessonIds(course.id, activeDeckIds);
 
-    const newWords = await prisma.word.findMany({
+    if (lessonIds.length === 0) {
+      return [];
+    }
+
+    const candidates = await prisma.word.findMany({
       where: {
-        lessonId: deck.id,
+        lessonId: { in: lessonIds },
         active: true,
         progress: { none: { userId: user.id } },
       },
-      orderBy: { position: "asc" },
-      take: SET_SIZE,
       include: {
         forms: { orderBy: { position: "asc" } },
         examples: { orderBy: { position: "asc" } },
       },
     });
+
+    const newWords = shuffle(candidates).slice(0, SET_SIZE);
 
     if (newWords.length > 0) {
       await prisma.userWordProgress.createMany({
@@ -856,33 +872,34 @@ export const getLearnQueue = cache(
   },
 );
 
-// Quiz-only, deck-scoped, never introduces new words — the "Test yourself"
-// half of the learn/quiz pair. Pool is every word in *this deck* that's been
-// learned but never yet answered (`lastSeenAt: null`). For a vocab deck,
+// Quiz-only, never introduces new words — the "Test yourself" half of the
+// learn/quiz pair. Pool is every word *anywhere in the course* with this
+// `path` that's been learned but never yet answered (`lastSeenAt: null`) —
+// not filtered to currently-active decks, since deactivating a deck after
+// learning some of its words shouldn't hide their pending quiz. For vocab,
 // each word gets exactly two questions (one multiple-choice, one typed —
 // see `buildTypedQuestion`), so a fresh 3-word learn session always
-// produces a 6-question quiz. For a grammar deck, every fresh point's
-// example sentences each become their own fill-in-the-blank question (see
+// produces a 6-question quiz. For grammar, every fresh point's example
+// sentences each become their own fill-in-the-blank question (see
 // `buildAllClozeQuestions`) — never multiple choice, since what's being
 // tested is production of the structure itself, not recognition among
 // options — so a fresh 3-point learn session (3 examples each) produces a
-// 9-question quiz. Either way, answering these never advances the word's stage
-// (see `recordAnswer`'s `advancesStage` in lib/actions/vocab.ts) — its
-// stage-1 review stays due 4 hours after it was *learned* (see
-// `getLearnQueue`), not from whenever it happens to get quizzed. A word
-// drops out of this pool the moment its first question is answered and
-// from then on is governed entirely by its stage/`nextReviewAt` — i.e. by
-// `getReviewQueue` below.
-export const getTestQueue = cache(
-  async (courseSlug: string, deckId: string): Promise<QuizQuestion[]> => {
+// 9-question quiz. Either way, answering these never advances the word's
+// stage (see `recordAnswer`'s `advancesStage` in lib/actions/vocab.ts) —
+// its stage-1 review stays due 4 hours after it was *learned* (see
+// `getLearnQueueForCourse`), not from whenever it happens to get quizzed. A
+// word drops out of this pool the moment its first question is answered
+// and from then on is governed entirely by its stage/`nextReviewAt` — i.e.
+// by `getReviewQueue` below.
+export const getTestQueueForCourse = cache(
+  async (courseSlug: string, path: "vocab" | "grammar"): Promise<QuizQuestion[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const deck = await requireDeck(courseSlug, course.id, deckId);
 
     const freshProgress = await prisma.userWordProgress.findMany({
       where: {
         userId: user.id,
         lastSeenAt: null,
-        word: { lessonId: deck.id, active: true },
+        word: { lesson: { courseId: course.id, path, active: true }, active: true },
       },
       include: {
         word: {
@@ -900,7 +917,7 @@ export const getTestQueue = cache(
 
     await bumpStreak(user.id, course.id, new Date());
 
-    if (deck.path === "grammar") {
+    if (path === "grammar") {
       const questions = freshProgress.flatMap((progress) =>
         buildAllClozeQuestions(progress.word, course),
       );
@@ -928,24 +945,23 @@ export const getTestQueue = cache(
   },
 );
 
-// One review queue per *deck*, combining its vocab lesson and its grammar
-// sibling if it has one (see `getDeckLessonIds`) — not two separate queues,
-// and not shared across other decks in the course either. Deck-page summary
-// card: just a count of words due right now plus the earliest upcoming due
-// time (for a "next review in ..." hint when nothing's due), not the full
-// question set — building that is deferred to `getReviewQueue`, only once
-// the learner actually starts a session.
+// One review queue per *course* — combining every deck's vocab and grammar
+// together, not scoped to currently-active decks (an already-learned word
+// stays reviewable even if its deck is later deactivated). Course-home-page
+// summary card: just a count of words due right now plus the earliest
+// upcoming due time (for a "next review in ..." hint when nothing's due),
+// not the full question set — building that is deferred to
+// `getReviewQueue`, only once the learner actually starts a session.
 export const getReviewQueueSummary = cache(
-  async (courseSlug: string, deckId: string): Promise<ReviewQueueSummary> => {
+  async (courseSlug: string): Promise<ReviewQueueSummary> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const lessonIds = await getDeckLessonIds(course.id, deckId);
     const now = new Date();
 
     const reviewable = {
       userId: user.id,
       stage: { lt: MAX_STAGE },
       lastSeenAt: { not: null },
-      word: { lessonId: { in: lessonIds }, active: true },
+      word: { lesson: { courseId: course.id, active: true }, active: true },
     } as const;
 
     const [dueCount, next] = await Promise.all([
@@ -963,17 +979,17 @@ export const getReviewQueueSummary = cache(
   },
 );
 
-// Admin-only "dev mode" debug view for the deck page — every word tracked
-// in this deck's review queue (learning or mastered, quizzed or not), not
-// just the due count `getReviewQueueSummary` shows, so an admin can see
-// exactly what's queued and when each word becomes due. Scoped to the
-// viewing admin's own progress, same as everything else on the deck page —
-// this is "what's in my queue for this deck," not a cross-user report.
+// Admin-only "dev mode" debug view for the course home page — every word
+// tracked anywhere in this course's review queue (learning or mastered,
+// quizzed or not), not just the due count `getReviewQueueSummary` shows, so
+// an admin can see exactly what's queued and when each word becomes due.
+// Scoped to the viewing admin's own progress, same as everything else on
+// the page — this is "what's in my queue," not a cross-user report.
 // Silently returns an empty list for a non-admin caller rather than
 // redirecting, since this is a data helper for an optional page section,
 // not a page of its own.
 export const getReviewQueueDebug = cache(
-  async (courseSlug: string, deckId: string): Promise<ReviewQueueDebugEntry[]> => {
+  async (courseSlug: string): Promise<ReviewQueueDebugEntry[]> => {
     const profile = await requireProfile();
 
     if (profile.role !== "admin") {
@@ -981,10 +997,9 @@ export const getReviewQueueDebug = cache(
     }
 
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const lessonIds = await getDeckLessonIds(course.id, deckId);
 
     const progress = await prisma.userWordProgress.findMany({
-      where: { userId: user.id, word: { lessonId: { in: lessonIds }, active: true } },
+      where: { userId: user.id, word: { lesson: { courseId: course.id, active: true }, active: true } },
       include: { word: { select: { term: true, translation: true } } },
       orderBy: [{ nextReviewAt: "asc" }],
     });
@@ -1002,14 +1017,13 @@ export const getReviewQueueDebug = cache(
 );
 
 // The scheduled review session itself — every word due right now
-// (`nextReviewAt <= now`, stage below Mastered) in this deck's vocab lesson
-// or its grammar sibling, one typed question each (see `buildTypedQuestion`;
-// the review queue never asks multiple choice, unlike the post-learn quiz
+// (`nextReviewAt <= now`, stage below Mastered) anywhere in the course,
+// vocab or grammar, one typed question each (see `buildTypedQuestion`; the
+// review queue never asks multiple choice, unlike the post-learn quiz
 // above).
 export const getReviewQueue = cache(
-  async (courseSlug: string, deckId: string): Promise<QuizQuestion[]> => {
+  async (courseSlug: string): Promise<QuizQuestion[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const lessonIds = await getDeckLessonIds(course.id, deckId);
 
     const dueProgress = await prisma.userWordProgress.findMany({
       where: {
@@ -1017,7 +1031,7 @@ export const getReviewQueue = cache(
         stage: { lt: MAX_STAGE },
         lastSeenAt: { not: null },
         nextReviewAt: { lte: new Date() },
-        word: { lessonId: { in: lessonIds }, active: true },
+        word: { lesson: { courseId: course.id, active: true }, active: true },
       },
       include: {
         word: {

@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { submitFormAnswer, submitTypedAnswer, completeQuiz } from "@/lib/actions/vocab";
+import {
+  submitFormAnswer,
+  submitTypedAnswer,
+  completeQuiz,
+  refreshDashboardHeader,
+} from "@/lib/actions/vocab";
 import type { QuizQuestion } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
@@ -13,7 +18,6 @@ import { parseDonguriConfig, formatXp, type AccessoryId } from "@/lib/levels";
 type ReviewSessionProps = {
   quiz: QuizQuestion[];
   courseSlug: string;
-  deckId: string;
   initialXp: number;
   initialDonguriConfig: unknown;
 };
@@ -26,16 +30,15 @@ type LevelUpInfo = {
   unlockedAccessories: AccessoryId[];
 };
 
-// One review queue per deck (see `getReviewQueue` in lib/dal.ts), mixing due
-// words from that deck's vocab lesson and its grammar sibling if it has one
-// — not shared across other decks. Every question here is typed — never
-// multiple choice, unlike `TestSession` — so this only ever needs to render
-// `type-form` (a cloze sentence) or `type-answer` (the plain term/
-// translation prompt), both answered the same way: one text input.
+// One review queue per course (see `getReviewQueue` in lib/dal.ts), mixing
+// due words from every deck's vocab and grammar together — not scoped to a
+// single deck. Every question here is typed — never multiple choice, unlike
+// `TestSession` — so this only ever needs to render `type-form` (a cloze
+// sentence) or `type-answer` (the plain term/translation prompt), both
+// answered the same way: one text input.
 export const ReviewSession = ({
   quiz,
   courseSlug,
-  deckId,
   initialXp,
   initialDonguriConfig,
 }: ReviewSessionProps) => {
@@ -107,6 +110,14 @@ export const ReviewSession = ({
             newlyUnlockedAccessories: result.newlyUnlockedAccessories,
             unlockedAccessories: result.unlockedAccessories,
           });
+        } else {
+          // No level-up modal to protect — safe to refresh the header now.
+          // When there IS a level-up, this is deferred to the modal's
+          // `onDone` instead (see below), so the dashboard-wide revalidation
+          // it triggers can't unmount this still-visible modal out from
+          // under the learner (that was the bug: revalidating immediately
+          // here reached this page too, whose `quiz` prop was now empty).
+          refreshDashboardHeader();
         }
       });
     }
@@ -155,10 +166,10 @@ export const ReviewSession = ({
         </div>
 
         <Link
-          href={`/dashboard/courses/${courseSlug}/decks/${deckId}`}
+          href={`/dashboard/courses/${courseSlug}`}
           className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
         >
-          Back to deck
+          Back to course
         </Link>
 
         {levelUpInfo && (
@@ -170,6 +181,7 @@ export const ReviewSession = ({
             onDone={(id) => {
               setEquippedAccessory(id);
               setLevelUpInfo(null);
+              refreshDashboardHeader();
             }}
           />
         )}

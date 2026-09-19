@@ -16,11 +16,11 @@ function formatDayFull(dateStr: string): string {
 }
 
 const WIDTH = 600;
-const HEIGHT = 220;
+const HEIGHT = 140;
 const PAD_LEFT = 12;
 const PAD_RIGHT = 12;
-const PAD_TOP = 30;
-const PAD_BOTTOM = 28;
+const PAD_TOP = 24;
+const PAD_BOTTOM = 24;
 const INNER_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT;
 const INNER_HEIGHT = HEIGHT - PAD_TOP - PAD_BOTTOM;
 const BASELINE_Y = PAD_TOP + INNER_HEIGHT;
