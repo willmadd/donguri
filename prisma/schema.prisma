@@ -12,36 +12,26 @@ model Profile {
   email         String
   fullName      String?            @map("full_name")
   role          String             @default("user")
-  // Total experience points — incremented only by the vocab quiz actions in
-  // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
-  // quiz, plus a half-point-per-day streak bonus), never set directly from
-  // a user-editable form field. A float (not Int) because the streak bonus
-  // is awarded in 0.5 increments.
-  xp            Float              @default(0)
-  // Free-form settings blob the user can view/edit as raw JSON from their
-  // profile page — no fixed shape yet, deliberately generic.
-  donguriConfig Json?              @map("donguri_config")
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  xp            Float              @default(0)
+  donguriConfig Json?              @map("donguri_config")
   enrollments   CourseEnrollment[]
-  wordProgress  UserWordProgress[]
-  friendsAdded  Friendship[]       @relation("FriendshipsAsUser")
   addedByOthers Friendship[]       @relation("FriendshipsAsFriend")
+  friendsAdded  Friendship[]       @relation("FriendshipsAsUser")
+  wordProgress  UserWordProgress[]
 
   @@map("profiles")
 }
 
-// One-directional: `userId` added `friendId` to their own friends list, no
-// acceptance step needed — just enough for a personal "friends leaderboard"
-// alongside the global top-10.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Friendship {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   friendId  String   @map("friend_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  user      Profile  @relation("FriendshipsAsUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   friend    Profile  @relation("FriendshipsAsFriend", fields: [friendId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      Profile  @relation("FriendshipsAsUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([userId, friendId])
   @@map("friendships")
@@ -66,18 +56,16 @@ model Course {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model CourseEnrollment {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  courseId         String    @map("course_id") @db.Uuid
-  enrolledAt       DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
-  currentStreak    Int       @default(0) @map("current_streak")
-  longestStreak    Int       @default(0) @map("longest_streak")
-  lastActivityDate DateTime? @map("last_activity_date") @db.Date
-  // The last UTC date this course's streak XP bonus was awarded — so
-  // completing a second quiz on the same day doesn't award it again.
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  courseId            String    @map("course_id") @db.Uuid
+  enrolledAt          DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  currentStreak       Int       @default(0) @map("current_streak")
+  longestStreak       Int       @default(0) @map("longest_streak")
+  lastActivityDate    DateTime? @map("last_activity_date") @db.Date
   lastStreakBonusDate DateTime? @map("last_streak_bonus_date") @db.Date
-  course           Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  profile          Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  course              Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile             Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([userId, courseId])
   @@map("course_enrollments")
@@ -107,27 +95,26 @@ model Word {
   term            String
   translation     String
   exampleSentence String?            @map("example_sentence")
-  explanation     String?
-  explanationJa   String?            @map("explanation_ja")
   position        Int
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   romanization    String?
   active          Boolean            @default(true)
   imageKey        String?            @map("image_key")
+  explanation     String?
+  explanationJa   String?            @map("explanation_ja")
+  categoryId      String?            @map("category_id") @db.Uuid
+  wordType        String?            @map("word_type")
   progress        UserWordProgress[]
-  forms           WordForm[]
   examples        WordExample[]
+  forms           WordForm[]
   quizQuestions   WordQuizQuestion[]
+  category        WordCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([lessonId, position])
   @@map("words")
 }
 
-// Hand-authored multiple-choice questions an admin adds for a specific word
-// — mixed into that word's quiz pool alongside the auto-generated
-// term/translation and fill-in-the-blank questions (see
-// `CUSTOM_QUESTION_CHANCE` in lib/dal.ts), not a replacement for them.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordQuizQuestion {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -144,10 +131,6 @@ model WordQuizQuestion {
   @@map("word_quiz_questions")
 }
 
-// A word's inflected/conjugated forms (e.g. go/goes/went/gone/going). Generic
-// on purpose — labels are free text set by the admin — so it also covers
-// non-verb inflections (noun plurals, adjective comparatives) without a
-// schema change.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordForm {
   id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -157,17 +140,13 @@ model WordForm {
   value     String
   position  Int
   createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  word      Word          @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   examples  WordExample[]
+  word      Word          @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([wordId, position])
   @@map("word_forms")
 }
 
-// Example sentence pairs for a word. `formId` optionally ties an example to
-// the specific form it demonstrates (used to build "type the form" quiz
-// questions from the Japanese side); null means a general example not tied
-// to one form.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordExample {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -177,8 +156,8 @@ model WordExample {
   ja        String
   position  Int
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  form      WordForm? @relation(fields: [formId], references: [id], onUpdate: NoAction)
   word      Word      @relation(fields: [wordId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  form      WordForm? @relation(fields: [formId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@unique([wordId, position])
   @@map("word_examples")
@@ -204,4 +183,20 @@ model UserWordProgress {
 
   @@unique([userId, wordId])
   @@map("user_word_progress")
+}
+
+// A cross-deck topical tag with its own admin-managed color — distinct from
+// a "category" elsewhere in this app, which is the admin UI's name for a
+// `Lesson` (deck). E.g. the "Colours" word-category can appear on words
+// inside a "TOEIC Basic" deck.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model WordCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  color     String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  words     Word[]
+
+  @@map("word_categories")
 }

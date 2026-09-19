@@ -951,3 +951,205 @@ drop policy if exists "Authenticated users can view word quiz questions" on publ
 create policy "Authenticated users can view word quiz questions"
   on public.word_quiz_questions for select
   using (auth.role() = 'authenticated');
+
+-- 24. Word categories and word type -------------------------------------------
+-- Distinct from a "category" (lesson/deck) elsewhere in this app — this is a
+-- cross-deck topical tag with its own admin-managed color (e.g. "Colours" the
+-- tag vs. "TOEIC Basic" the deck a coloured word happens to live in), plus a
+-- fixed part-of-speech field. Both are nullable and admin-editable per word.
+
+create table if not exists public.word_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  color text not null,
+  position integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.word_categories enable row level security;
+
+drop policy if exists "Authenticated users can view word categories" on public.word_categories;
+create policy "Authenticated users can view word categories"
+  on public.word_categories for select
+  using (auth.role() = 'authenticated');
+
+alter table public.words add column if not exists category_id uuid references public.word_categories (id) on delete set null;
+alter table public.words add column if not exists word_type text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'words_word_type_check'
+  ) then
+    alter table public.words add constraint words_word_type_check
+      check (word_type is null or word_type in (
+        'noun', 'verb', 'adjective', 'adverb', 'pronoun', 'preposition',
+        'conjunction', 'interjection', 'phrase', 'numeral', 'particle'
+      ));
+  end if;
+end $$;
+
+-- Seed a starting set of topical categories and classify the existing
+-- vocabulary. Matched by term/translation text (not id) so this stays
+-- portable across databases, and only fills columns that are still null so a
+-- re-run never overwrites an admin's later recategorization.
+
+insert into public.word_categories (name, color, position) values
+  ('Greetings & Phrases', '#2563eb', 1),
+  ('People & Family', '#9333ea', 2),
+  ('Places & Travel', '#0d9488', 3),
+  ('Time & Weather', '#0ea5e9', 4),
+  ('Colours', '#db2777', 5),
+  ('Sports & Exercise', '#16a34a', 6),
+  ('Actions & Verbs', '#64748b', 7),
+  ('Numbers', '#ca8a04', 8),
+  ('Position & Direction', '#4f46e5', 9),
+  ('Food & Drink', '#ea580c', 10),
+  ('Hobbies', '#e11d48', 11),
+  ('Everyday Objects', '#78716c', 12),
+  ('Descriptions', '#c026d3', 13)
+on conflict (name) do nothing;
+
+with classification (concept, category_name, word_type) as (
+  values
+    ('above', 'Position & Direction', 'preposition'),
+    ('badminton', 'Sports & Exercise', 'noun'),
+    ('baseball', 'Sports & Exercise', 'noun'),
+    ('basketball', 'Sports & Exercise', 'noun'),
+    ('behind', 'Position & Direction', 'preposition'),
+    ('below', 'Position & Direction', 'preposition'),
+    ('between', 'Position & Direction', 'preposition'),
+    ('big', 'Descriptions', 'adjective'),
+    ('black', 'Colours', 'adjective'),
+    ('blue', 'Colours', 'adjective'),
+    ('book', 'Everyday Objects', 'noun'),
+    ('bread', 'Food & Drink', 'noun'),
+    ('brown', 'Colours', 'adjective'),
+    ('bus', 'Places & Travel', 'noun'),
+    ('camping', 'Hobbies', 'noun'),
+    ('cheese', 'Food & Drink', 'noun'),
+    ('cooking', 'Hobbies', 'noun'),
+    ('dancing', 'Hobbies', 'noun'),
+    ('drawing', 'Hobbies', 'noun'),
+    ('drink', 'Actions & Verbs', 'verb'),
+    ('eat', 'Actions & Verbs', 'verb'),
+    ('egg', 'Food & Drink', 'noun'),
+    ('eight', 'Numbers', 'numeral'),
+    ('family', 'People & Family', 'noun'),
+    ('far', 'Position & Direction', 'adverb'),
+    ('fish', 'Food & Drink', 'noun'),
+    ('fishing', 'Hobbies', 'noun'),
+    ('five', 'Numbers', 'numeral'),
+    ('food', 'Food & Drink', 'noun'),
+    ('football', 'Sports & Exercise', 'noun'),
+    ('four', 'Numbers', 'numeral'),
+    ('friend', 'People & Family', 'noun'),
+    ('fruit', 'Food & Drink', 'noun'),
+    ('gaming', 'Hobbies', 'noun'),
+    ('gardening', 'Hobbies', 'noun'),
+    ('go', 'Actions & Verbs', 'verb'),
+    ('golf', 'Sports & Exercise', 'noun'),
+    ('good evening', 'Greetings & Phrases', 'phrase'),
+    ('good morning', 'Greetings & Phrases', 'phrase'),
+    ('good night', 'Greetings & Phrases', 'phrase'),
+    ('goodbye', 'Greetings & Phrases', 'interjection'),
+    ('green', 'Colours', 'adjective'),
+    ('happy', 'Descriptions', 'adjective'),
+    ('have a good day', 'Greetings & Phrases', 'phrase'),
+    ('hello', 'Greetings & Phrases', 'interjection'),
+    ('home', 'Everyday Objects', 'noun'),
+    ('hospital', 'Places & Travel', 'noun'),
+    ('hot', 'Descriptions', 'adjective'),
+    ('how are you', 'Greetings & Phrases', 'phrase'),
+    ('i''m fine', 'Greetings & Phrases', 'phrase'),
+    ('in front of', 'Position & Direction', 'preposition'),
+    ('inside', 'Position & Direction', 'adverb'),
+    ('january', 'Time & Weather', 'noun'),
+    ('judo', 'Sports & Exercise', 'noun'),
+    ('knitting', 'Hobbies', 'noun'),
+    ('left', 'Position & Direction', 'adverb'),
+    ('listen', 'Actions & Verbs', 'verb'),
+    ('long time no see', 'Greetings & Phrases', 'phrase'),
+    ('meat', 'Food & Drink', 'noun'),
+    ('milk', 'Food & Drink', 'noun'),
+    ('money', 'Everyday Objects', 'noun'),
+    ('morning', 'Time & Weather', 'noun'),
+    ('name', 'People & Family', 'noun'),
+    ('near', 'Position & Direction', 'preposition'),
+    ('next to', 'Position & Direction', 'preposition'),
+    ('nice to meet you', 'Greetings & Phrases', 'phrase'),
+    ('night', 'Time & Weather', 'noun'),
+    ('nine', 'Numbers', 'numeral'),
+    ('no', 'Greetings & Phrases', 'interjection'),
+    ('noodles', 'Food & Drink', 'noun'),
+    ('one', 'Numbers', 'numeral'),
+    ('orange', 'Colours', 'adjective'),
+    ('outside', 'Position & Direction', 'adverb'),
+    ('phone', 'Everyday Objects', 'noun'),
+    ('photography', 'Hobbies', 'noun'),
+    ('pink', 'Colours', 'adjective'),
+    ('play', 'Actions & Verbs', 'verb'),
+    ('please', 'Greetings & Phrases', 'interjection'),
+    ('please / excuse me', 'Greetings & Phrases', 'interjection'),
+    ('potato', 'Food & Drink', 'noun'),
+    ('purple', 'Colours', 'adjective'),
+    ('read', 'Actions & Verbs', 'verb'),
+    ('reading', 'Hobbies', 'noun'),
+    ('red', 'Colours', 'adjective'),
+    ('restaurant', 'Places & Travel', 'noun'),
+    ('rice', 'Food & Drink', 'noun'),
+    ('right', 'Position & Direction', 'adverb'),
+    ('run', 'Actions & Verbs', 'verb'),
+    ('running', 'Sports & Exercise', 'noun'),
+    ('school', 'Places & Travel', 'noun'),
+    ('see you later', 'Greetings & Phrases', 'phrase'),
+    ('see you tomorrow', 'Greetings & Phrases', 'phrase'),
+    ('seven', 'Numbers', 'numeral'),
+    ('singing', 'Hobbies', 'noun'),
+    ('six', 'Numbers', 'numeral'),
+    ('skiing', 'Sports & Exercise', 'noun'),
+    ('sleep', 'Actions & Verbs', 'verb'),
+    ('soccer', 'Sports & Exercise', 'noun'),
+    ('sorry', 'Greetings & Phrases', 'interjection'),
+    ('soup', 'Food & Drink', 'noun'),
+    ('speak', 'Actions & Verbs', 'verb'),
+    ('station', 'Places & Travel', 'noun'),
+    ('store', 'Places & Travel', 'noun'),
+    ('study', 'Actions & Verbs', 'verb'),
+    ('swimming', 'Sports & Exercise', 'noun'),
+    ('table tennis', 'Sports & Exercise', 'noun'),
+    ('take care', 'Greetings & Phrases', 'phrase'),
+    ('taxi', 'Places & Travel', 'noun'),
+    ('ten', 'Numbers', 'numeral'),
+    ('tennis', 'Sports & Exercise', 'noun'),
+    ('thank you', 'Greetings & Phrases', 'phrase'),
+    ('three', 'Numbers', 'numeral'),
+    ('ticket', 'Places & Travel', 'noun'),
+    ('time', 'Time & Weather', 'noun'),
+    ('train', 'Places & Travel', 'noun'),
+    ('traveling', 'Hobbies', 'noun'),
+    ('two', 'Numbers', 'numeral'),
+    ('vegetable', 'Food & Drink', 'noun'),
+    ('video', 'Everyday Objects', 'noun'),
+    ('volleyball', 'Sports & Exercise', 'noun'),
+    ('walk', 'Actions & Verbs', 'verb'),
+    ('watch', 'Actions & Verbs', 'verb'),
+    ('water', 'Food & Drink', 'noun'),
+    ('weather', 'Time & Weather', 'noun'),
+    ('welcome', 'Greetings & Phrases', 'interjection'),
+    ('white', 'Colours', 'adjective'),
+    ('work', 'Everyday Objects', 'noun'),
+    ('write', 'Actions & Verbs', 'verb'),
+    ('yellow', 'Colours', 'adjective'),
+    ('yes', 'Greetings & Phrases', 'interjection'),
+    ('you', 'People & Family', 'pronoun')
+)
+update public.words w
+set category_id = coalesce(w.category_id, wc.id),
+    word_type = coalesce(w.word_type, c.word_type)
+from public.lessons l, public.courses co, classification c
+join public.word_categories wc on wc.name = c.category_name
+where w.lesson_id = l.id
+  and l.course_id = co.id
+  and (case when co.slug = 'en-for-ja' then lower(trim(w.term)) else lower(trim(w.translation)) end) = c.concept
+  and (w.category_id is null or w.word_type is null);

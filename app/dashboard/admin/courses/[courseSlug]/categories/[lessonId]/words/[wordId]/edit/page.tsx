@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { requireAdminProfile, getAdminWord } from "@/lib/dal";
+import { requireAdminProfile, getAdminWord, getWordCategories } from "@/lib/dal";
 import { EditWordForm } from "@/components/admin/edit-word-form";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { wordImagePath } from "@/lib/images";
@@ -23,6 +23,8 @@ export default async function EditWordPage({ params }: PageProps) {
   if (course.slug !== courseSlug || lesson.id !== lessonId) {
     redirect(`/dashboard/admin/courses/${courseSlug}`);
   }
+
+  const categories = await getWordCategories();
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,7 +49,7 @@ export default async function EditWordPage({ params }: PageProps) {
       </div>
 
       <div className="max-w-sm rounded-2xl border border-sumi/10 bg-washi-soft p-8">
-        <EditWordForm word={word} currentImageSrc={wordImagePath(word)} />
+        <EditWordForm word={word} currentImageSrc={wordImagePath(word)} categories={categories} />
       </div>
     </div>
   );

@@ -5,14 +5,22 @@ import { createWord } from "@/lib/actions/admin-content";
 import { TextField } from "@/components/ui/text-field";
 import { TextareaField } from "@/components/ui/textarea";
 import { FileField } from "@/components/ui/file-field";
+import { SelectField } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordFormsFields } from "@/components/admin/word-forms-fields";
+import { WORD_TYPES, type WordCategoryOption } from "@/lib/definitions";
 
 type CreateWordFormProps = {
   lessonId: string;
+  categories: WordCategoryOption[];
 };
 
-export function CreateWordForm({ lessonId }: CreateWordFormProps) {
+const WORD_TYPE_OPTIONS = WORD_TYPES.map((type) => ({
+  value: type,
+  label: type[0].toUpperCase() + type.slice(1),
+}));
+
+export function CreateWordForm({ lessonId, categories }: CreateWordFormProps) {
   const [state, action, pending] = useActionState(createWord, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -76,6 +84,22 @@ export function CreateWordForm({ lessonId }: CreateWordFormProps) {
         name="explanationJa"
         placeholder="Optional"
         errors={state?.errors?.explanationJa}
+      />
+      <SelectField
+        label="Category"
+        name="categoryId"
+        required={false}
+        placeholder="No category"
+        options={categories.map((category) => ({ value: category.id, label: category.name }))}
+        errors={state?.errors?.categoryId}
+      />
+      <SelectField
+        label="Word type"
+        name="wordType"
+        required={false}
+        placeholder="No word type"
+        options={WORD_TYPE_OPTIONS}
+        errors={state?.errors?.wordType}
       />
       <WordFormsFields key={resetCount} />
       <FileField

@@ -3,6 +3,8 @@ type SelectFieldProps = {
   name: string;
   options: { value: string; label: string }[];
   required?: boolean;
+  defaultValue?: string;
+  placeholder?: string;
   errors?: string[];
 };
 
@@ -11,6 +13,8 @@ export function SelectField({
   name,
   options,
   required = true,
+  defaultValue = "",
+  placeholder = "Select…",
   errors,
 }: SelectFieldProps) {
   return (
@@ -23,11 +27,11 @@ export function SelectField({
         name={name}
         required={required}
         aria-invalid={errors && errors.length > 0}
-        defaultValue=""
+        defaultValue={defaultValue}
         className="rounded-lg border border-sumi/15 bg-washi px-4 py-2.5 text-sumi outline-none transition focus:border-ai focus:ring-2 focus:ring-ai-soft"
       >
-        <option value="" disabled>
-          Select…
+        <option value="" disabled={required}>
+          {placeholder}
         </option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>

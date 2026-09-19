@@ -117,6 +117,31 @@ export type CourseStreak = {
 // learner's base language. Generic across every course/language pair.
 export type QuizDirection = "term-to-translation" | "translation-to-term";
 
+// A cross-deck topical tag with its own admin-managed color — see the note
+// on the `WordCategory` Prisma model. Distinct from a "category" elsewhere
+// in this file/app, which means a deck (`Lesson`).
+export const WORD_TYPES = [
+  "noun",
+  "verb",
+  "adjective",
+  "adverb",
+  "pronoun",
+  "preposition",
+  "conjunction",
+  "interjection",
+  "phrase",
+  "numeral",
+  "particle",
+] as const;
+
+export type WordType = (typeof WORD_TYPES)[number];
+
+export type WordCategoryOption = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type WordFormSummary = {
   id: string;
   labelEn: string;
@@ -272,6 +297,43 @@ export type CreateCategoryFormState =
     }
   | undefined;
 
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+
+const WordCategoryFieldsSchema = {
+  name: z
+    .string()
+    .trim()
+    .min(1, { error: "Name is required." })
+    .max(100, { error: "Keep it under 100 characters." }),
+  color: z
+    .string()
+    .trim()
+    .regex(HEX_COLOR_REGEX, { error: "Use a hex color like #2563eb." }),
+};
+
+export const CreateWordCategoryFormSchema = z.object(WordCategoryFieldsSchema);
+
+export type CreateWordCategoryFormState =
+  | {
+      errors?: { name?: string[]; color?: string[] };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
+export const UpdateWordCategoryFormSchema = z.object({
+  categoryId: z.uuid({ error: "Missing category." }),
+  ...WordCategoryFieldsSchema,
+});
+
+export type UpdateWordCategoryFormState =
+  | {
+      errors?: { name?: string[]; color?: string[] };
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
 const MAX_WORD_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // Shared by create and edit — only the id field (which category vs. which
@@ -307,6 +369,8 @@ const WordFieldsSchema = {
     .trim()
     .max(500, { error: "Keep it under 500 characters." })
     .optional(),
+  categoryId: z.uuid({ error: "Invalid category." }).optional(),
+  wordType: z.enum(WORD_TYPES, { error: "Invalid word type." }).optional(),
   image: z
     .file({ error: "Choose an image." })
     .max(MAX_WORD_IMAGE_BYTES, { error: "Image must be under 5MB." })
@@ -323,6 +387,8 @@ type WordFieldErrors = {
   exampleSentence?: string[];
   explanation?: string[];
   explanationJa?: string[];
+  categoryId?: string[];
+  wordType?: string[];
   image?: string[];
 };
 
@@ -477,6 +543,8 @@ export type AdminWordSummary = {
   position: number;
   imageKey: string | null;
   active: boolean;
+  category: WordCategoryOption | null;
+  wordType: WordType | null;
   forms: WordFormSummary[];
   examples: WordExampleSummary[];
 };

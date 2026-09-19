@@ -20,6 +20,8 @@ import type {
   QuizQuestion,
   RevealWord,
   UserRole,
+  WordCategoryOption,
+  WordType,
 } from "@/lib/definitions";
 import {
   addDays,
@@ -257,6 +259,7 @@ export const getAdminCategoryWords = cache(async (lessonId: string) => {
         include: {
           forms: { orderBy: { position: "asc" } },
           examples: { orderBy: { position: "asc" } },
+          category: { select: { id: true, name: true, color: true } },
         },
       },
     },
@@ -282,6 +285,7 @@ export const getAdminWord = cache(async (wordId: string) => {
       lesson: { select: { id: true, title: true, course: { select: { slug: true, title: true } } } },
       forms: { orderBy: { position: "asc" } },
       examples: { orderBy: { position: "asc" } },
+      category: { select: { id: true, name: true, color: true } },
     },
   });
 
@@ -296,6 +300,17 @@ export const getAdminWord = cache(async (wordId: string) => {
   };
 });
 
+// Every word category, for the admin word-category management page and the
+// dropdown on the word create/edit forms. Small, unfiltered, ordered for
+// display — not scoped to a course, since a category is meant to be reused
+// across decks/courses (unlike a `Lesson`).
+export const getWordCategories = cache(async (): Promise<WordCategoryOption[]> => {
+  return prisma.wordCategory.findMany({
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, color: true },
+  });
+});
+
 function toAdminWordSummary(word: {
   id: string;
   term: string;
@@ -307,6 +322,8 @@ function toAdminWordSummary(word: {
   position: number;
   imageKey: string | null;
   active: boolean;
+  wordType: string | null;
+  category: { id: string; name: string; color: string } | null;
   forms: { id: string; labelEn: string; labelJa: string; value: string }[];
   examples: { id: string; formId: string | null; en: string; ja: string }[];
 }): AdminWordSummary {
@@ -321,6 +338,8 @@ function toAdminWordSummary(word: {
     position: word.position,
     imageKey: word.imageKey,
     active: word.active,
+    wordType: word.wordType as WordType | null,
+    category: word.category,
     forms: word.forms.map((form) => ({
       id: form.id,
       labelEn: form.labelEn,

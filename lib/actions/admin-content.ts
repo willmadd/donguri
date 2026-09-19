@@ -9,17 +9,21 @@ import { buildWordImageKey, uploadWordImage } from "@/lib/bunny";
 import {
   BulkQuizQuestionsSchema,
   CreateCategoryFormSchema,
+  CreateWordCategoryFormSchema,
   CreateWordFormSchema,
   ImportWordsFormSchema,
+  UpdateWordCategoryFormSchema,
   UpdateWordFormSchema,
   WordExampleInputSchema,
   WordFormInputSchema,
   WordQuizQuestionInputSchema,
   type BulkImportQuizQuestionsFormState,
   type CreateCategoryFormState,
+  type CreateWordCategoryFormState,
   type CreateWordFormState,
   type ImportWordsFormState,
   type SaveQuizQuestionsFormState,
+  type UpdateWordCategoryFormState,
   type UpdateWordFormState,
 } from "@/lib/definitions";
 
@@ -322,6 +326,8 @@ export async function createWord(
     exampleSentence: formData.get("exampleSentence") || undefined,
     explanation: formData.get("explanation") || undefined,
     explanationJa: formData.get("explanationJa") || undefined,
+    categoryId: formData.get("categoryId") || undefined,
+    wordType: formData.get("wordType") || undefined,
     image,
   });
 
@@ -337,6 +343,8 @@ export async function createWord(
     exampleSentence,
     explanation,
     explanationJa,
+    categoryId,
+    wordType,
     image: validImage,
   } = validatedFields.data;
 
@@ -376,6 +384,8 @@ export async function createWord(
       exampleSentence: exampleSentence || null,
       explanation: explanation || null,
       explanationJa: explanationJa || null,
+      categoryId: categoryId || null,
+      wordType: wordType || null,
       position: (_max.position ?? 0) + 1,
       imageKey,
     },
@@ -413,6 +423,8 @@ export async function updateWord(
     exampleSentence: formData.get("exampleSentence") || undefined,
     explanation: formData.get("explanation") || undefined,
     explanationJa: formData.get("explanationJa") || undefined,
+    categoryId: formData.get("categoryId") || undefined,
+    wordType: formData.get("wordType") || undefined,
     image,
   });
 
@@ -428,6 +440,8 @@ export async function updateWord(
     exampleSentence,
     explanation,
     explanationJa,
+    categoryId,
+    wordType,
     image: validImage,
   } = validatedFields.data;
 
@@ -462,6 +476,8 @@ export async function updateWord(
       exampleSentence: exampleSentence || null,
       explanation: explanation || null,
       explanationJa: explanationJa || null,
+      categoryId: categoryId || null,
+      wordType: wordType || null,
       imageKey,
     },
   });
@@ -600,6 +616,8 @@ export async function importWords(
             explanation: word.explanation,
             explanationJa: word.explanationJa,
             imageKey: word.imageKey,
+            categoryId: word.categoryId,
+            wordType: word.wordType,
             position: basePosition + 1 + wordIndex,
           },
         }),
@@ -636,4 +654,101 @@ export async function importWords(
 
   revalidatePath(`/dashboard/courses/${targetLesson.course.slug}/decks/${targetLessonId}`);
   redirect(`/dashboard/admin/courses/${targetLesson.course.slug}/categories/${targetLessonId}`);
+}
+
+// Word categories (see the `WordCategory` model note in prisma/schema.prisma
+// for how this differs from a "category"/`Lesson` elsewhere in this file) —
+// a small global lookup list, not scoped to a course, so create/update/delete
+// only ever revalidate the word-category admin page itself plus the generic
+// course-content paths a word's category badge could show up on.
+
+export async function createWordCategory(
+  _state: CreateWordCategoryFormState,
+  formData: FormData,
+): Promise<CreateWordCategoryFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const validatedFields = CreateWordCategoryFormSchema.safeParse({
+    name: formData.get("name"),
+    color: formData.get("color"),
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { name, color } = validatedFields.data;
+
+  const existing = await prisma.wordCategory.findUnique({ where: { name } });
+
+  if (existing) {
+    return { errors: { name: ["A category with that name already exists."] } };
+  }
+
+  const { _max } = await prisma.wordCategory.aggregate({ _max: { position: true } });
+
+  await prisma.wordCategory.create({
+    data: { name, color, position: (_max.position ?? 0) + 1 },
+  });
+
+  revalidatePath("/dashboard/admin/word-categories");
+
+  return { success: true, message: `"${name}" created.` };
+}
+
+export async function updateWordCategory(
+  _state: UpdateWordCategoryFormState,
+  formData: FormData,
+): Promise<UpdateWordCategoryFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const validatedFields = UpdateWordCategoryFormSchema.safeParse({
+    categoryId: formData.get("categoryId"),
+    name: formData.get("name"),
+    color: formData.get("color"),
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { categoryId, name, color } = validatedFields.data;
+
+  const existing = await prisma.wordCategory.findUnique({ where: { name } });
+
+  if (existing && existing.id !== categoryId) {
+    return { errors: { name: ["A category with that name already exists."] } };
+  }
+
+  await prisma.wordCategory.update({
+    where: { id: categoryId },
+    data: { name, color },
+  });
+
+  revalidatePath("/dashboard/admin/word-categories");
+
+  return { success: true, message: `"${name}" saved.` };
+}
+
+export async function deleteWordCategory(categoryId: string): Promise<void> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return;
+  }
+
+  // Words keeping this category are left uncategorized rather than blocked
+  // — `Word.categoryId` is `onDelete: SetNull` — so deleting a category is a
+  // plain, no-confirmation-needed action like the rest of this admin tool.
+  await prisma.wordCategory.delete({ where: { id: categoryId } });
+
+  revalidatePath("/dashboard/admin/word-categories");
 }

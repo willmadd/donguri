@@ -1,0 +1,38 @@
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { createWordCategory } from "@/lib/actions/admin-content";
+import { TextField } from "@/components/ui/text-field";
+import { SubmitButton } from "@/components/ui/submit-button";
+
+export function CreateWordCategoryForm() {
+  const [state, action, pending] = useActionState(createWordCategory, undefined);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state?.success) {
+      formRef.current?.reset();
+    }
+  }, [state]);
+
+  return (
+    <form ref={formRef} action={action} className="flex flex-col gap-4">
+      <TextField label="Name" name="name" placeholder="e.g. Food & Drink" errors={state?.errors?.name} />
+      <TextField
+        label="Color"
+        name="color"
+        type="color"
+        defaultValue="#2563eb"
+        errors={state?.errors?.color}
+      />
+      {state?.message && (
+        <p className={`text-sm ${state.success ? "text-matcha-dark" : "text-shu"}`}>
+          {state.message}
+        </p>
+      )}
+      <SubmitButton pending={pending} pendingText="Creating…">
+        Create category
+      </SubmitButton>
+    </form>
+  );
+}

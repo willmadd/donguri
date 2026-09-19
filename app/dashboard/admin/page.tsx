@@ -37,6 +37,15 @@ export default async function AdminHubPage() {
             Create categories, add words, and copy categories between courses.
           </p>
         </Link>
+        <Link
+          href="/dashboard/admin/word-categories"
+          className="rounded-2xl border border-sumi/10 bg-washi-soft p-6 transition hover:border-ai/40"
+        >
+          <h2 className="font-semibold text-sumi">Manage word categories</h2>
+          <p className="mt-1 text-sm text-sumi-soft">
+            Create and colour the topic tags words can be assigned, independent of deck.
+          </p>
+        </Link>
       </div>
     </div>
   );

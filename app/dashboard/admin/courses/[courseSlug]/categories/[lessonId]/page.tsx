@@ -82,6 +82,23 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
                 {word.exampleSentence && (
                   <p className="mt-0.5 text-sm text-sumi-soft">{word.exampleSentence}</p>
                 )}
+                {(word.category || word.wordType) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {word.category && (
+                      <span
+                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium text-washi"
+                        style={{ backgroundColor: word.category.color }}
+                      >
+                        {word.category.name}
+                      </span>
+                    )}
+                    {word.wordType && (
+                      <span className="inline-flex items-center rounded-full border border-sumi/15 px-2.5 py-0.5 text-xs font-medium text-sumi-soft">
+                        {word.wordType}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-3">

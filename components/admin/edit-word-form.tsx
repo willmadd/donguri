@@ -5,17 +5,24 @@ import { updateWord } from "@/lib/actions/admin-content";
 import { TextField } from "@/components/ui/text-field";
 import { TextareaField } from "@/components/ui/textarea";
 import { FileField } from "@/components/ui/file-field";
+import { SelectField } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordImage } from "@/components/ui/word-image";
 import { WordFormsFields } from "@/components/admin/word-forms-fields";
-import type { AdminWordSummary } from "@/lib/definitions";
+import { WORD_TYPES, type AdminWordSummary, type WordCategoryOption } from "@/lib/definitions";
 
 type EditWordFormProps = {
   word: AdminWordSummary;
   currentImageSrc: string;
+  categories: WordCategoryOption[];
 };
 
-export function EditWordForm({ word, currentImageSrc }: EditWordFormProps) {
+const WORD_TYPE_OPTIONS = WORD_TYPES.map((type) => ({
+  value: type,
+  label: type[0].toUpperCase() + type.slice(1),
+}));
+
+export function EditWordForm({ word, currentImageSrc, categories }: EditWordFormProps) {
   const [state, action, pending] = useActionState(updateWord, undefined);
 
   return (
@@ -61,6 +68,24 @@ export function EditWordForm({ word, currentImageSrc }: EditWordFormProps) {
         placeholder="Optional"
         defaultValue={word.explanationJa ?? ""}
         errors={state?.errors?.explanationJa}
+      />
+      <SelectField
+        label="Category"
+        name="categoryId"
+        required={false}
+        placeholder="No category"
+        defaultValue={word.category?.id ?? ""}
+        options={categories.map((category) => ({ value: category.id, label: category.name }))}
+        errors={state?.errors?.categoryId}
+      />
+      <SelectField
+        label="Word type"
+        name="wordType"
+        required={false}
+        placeholder="No word type"
+        defaultValue={word.wordType ?? ""}
+        options={WORD_TYPE_OPTIONS}
+        errors={state?.errors?.wordType}
       />
       <WordFormsFields initialForms={word.forms} initialExamples={word.examples} />
 
