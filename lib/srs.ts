@@ -1,59 +1,45 @@
-// Weighted spaced repetition: `box` (1-5) is a mastery level, not a
-// schedule. Every not-yet-mastered word is always eligible for review, but
-// `weightForBox` weights lower boxes (new words, or words just answered
-// wrong) to appear far more often than higher boxes (answered correctly
-// again and again) — a sliding scale, not a hard due-date gate. A wrong
-// answer always drops a word back to box 1; box 5 retires it as "known".
-const MAX_BOX = 5;
 const SET_SIZE = 3;
-// A full quiz round — long enough to give real practice even early on, when
-// filling it means repeating the handful of words learnt so far.
-const QUIZ_SIZE = 12;
-// Flat multiplier on top of `weightForBox` for words in the category being
-// practiced — makes them dominate the review sample without excluding the
-// rest of the course (a boost, not a filter, same philosophy as the box
-// weighting itself).
-const CATEGORY_BOOST = 4;
+// Every freshly learned word is quizzed exactly this many times (one
+// multiple-choice, one typed) before it graduates into the scheduled review
+// queue below.
+const QUESTIONS_PER_LEARNT_WORD = 2;
 
-export { MAX_BOX, SET_SIZE, QUIZ_SIZE, CATEGORY_BOOST };
+export { SET_SIZE, QUESTIONS_PER_LEARNT_WORD };
 
-export function nextBoxAfterAnswer(box: number, correct: boolean): number {
-  return correct ? Math.min(box + 1, MAX_BOX) : 1;
+// The 7-stage scheduled review model. A word starts at stage 1 the moment
+// it's learned (see `getLearnQueue`); every correct review answer — whether
+// from the initial post-learn quiz or a later review-queue session —
+// advances it one stage and pushes `nextReviewAt` out to `intervalHours`
+// from now. A wrong answer regresses it to `wrongGoesTo`, not always back to
+// stage 1 (e.g. a slip at Intermediate 1 only drops to Beginner 2, not to
+// square one). Stage 7 ("Mastered") has no interval — it's terminal, same
+// meaning as the old `status: "known"`.
+export const STAGES = [
+  { stage: 1, nameEn: "Beginner 1", nameJa: "初心者 1", intervalHours: 4, wrongGoesTo: 1 },
+  { stage: 2, nameEn: "Beginner 2", nameJa: "初心者 2", intervalHours: 24, wrongGoesTo: 1 },
+  { stage: 3, nameEn: "Beginner 3", nameJa: "初心者 3", intervalHours: 24 * 3, wrongGoesTo: 1 },
+  { stage: 4, nameEn: "Intermediate 1", nameJa: "中級者 1", intervalHours: 24 * 7, wrongGoesTo: 2 },
+  { stage: 5, nameEn: "Intermediate 2", nameJa: "中級者 2", intervalHours: 24 * 14, wrongGoesTo: 2 },
+  { stage: 6, nameEn: "Expert 1", nameJa: "上級者 1", intervalHours: 24 * 30, wrongGoesTo: 4 },
+  { stage: 7, nameEn: "Mastered", nameJa: "マスター", intervalHours: null, wrongGoesTo: null },
+] as const;
+
+export const MAX_STAGE = 7;
+
+export function stageInfo(stage: number) {
+  return STAGES[Math.min(Math.max(stage, 1), MAX_STAGE) - 1];
 }
 
-// Monotonically decreasing: box 1 → 4, box 2 → 3, box 3 → 2, box 4 → 1.
-// Box 5 is "known" and excluded from the active pool before this is called.
-export function weightForBox(box: number): number {
-  return Math.max(1, MAX_BOX - box);
+export function nextStageAfterAnswer(stage: number, correct: boolean): number {
+  if (correct) return Math.min(stage + 1, MAX_STAGE);
+  return stageInfo(stage).wrongGoesTo ?? stage;
 }
 
-// Weighted sampling without replacement (Efraimidis-Spirakis): each item
-// gets a key = random()^(1/weight), and the top-k keys are taken. Higher
-// weight pushes the key closer to 1, so it's more likely to rank in the
-// top-k, but never guaranteed — a true sliding scale rather than a cutoff.
-export function weightedSample<T>(items: { item: T; weight: number }[], k: number): T[] {
-  return items
-    .map(({ item, weight }) => ({ item, key: Math.random() ** (1 / weight) }))
-    .sort((a, b) => b.key - a.key)
-    .slice(0, k)
-    .map((entry) => entry.item);
-}
-
-// Same weighted draw as `weightedSample`, but once every candidate has been
-// used once it starts drawing again with replacement until `k` is reached —
-// so a quiz still hits its full length even when only a few words have been
-// introduced so far. Repeating words early on is fine; running a 3-question
-// quiz isn't.
-export function weightedSampleWithRepeats<T>(items: { item: T; weight: number }[], k: number): T[] {
-  if (items.length === 0) return [];
-
-  const result = weightedSample(items, Math.min(k, items.length));
-
-  while (result.length < k) {
-    result.push(weightedSample(items, 1)[0]);
-  }
-
-  return result;
+// null means "no further review" (stage 7, mastered).
+export function nextReviewAtForStage(stage: number, from: Date = new Date()): Date | null {
+  const hours = stageInfo(stage).intervalHours;
+  if (hours == null) return null;
+  return new Date(from.getTime() + hours * 60 * 60 * 1000);
 }
 
 export function startOfUTCDay(date: Date = new Date()): Date {

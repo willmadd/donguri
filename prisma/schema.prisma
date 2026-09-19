@@ -14,7 +14,14 @@ model Profile {
   role          String             @default("user")
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime           @default(now()) @map("updated_at") @db.Timestamptz(6)
+  // Total experience points — incremented only by the vocab quiz actions in
+  // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
+  // quiz, plus a half-point-per-day streak bonus), never set directly from
+  // a user-editable form field. A float (not Int) because the streak bonus
+  // is awarded in 0.5 increments.
   xp            Float              @default(0)
+  // Free-form settings blob the user can view/edit as raw JSON from their
+  // profile page — no fixed shape yet, deliberately generic.
   donguriConfig Json?              @map("donguri_config")
   enrollments   CourseEnrollment[]
   addedByOthers Friendship[]       @relation("FriendshipsAsFriend")
@@ -24,6 +31,9 @@ model Profile {
   @@map("profiles")
 }
 
+// One-directional: `userId` added `friendId` to their own friends list, no
+// acceptance step needed — just enough for a personal "friends leaderboard"
+// alongside the global top-10.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Friendship {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -63,6 +73,8 @@ model CourseEnrollment {
   currentStreak       Int       @default(0) @map("current_streak")
   longestStreak       Int       @default(0) @map("longest_streak")
   lastActivityDate    DateTime? @map("last_activity_date") @db.Date
+  // The last UTC date this course's streak XP bonus was awarded — so
+  // completing a second quiz on the same day doesn't award it again.
   lastStreakBonusDate DateTime? @map("last_streak_bonus_date") @db.Date
   course              Course    @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   profile             Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -108,13 +120,16 @@ model Word {
   examples        WordExample[]
   forms           WordForm[]
   quizQuestions   WordQuizQuestion[]
-  category        WordCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  category        WordCategory?      @relation(fields: [categoryId], references: [id], onUpdate: NoAction)
   lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([lessonId, position])
   @@map("words")
 }
 
+// Hand-authored multiple-choice questions an admin adds for a specific word.
+// Editable from the admin quiz-questions page, but not currently mixed into
+// the auto-generated quiz/review question builders in lib/dal.ts.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordQuizQuestion {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -131,6 +146,10 @@ model WordQuizQuestion {
   @@map("word_quiz_questions")
 }
 
+// A word's inflected/conjugated forms (e.g. go/goes/went/gone/going). Generic
+// on purpose — labels are free text set by the admin — so it also covers
+// non-verb inflections (noun plurals, adjective comparatives) without a
+// schema change.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordForm {
   id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -147,6 +166,10 @@ model WordForm {
   @@map("word_forms")
 }
 
+// Example sentence pairs for a word. `formId` optionally ties an example to
+// the specific form it demonstrates (used to build "type the form" quiz
+// questions from the Japanese side); null means a general example not tied
+// to one form.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordExample {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -170,7 +193,13 @@ model UserWordProgress {
   userId         String    @map("user_id") @db.Uuid
   wordId         String    @map("word_id") @db.Uuid
   status         String    @default("learning")
-  box            Int       @default(1)
+  // 1-7, see the STAGES table in lib/srs.ts — replaces the old 1-5 "box".
+  // Stage 7 is "Mastered" (status flips to 'known', nextReviewAt cleared).
+  stage          Int       @default(1)
+  // When this word is next due in the review queue — null until the word's
+  // very first quiz question is answered (see `lastSeenAt`), and null again
+  // once it reaches stage 7 (mastered, no more reviews).
+  nextReviewAt   DateTime? @map("next_review_at") @db.Timestamptz(6)
   correctCount   Int       @default(0) @map("correct_count")
   incorrectCount Int       @default(0) @map("incorrect_count")
   skipped        Boolean   @default(false)

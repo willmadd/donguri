@@ -3,9 +3,27 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { nextBoxAfterAnswer, MAX_BOX, streakBonusXp, toUTCDateString } from "@/lib/srs";
+import {
+  MAX_STAGE,
+  nextReviewAtForStage,
+  nextStageAfterAnswer,
+  streakBonusXp,
+  toUTCDateString,
+} from "@/lib/srs";
 import { ACCESSORIES, levelForXp, parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 import type { QuizDirection } from "@/lib/definitions";
+
+// Case-insensitive, whitespace-trimmed match against one candidate answer —
+// or, when the stored value is a comma-separated list (e.g. a translation
+// with more than one accepted reading, "こんにちは, もしもし"), against any
+// one of its segments. Shared by every typed-answer check.
+function matchesTypedAnswer(typed: string, stored: string): boolean {
+  const guess = typed.trim().toLowerCase();
+  return stored
+    .split(",")
+    .map((segment) => segment.trim().toLowerCase())
+    .some((segment) => segment === guess);
+}
 
 // +1 XP per correct quiz answer (both multiple-choice and fill-in-the-form
 // questions) — see `completeQuiz` below for the +5 perfect-quiz bonus on top
@@ -30,31 +48,52 @@ async function awardXp(userId: string, amount: number): Promise<number> {
   return profile.xp;
 }
 
-// Shared by `submitAnswer` and `submitFormAnswer`: applies one answer's
-// result to a word's `UserWordProgress` (box transition, mastery status,
-// counts, `lastSeenAt`) and awards XP for a correct answer. No
-// `revalidatePath` here — this is invoked from the test route itself, and
-// any revalidatePath call, no matter which path it targets, makes Next.js
-// re-render *this* route in the same response (see
+// Shared by `submitAnswer`/`submitFormAnswer`/`submitTypedAnswer`: records
+// one answer's result — counts, `lastSeenAt`, XP — always. Stage transition
+// (see the STAGES table in lib/srs.ts) only happens when `advancesStage` is
+// true, i.e. only for an answer given in the *scheduled review queue*. The
+// post-learn quiz deliberately does NOT advance stage: a word's first
+// real review has to wait for its stage-1 `nextReviewAt` (set 4 hours out
+// the moment it's learned, in `getLearnQueue`) to actually pass — answering
+// it twice correctly thirty seconds after learning it isn't evidence of
+// retention over time, so it must not fast-forward the schedule. Without
+// this split, a perfect post-learn quiz (2 correct answers) would silently
+// jump a fresh word from stage 1 to stage 3, skipping its 4-hour and 1-day
+// check-ins entirely — which is exactly the bug this parameter fixes.
+// No `revalidatePath` here — this is invoked from the test/review routes
+// themselves, and any revalidatePath call, no matter which path it targets,
+// makes Next.js re-render *this* route in the same response (see
 // node_modules/next/dist/docs/01-app/02-guides/server-actions.md). Since
-// `getTestQueue` reshuffles the quiz randomly on every render, that would
-// swap the current question out from under the user mid-session. The
-// dashboard/decks pages read the session via cookies() and are already fully
-// dynamic (staleTimes.dynamic defaults to 0), so they pick up the updated
-// progress on their own next visit without on-demand revalidation.
-async function recordAnswer(userId: string, wordId: string, correct: boolean): Promise<{ xp: number }> {
+// `getTestQueue`/`getReviewQueue` reshuffle the session randomly on every
+// render, that would swap the current question out from under the user
+// mid-session. The dashboard/decks pages read the session via cookies() and
+// are already fully dynamic (staleTimes.dynamic defaults to 0), so they pick
+// up the updated progress on their own next visit without on-demand
+// revalidation.
+async function recordAnswer(
+  userId: string,
+  wordId: string,
+  correct: boolean,
+  advancesStage: boolean,
+): Promise<{ xp: number }> {
   const progress = await prisma.userWordProgress.findUniqueOrThrow({
     where: { userId_wordId: { userId, wordId } },
-    select: { box: true, correctCount: true, incorrectCount: true },
+    select: { stage: true, correctCount: true, incorrectCount: true },
   });
 
-  const box = nextBoxAfterAnswer(progress.box, correct);
+  const stage = advancesStage ? nextStageAfterAnswer(progress.stage, correct) : progress.stage;
+  const mastered = advancesStage && stage >= MAX_STAGE && correct;
 
   await prisma.userWordProgress.update({
     where: { userId_wordId: { userId, wordId } },
     data: {
-      box,
-      status: box >= MAX_BOX && correct ? "known" : "learning",
+      ...(advancesStage
+        ? {
+            stage,
+            nextReviewAt: mastered ? null : nextReviewAtForStage(stage),
+            status: mastered ? "known" : "learning",
+          }
+        : {}),
       correctCount: correct ? progress.correctCount + 1 : progress.correctCount,
       incorrectCount: correct ? progress.incorrectCount : progress.incorrectCount + 1,
       lastSeenAt: new Date(),
@@ -66,6 +105,8 @@ async function recordAnswer(userId: string, wordId: string, correct: boolean): P
   return { xp };
 }
 
+// Always the post-learn quiz — multiple choice never appears in the review
+// queue (see `getReviewQueue`), so this never advances stage.
 export async function submitAnswer(
   wordId: string,
   direction: QuizDirection,
@@ -81,17 +122,50 @@ export async function submitAnswer(
   const correctAnswer = direction === "term-to-translation" ? word.translation : word.term;
   const correct = selectedAnswer === correctAnswer;
 
-  const { xp } = await recordAnswer(user.id, wordId, correct);
+  const { xp } = await recordAnswer(user.id, wordId, correct, false);
+
+  return { correct, correctAnswer, xp };
+}
+
+// The typed counterpart to `submitAnswer`, for `TypeAnswerQuestion` — same
+// term/translation fact, checked with `matchesTypedAnswer`'s trimmed,
+// case-insensitive, comma-list-tolerant comparison instead of an exact
+// option match (some translations carry more than one accepted reading,
+// e.g. "こんにちは, もしもし"). The correct-answer shown back to the learner
+// is just the first reading, not the full stored list. Shared by the quiz's
+// typed half (`advancesStage: false`) and the review queue's fallback typed
+// question for words with no cloze content (`advancesStage: true`).
+export async function submitTypedAnswer(
+  wordId: string,
+  direction: QuizDirection,
+  typedAnswer: string,
+  advancesStage: boolean,
+): Promise<{ correct: boolean; correctAnswer: string; xp: number }> {
+  const user = await requireUser();
+
+  const word = await prisma.word.findUniqueOrThrow({
+    where: { id: wordId },
+    select: { term: true, translation: true },
+  });
+
+  const storedAnswer = direction === "term-to-translation" ? word.translation : word.term;
+  const correct = matchesTypedAnswer(typedAnswer, storedAnswer);
+  const correctAnswer = storedAnswer.split(",")[0].trim();
+
+  const { xp } = await recordAnswer(user.id, wordId, correct, advancesStage);
 
   return { correct, correctAnswer, xp };
 }
 
 // Checks a typed answer against a word form's value — trimmed and
-// case-insensitive, so "Went"/"went "/"WENT" all count.
+// case-insensitive, so "Went"/"went "/"WENT" all count. Shared by the
+// quiz's cloze-preferred typed half (`advancesStage: false`) and the review
+// queue's cloze question (`advancesStage: true`) — see `submitTypedAnswer`.
 export async function submitFormAnswer(
   wordId: string,
   formId: string,
   typedAnswer: string,
+  advancesStage: boolean,
 ): Promise<{ correct: boolean; correctAnswer: string; xp: number }> {
   const user = await requireUser();
 
@@ -106,7 +180,7 @@ export async function submitFormAnswer(
 
   const correct = typedAnswer.trim().toLowerCase() === form.value.trim().toLowerCase();
 
-  const { xp } = await recordAnswer(user.id, wordId, correct);
+  const { xp } = await recordAnswer(user.id, wordId, correct, advancesStage);
 
   return { correct, correctAnswer: form.value, xp };
 }
@@ -134,7 +208,7 @@ export async function submitCustomAnswer(
   // the free-typed one, where "Correct"/"correct "/"CORRECT" should all count.
   const correct = selectedOption.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
-  const { xp } = await recordAnswer(user.id, wordId, correct);
+  const { xp } = await recordAnswer(user.id, wordId, correct, false);
 
   return { correct, correctAnswer, xp };
 }
@@ -260,12 +334,14 @@ export async function skipWord(wordId: string): Promise<void> {
       wordId,
       status: "known",
       skipped: true,
-      box: MAX_BOX,
+      stage: MAX_STAGE,
+      nextReviewAt: null,
     },
     update: {
       status: "known",
       skipped: true,
-      box: MAX_BOX,
+      stage: MAX_STAGE,
+      nextReviewAt: null,
     },
   });
 
@@ -290,7 +366,8 @@ export async function skipLesson(lessonId: string): Promise<void> {
       wordId: word.id,
       status: "known",
       skipped: true,
-      box: MAX_BOX,
+      stage: MAX_STAGE,
+      nextReviewAt: null,
     })),
     skipDuplicates: true,
   });
@@ -301,7 +378,7 @@ export async function skipLesson(lessonId: string): Promise<void> {
       wordId: { in: words.map((word) => word.id) },
       status: { not: "known" },
     },
-    data: { status: "known", skipped: true, box: MAX_BOX },
+    data: { status: "known", skipped: true, stage: MAX_STAGE, nextReviewAt: null },
   });
 
   // "page" scope (the default) only revalidates this exact path, not the

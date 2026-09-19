@@ -1153,3 +1153,50 @@ where w.lesson_id = l.id
   and l.course_id = co.id
   and (case when co.slug = 'en-for-ja' then lower(trim(w.term)) else lower(trim(w.translation)) end) = c.concept
   and (w.category_id is null or w.word_type is null);
+
+-- 25. Review queue: replace the 1-5 "box" with a 7-stage scheduled review ----
+-- The old model (`box` 1-5, weighted-random sampling, see the removed
+-- `weightForBox` note in lib/srs.ts's history) never had a real due date —
+-- every not-yet-mastered word was always eligible, just weighted. This
+-- replaces it with an actual schedule: `stage` (1-7, see the STAGES table in
+-- lib/srs.ts) and `next_review_at`, the timestamp a word becomes due. A
+-- correct review answer advances one stage (and pushes next_review_at out
+-- further); a wrong answer regresses to a specific earlier stage (not always
+-- back to 1 — see STAGES.wrongGoesTo in lib/srs.ts). Stage 7 ("Mastered")
+-- clears next_review_at and flips status to 'known', same meaning as before.
+-- `next_review_at` stays null for a freshly learned word until its first
+-- quiz question is answered (see `last_seen_at`) — it isn't due for review
+-- until it's actually been quizzed once.
+
+alter table public.user_word_progress rename column box to stage;
+alter table public.user_word_progress add column if not exists next_review_at timestamptz;
+
+alter table public.user_word_progress drop constraint if exists user_word_progress_box_check;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'user_word_progress_stage_check'
+  ) then
+    alter table public.user_word_progress add constraint user_word_progress_stage_check
+      check (stage between 1 and 7);
+  end if;
+end $$;
+
+-- Backfill existing rows into the new model, guarded so this is safe to
+-- re-run: mastered words become stage 7 with no due date; words already
+-- quizzed at least once (last_seen_at set) carry their box level over
+-- (capped at 6, since 7 is reserved for "mastered") and become due
+-- immediately, so the new review queue picks them up on its first run
+-- rather than losing their place; freshly introduced, never-quizzed words
+-- become stage 1 with no due date yet, same as `getLearnQueue` always set.
+update public.user_word_progress
+set stage = 7, next_review_at = null
+where status = 'known' and stage <> 7;
+
+update public.user_word_progress
+set stage = least(stage, 6), next_review_at = now()
+where status = 'learning' and last_seen_at is not null and next_review_at is null;
+
+update public.user_word_progress
+set stage = 1
+where status = 'learning' and last_seen_at is null and stage <> 1;

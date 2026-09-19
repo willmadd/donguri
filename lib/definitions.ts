@@ -235,12 +235,37 @@ type CustomQuestionBase = {
 export type CustomChoiceQuestion = CustomQuestionBase & { kind: "custom-choice"; options: string[] };
 export type CustomTypeQuestion = CustomQuestionBase & { kind: "custom-type" };
 
+// The generic typed counterpart to `MultipleChoiceQuestion` — same term/
+// translation prompt, but answered by typing instead of picking an option.
+// Used as the "typed half" of a freshly-learned word's quiz (see
+// `getTestQueue`) and as the fallback review-queue question for words with
+// no form/example cloze content to draw on (see `getReviewQueue`).
+export type TypeAnswerQuestion = {
+  kind: "type-answer";
+  wordId: string;
+  direction: QuizDirection;
+  prompt: string;
+  promptRomanization: string | null;
+  targetLanguage: string;
+  image: string;
+};
+
 export type QuizQuestion =
   | MultipleChoiceQuestion
   | TypeFormQuestion
   | FormChoiceQuestion
   | CustomChoiceQuestion
-  | CustomTypeQuestion;
+  | CustomTypeQuestion
+  | TypeAnswerQuestion;
+
+// Deck-page summary of what's due in the scheduled review queue (see the
+// STAGES table in lib/srs.ts) — deliberately just a count/next-due hint, not
+// the full question set, which `getReviewQueue` builds only when the
+// learner actually starts a review session.
+export type ReviewQueueSummary = {
+  dueCount: number;
+  nextDueAt: Date | null;
+};
 
 export type LessonWordSummary = {
   id: string;

@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { submitAnswer, submitFormAnswer, submitCustomAnswer, completeQuiz } from "@/lib/actions/vocab";
+import {
+  submitAnswer,
+  submitFormAnswer,
+  submitCustomAnswer,
+  submitTypedAnswer,
+  completeQuiz,
+} from "@/lib/actions/vocab";
 import type { QuizOption, QuizQuestion } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
@@ -77,7 +83,7 @@ export const TestSession = ({
     setPending(true);
 
     try {
-      const result = await submitFormAnswer(question.wordId, question.formId, typedAnswer);
+      const result = await submitFormAnswer(question.wordId, question.formId, typedAnswer, false);
       setFeedback({ selected: typedAnswer, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
       setXp(result.xp);
@@ -92,7 +98,7 @@ export const TestSession = ({
     setPending(true);
 
     try {
-      const result = await submitFormAnswer(question.wordId, question.formId, optionValue);
+      const result = await submitFormAnswer(question.wordId, question.formId, optionValue, false);
       setFeedback({ selected: optionValue, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
       setXp(result.xp);
@@ -123,6 +129,21 @@ export const TestSession = ({
 
     try {
       const result = await submitCustomAnswer(question.wordId, question.questionId, typedAnswer);
+      setFeedback({ selected: typedAnswer, correct: result.correct, correctAnswer: result.correctAnswer });
+      recordResult(result.correct);
+      setXp(result.xp);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleTypeAnswerSubmit = async () => {
+    if (feedback || pending || question.kind !== "type-answer" || typedAnswer.trim() === "") return;
+
+    setPending(true);
+
+    try {
+      const result = await submitTypedAnswer(question.wordId, question.direction, typedAnswer, false);
       setFeedback({ selected: typedAnswer, correct: result.correct, correctAnswer: result.correctAnswer });
       recordResult(result.correct);
       setXp(result.xp);
@@ -380,6 +401,62 @@ export const TestSession = ({
               })}
             </div>
           )}
+        </>
+      ) : question.kind === "type-answer" ? (
+        <>
+          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+            {question.direction === "translation-to-term" ? null : (
+              <WordImage
+                src={question.image}
+                alt={question.prompt}
+                className="mx-auto mb-6 max-h-64 w-full object-contain sm:max-h-72"
+              />
+            )}
+            <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
+              {question.direction === "translation-to-term" ? "What does this mean?" : "Type the word"}
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <p className="text-3xl font-semibold text-sumi capitalize">{question.prompt}</p>
+
+              {question.direction === "term-to-translation" && (
+                <SpeakButton text={question.prompt} language={question.targetLanguage} />
+              )}
+            </div>
+            {question.promptRomanization && (
+              <p className="mt-2 text-sm text-sumi-soft">{question.promptRomanization}</p>
+            )}
+          </div>
+
+          <form
+            className="mt-5 flex w-full flex-col gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleTypeAnswerSubmit();
+            }}
+          >
+            <input
+              type="text"
+              value={typedAnswer}
+              onChange={(event) => setTypedAnswer(event.target.value)}
+              disabled={pending || Boolean(feedback)}
+              autoFocus
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              placeholder="Type your answer"
+              className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
+            />
+
+            {!feedback && (
+              <button
+                type="submit"
+                disabled={pending || typedAnswer.trim() === ""}
+                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
+              >
+                Check
+              </button>
+            )}
+          </form>
         </>
       ) : (
         <>
