@@ -278,6 +278,11 @@ export type LessonWordSummary = {
 export type LessonSummary = {
   id: string;
   title: string;
+  // 'vocab' | 'grammar' — lets learn/test/review pages branch behavior
+  // (e.g. one grammar point per lesson instead of three, an all-cloze quiz)
+  // without a second round trip. See the note on Lesson.path in
+  // supabase/schema.sql.
+  path: string;
   position: number;
   totalWords: number;
   // Words with any practice history (revealed or quizzed at least once),

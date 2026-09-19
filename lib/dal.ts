@@ -484,6 +484,7 @@ type LessonWordRow = {
 function toLessonSummary(lesson: {
   id: string;
   title: string;
+  path: string;
   position: number;
   words: LessonWordRow[];
 }): LessonSummary {
@@ -498,6 +499,7 @@ function toLessonSummary(lesson: {
   return {
     id: lesson.id,
     title: lesson.title,
+    path: lesson.path,
     position: lesson.position,
     totalWords: words.length,
     learntWords: lesson.words.filter((word) => word.progress.length > 0).length,
@@ -773,7 +775,7 @@ export const getLeaderboards = cache(
 async function requireDeck(courseSlug: string, courseId: string, deckId: string) {
   const deck = await prisma.lesson.findFirst({
     where: { id: deckId, courseId, active: true },
-    select: { id: true },
+    select: { id: true, path: true },
   });
 
   if (!deck) {
@@ -854,15 +856,21 @@ export const getLearnQueue = cache(
 
 // Quiz-only, deck-scoped, never introduces new words — the "Test yourself"
 // half of the learn/quiz pair. Pool is every word in *this deck* that's been
-// learned but never yet answered (`lastSeenAt: null`); each gets exactly two
-// questions (one multiple-choice, one typed — see `buildTypedQuestion`), so
-// a fresh 3-word learn session always produces a 6-question quiz. Answering
-// these never advances the word's stage (see `recordAnswer`'s
-// `advancesStage` in lib/actions/vocab.ts) — its stage-1 review stays due 4
-// hours after it was *learned* (see `getLearnQueue`), not from whenever it
-// happens to get quizzed. A word drops out of this pool the moment its
-// first question is answered and from then on is governed entirely by its
-// stage/`nextReviewAt` — i.e. by `getReviewQueue` below.
+// learned but never yet answered (`lastSeenAt: null`). For a vocab deck,
+// each word gets exactly two questions (one multiple-choice, one typed —
+// see `buildTypedQuestion`), so a fresh 3-word learn session always
+// produces a 6-question quiz. For a grammar deck, every fresh point's
+// example sentences each become their own fill-in-the-blank question (see
+// `buildAllClozeQuestions`) — never multiple choice, since what's being
+// tested is production of the structure itself, not recognition among
+// options — so a fresh 3-point learn session (3 examples each) produces a
+// 9-question quiz. Either way, answering these never advances the word's stage
+// (see `recordAnswer`'s `advancesStage` in lib/actions/vocab.ts) — its
+// stage-1 review stays due 4 hours after it was *learned* (see
+// `getLearnQueue`), not from whenever it happens to get quizzed. A word
+// drops out of this pool the moment its first question is answered and
+// from then on is governed entirely by its stage/`nextReviewAt` — i.e. by
+// `getReviewQueue` below.
 export const getTestQueue = cache(
   async (courseSlug: string, deckId: string): Promise<QuizQuestion[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
@@ -889,6 +897,13 @@ export const getTestQueue = cache(
     }
 
     await bumpStreak(user.id, course.id, new Date());
+
+    if (deck.path === "grammar") {
+      const questions = freshProgress.flatMap((progress) =>
+        buildAllClozeQuestions(progress.word, course),
+      );
+      return shuffle(questions);
+    }
 
     const distractorPool = await prisma.word.findMany({
       where: { lesson: { courseId: course.id, active: true }, active: true },
@@ -1117,6 +1132,34 @@ function buildTypedQuestion(
     targetLanguage: course.targetLanguage,
     image: wordImagePath(word),
   };
+}
+
+// Every (form, example) cloze match becomes its own question — used only
+// for a freshly-learned grammar point's post-learn quiz (see
+// `getTestQueue`), where the point is meant to be drilled across all of its
+// example sentences at once, not just one at random the way
+// `buildTypedQuestion` picks for ordinary review. Falls back to a single
+// generic typed question for the rare word with no matchable forms/examples
+// at all, so a quiz question is always produced.
+function buildAllClozeQuestions(
+  word: QuestionWord,
+  course: { targetLanguage: string; sourceLanguage: string },
+): QuizQuestion[] {
+  const clozeByForm = findClozeMatchesByForm(word.forms ?? [], word.examples ?? []);
+  const matches = [...clozeByForm.values()].flat();
+
+  if (matches.length === 0) {
+    return [buildTypedQuestion(word, course)];
+  }
+
+  return matches.map((match) => ({
+    kind: "type-form",
+    wordId: word.id,
+    formId: match.formId,
+    clozeSentence: match.en,
+    clozeSentenceJa: match.ja,
+    targetLanguage: course.targetLanguage,
+  }));
 }
 
 function shuffle<T>(items: T[]): T[] {

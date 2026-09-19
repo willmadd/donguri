@@ -27,6 +27,8 @@ export default async function LearnPage({ params }: PageProps) {
     { label: "Learn" },
   ];
 
+  const kind = deck.path === "grammar" ? "grammar" : "vocab";
+
   if (words.length === 0) {
     return (
       <div className="flex flex-col gap-6">
@@ -37,11 +39,13 @@ export default async function LearnPage({ params }: PageProps) {
             ✓
           </span>
           <h1 className="text-xl font-semibold text-sumi">
-            You&apos;ve learnt every word in this deck
+            {kind === "grammar"
+              ? "You've learnt every point in this deck"
+              : "You've learnt every word in this deck"}
           </h1>
           <p className="max-w-sm text-sm text-sumi-soft">
             Head over to Test yourself to keep them fresh, or check back once
-            more words are added here.
+            more {kind === "grammar" ? "points are" : "words are"} added here.
           </p>
           <Link
             href={`/dashboard/courses/${slug}/decks/${deckId}/test`}
@@ -63,7 +67,13 @@ export default async function LearnPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs items={breadcrumbItems} />
-      <LearnSession words={words} courseSlug={slug} deckId={deckId} />
+      <LearnSession
+        key={words.map((word) => word.id).join(",")}
+        words={words}
+        courseSlug={slug}
+        deckId={deckId}
+        kind={kind}
+      />
     </div>
   );
 }

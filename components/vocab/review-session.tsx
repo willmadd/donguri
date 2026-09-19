@@ -200,8 +200,8 @@ export const ReviewSession = ({
           <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
             Fill in the blank
           </p>
-          <p className="mt-3 text-2xl font-semibold text-sumi">{question.clozeSentence}</p>
-          <p className="mt-2 text-sumi-soft">{question.clozeSentenceJa}</p>
+          <p className="mt-3 text-lg text-sumi-soft">{question.clozeSentenceJa}</p>
+          <p className="mt-2 text-2xl font-semibold text-sumi">{question.clozeSentence}</p>
         </div>
       ) : (
         <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
