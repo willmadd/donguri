@@ -267,6 +267,21 @@ export type ReviewQueueSummary = {
   nextDueAt: Date | null;
 };
 
+// Admin-only "dev mode" debug view on the deck page — every word in this
+// deck's review queue (see getReviewQueueDebug in lib/dal.ts), not just the
+// due count, so an admin can see exactly what's queued and when each word
+// is due. `lastSeenAt: null` means it hasn't had its post-learn quiz yet,
+// so it isn't on the review schedule at all (`nextReviewAt` is also null).
+export type ReviewQueueDebugEntry = {
+  wordId: string;
+  term: string;
+  translation: string;
+  stage: number;
+  stageName: string;
+  lastSeenAt: Date | null;
+  nextReviewAt: Date | null;
+};
+
 export type LessonWordSummary = {
   id: string;
   term: string;

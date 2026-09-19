@@ -18,6 +18,7 @@ import type {
   QuizDirection,
   QuizOption,
   QuizQuestion,
+  ReviewQueueDebugEntry,
   ReviewQueueSummary,
   RevealWord,
   UserRole,
@@ -30,6 +31,7 @@ import {
   MAX_STAGE,
   nextReviewAtForStage,
   SET_SIZE,
+  stageInfo,
   startOfUTCDay,
 } from "@/lib/srs";
 import { wordImagePath } from "@/lib/images";
@@ -958,6 +960,44 @@ export const getReviewQueueSummary = cache(
     ]);
 
     return { dueCount, nextDueAt: next?.nextReviewAt ?? null };
+  },
+);
+
+// Admin-only "dev mode" debug view for the deck page — every word tracked
+// in this deck's review queue (learning or mastered, quizzed or not), not
+// just the due count `getReviewQueueSummary` shows, so an admin can see
+// exactly what's queued and when each word becomes due. Scoped to the
+// viewing admin's own progress, same as everything else on the deck page —
+// this is "what's in my queue for this deck," not a cross-user report.
+// Silently returns an empty list for a non-admin caller rather than
+// redirecting, since this is a data helper for an optional page section,
+// not a page of its own.
+export const getReviewQueueDebug = cache(
+  async (courseSlug: string, deckId: string): Promise<ReviewQueueDebugEntry[]> => {
+    const profile = await requireProfile();
+
+    if (profile.role !== "admin") {
+      return [];
+    }
+
+    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const lessonIds = await getDeckLessonIds(course.id, deckId);
+
+    const progress = await prisma.userWordProgress.findMany({
+      where: { userId: user.id, word: { lessonId: { in: lessonIds }, active: true } },
+      include: { word: { select: { term: true, translation: true } } },
+      orderBy: [{ nextReviewAt: "asc" }],
+    });
+
+    return progress.map((entry) => ({
+      wordId: entry.wordId,
+      term: entry.word.term,
+      translation: entry.word.translation,
+      stage: entry.stage,
+      stageName: stageInfo(entry.stage).nameEn,
+      lastSeenAt: entry.lastSeenAt,
+      nextReviewAt: entry.nextReviewAt,
+    }));
   },
 );
 

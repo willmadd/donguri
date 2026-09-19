@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCanonicalDeckId, getDeckDetail, getGrammarDeck, getReviewQueueSummary } from "@/lib/dal";
+import {
+  getCanonicalDeckId,
+  getDeckDetail,
+  getGrammarDeck,
+  getReviewQueueDebug,
+  getReviewQueueSummary,
+  requireProfile,
+} from "@/lib/dal";
 import { LessonWords } from "@/components/vocab/lesson-words";
+import { ReviewQueueDevPanel } from "@/components/vocab/review-queue-dev-panel";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import type { LessonSummary } from "@/lib/definitions";
 
@@ -27,11 +35,15 @@ export default async function DeckPage({ params }: PageProps) {
     redirect(`/dashboard/courses/${slug}/decks/${canonicalDeckId}`);
   }
 
-  const [{ course, deck }, grammarDeck, reviewQueue] = await Promise.all([
+  const [{ course, deck }, grammarDeck, reviewQueue, profile] = await Promise.all([
     getDeckDetail(slug, deckId),
     getGrammarDeck(slug, deckId),
     getReviewQueueSummary(slug, deckId),
+    requireProfile(),
   ]);
+
+  const isAdmin = profile.role === "admin";
+  const reviewQueueDebug = isAdmin ? await getReviewQueueDebug(slug, deckId) : null;
 
   const complete = deck.totalWords > 0 && deck.knownWords === deck.totalWords;
   const learntPercent =
@@ -50,7 +62,10 @@ export default async function DeckPage({ params }: PageProps) {
             { label: deck.title },
           ]}
         />
-        <h1 className="text-2xl font-semibold text-sumi">{deck.title}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold text-sumi">{deck.title}</h1>
+          {isAdmin && reviewQueueDebug && <ReviewQueueDevPanel entries={reviewQueueDebug} />}
+        </div>
       </div>
 
       <section className="rounded-2xl border border-sumi/10 bg-washi-soft p-6">
