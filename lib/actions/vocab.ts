@@ -358,11 +358,11 @@ export async function skipWord(wordId: string): Promise<void> {
   // Same reasoning as `submitAnswer` above — no revalidatePath here.
 }
 
-export async function skipLesson(lessonId: string): Promise<void> {
+export async function skipLanguageDeck(languageDeckId: string): Promise<void> {
   const user = await requireUser();
 
   const words = await prisma.word.findMany({
-    where: { lessonId },
+    where: { languageDeckId },
     select: { id: true },
   });
 
@@ -401,10 +401,9 @@ export async function skipLesson(lessonId: string): Promise<void> {
 // course (see getActiveDeckIds in lib/dal.ts) — upserts rather than
 // creating/deleting the row, since `active` being a real column (not row
 // presence) is what lets getActiveDeckIds tell "explicitly deactivated"
-// apart from "never touched" even once every deck is off. `deckId` is
-// always a `path: 'vocab'` lesson id — its grammar sibling, if any,
-// activates implicitly alongside it (see getActiveGrammarLessonIds), not as
-// its own row.
+// apart from "never touched" even once every deck is off. `deckId` can be
+// either a vocab or a grammar languageDeck id — the two paths are independently
+// activated (see getActiveDeckIds's per-path lookup in lib/dal.ts).
 export async function toggleDeckActivation(
   courseSlug: string,
   deckId: string,
@@ -413,8 +412,8 @@ export async function toggleDeckActivation(
   const user = await requireUser();
 
   await prisma.userDeckActivation.upsert({
-    where: { userId_lessonId: { userId: user.id, lessonId: deckId } },
-    create: { userId: user.id, lessonId: deckId, active },
+    where: { userId_languageDeckId: { userId: user.id, languageDeckId: deckId } },
+    create: { userId: user.id, languageDeckId: deckId, active },
     update: { active },
   });
 
@@ -425,7 +424,7 @@ export async function resetCourseProgress(courseId: string): Promise<void> {
   const user = await requireUser();
 
   await prisma.userWordProgress.deleteMany({
-    where: { userId: user.id, word: { lesson: { courseId } } },
+    where: { userId: user.id, word: { languageDeck: { courseId } } },
   });
 
   await prisma.courseEnrollment.update({

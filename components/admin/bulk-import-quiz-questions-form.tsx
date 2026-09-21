@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { bulkImportQuizQuestions } from "@/lib/actions/admin-content";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 const EXAMPLE = `[
   {
@@ -13,14 +14,18 @@ const EXAMPLE = `[
 ]`;
 
 export function BulkImportQuizQuestionsForm({ wordId }: { wordId: string }) {
+  const t = useTranslations();
   const [state, action, pending] = useActionState(bulkImportQuizQuestions, undefined);
 
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="wordId" value={wordId} />
       <p className="text-sm text-sumi-soft">
-        An array of <code>{"{ prompt, promptJa?, options: string[], correctIndex }"}</code> objects
-        — added to the questions above, not replacing them.
+        {t(
+          "admin_bulk_import.hint",
+          "An array of {{shape}} objects — added to the questions above, not replacing them.",
+          { shape: "{ prompt, promptJa?, options: string[], correctIndex }" },
+        )}
       </p>
       <textarea
         name="json"
@@ -31,8 +36,8 @@ export function BulkImportQuizQuestionsForm({ wordId }: { wordId: string }) {
       {state?.message && (
         <p className={`text-sm ${state.success ? "text-matcha-dark" : "text-shu"}`}>{state.message}</p>
       )}
-      <SubmitButton pending={pending} pendingText="Importing…">
-        Import questions
+      <SubmitButton pending={pending} pendingText={t("admin_bulk_import.importing", "Importing…")}>
+        {t("admin_bulk_import.submit", "Import questions")}
       </SubmitButton>
     </form>
   );

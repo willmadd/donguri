@@ -1,4 +1,7 @@
+"use client";
+
 import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
+import { useTranslations } from "@/components/i18n/locale-provider";
 import type { LeaderboardEntry } from "@/lib/definitions";
 
 export function LeaderboardRow({
@@ -10,6 +13,8 @@ export function LeaderboardRow({
   entry: LeaderboardEntry;
   onRemove?: () => void;
 }) {
+  const t = useTranslations();
+
   return (
     <div
       className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
@@ -29,18 +34,20 @@ export function LeaderboardRow({
 
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-sumi">
         {entry.name}
-        {entry.isSelf && <span className="text-sumi-soft"> (you)</span>}
+        {entry.isSelf && (
+          <span className="text-sumi-soft"> {t("leaderboard.you_suffix", "(you)")}</span>
+        )}
       </span>
 
       <span className="shrink-0 text-sm font-semibold text-sumi-soft">
-        {entry.xp} XP
+        {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.xp })}
       </span>
 
       {onRemove && !entry.isSelf && (
         <button
           type="button"
           onClick={onRemove}
-          aria-label={`Remove ${entry.name}`}
+          aria-label={t("leaderboard.remove_aria", "Remove {{name}}", { name: entry.name })}
           className="shrink-0 text-sumi-soft transition hover:text-shu-dark"
         >
           ×
@@ -59,24 +66,26 @@ function PodiumUser({
   rank: 1 | 2 | 3;
   className: string;
 }) {
+  const t = useTranslations();
+
   return (
     <div
       className={`absolute z-10 flex -translate-x-1/2 flex-col items-center ${className}`}
     >
       <div
         className={`mb-1 max-w-[110px] rounded-full px-2 py-1 text-center shadow-sm backdrop-blur-sm ${
-          entry.isSelf ? "bg-ai-soft/95" : "bg-white/90"
+          entry.isSelf ? "bg-ai-soft/95" : "bg-washi/90"
         }`}
       >
         <p className="truncate text-xs font-bold leading-tight text-sumi sm:text-sm">
           {entry.name}
           {entry.isSelf && (
-            <span className="font-medium text-sumi-soft"> (you)</span>
+            <span className="font-medium text-sumi-soft"> {t("leaderboard.you_suffix", "(you)")}</span>
           )}
         </p>
 
         <p className="text-[10px] font-semibold leading-tight text-sumi-soft sm:text-xs">
-          {entry.xp} XP
+          {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.xp })}
         </p>
       </div>
 
@@ -94,6 +103,7 @@ function PodiumUser({
 }
 
 function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
+  const t = useTranslations();
   const first = entries[0];
   const second = entries[1];
   const third = entries[2];
@@ -102,7 +112,7 @@ function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
     <div className="relative aspect-square w-full overflow-hidden rounded-2xl">
       <img
         src="/images/podium.webp"
-        alt="Winners' podium in front of a cheering crowd"
+        alt={t("leaderboard.podium_alt", "Winners' podium in front of a cheering crowd")}
         className="absolute inset-0 h-full w-full object-cover"
       />
 

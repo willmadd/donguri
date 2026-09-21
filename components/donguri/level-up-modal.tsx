@@ -5,6 +5,9 @@ import { motion } from "framer-motion";
 import { AccessoryPicker } from "@/components/donguri/accessory-picker";
 import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
 import { ShareButton } from "@/components/ui/share-button";
+import { Button } from "@/components/ui/button";
+import { PageTitle, PageSubtitle } from "@/components/ui/page-heading";
+import { useTranslations } from "@/components/i18n/locale-provider";
 import type { AccessoryId } from "@/lib/levels";
 
 const CONFETTI_COLORS = ["#c0392b", "#3f8f5f", "#3d7dc4", "#e0a92e", "#b5548f"];
@@ -51,6 +54,7 @@ export function LevelUpModal({
   equippedAccessory,
   onDone,
 }: LevelUpModalProps) {
+  const t = useTranslations();
   const [phase, setPhase] = useState<"celebrate" | "choose">("celebrate");
   const [chosen, setChosen] = useState<AccessoryId | null>(equippedAccessory);
   const confetti = useConfetti(18);
@@ -91,24 +95,32 @@ export function LevelUpModal({
               {newLevel}
             </motion.div>
 
-            <h1 className="mt-5 text-2xl font-semibold text-sumi">Level up!</h1>
+            <PageTitle className="mt-5">{t("level_up.title", "Level up!")}</PageTitle>
 
-            <p className="mt-2 text-sumi-soft">
-              You&apos;ve reached <strong>Level {newLevel}</strong>
-              {hasNewAccessories && <> and unlocked new looks for your Donguri</>}.
-            </p>
+            <PageSubtitle className="mt-2">
+              {hasNewAccessories
+                ? t(
+                    "level_up.reached_with_accessories",
+                    "You've reached Level {{level}} and unlocked new looks for your Donguri.",
+                    { level: newLevel },
+                  )
+                : t("level_up.reached", "You've reached Level {{level}}.", { level: newLevel })}
+            </PageSubtitle>
 
-            <button
-              type="button"
+            <Button
+              size="lg"
+              fullWidth
               onClick={() => setPhase("choose")}
-              className="mt-7 inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
+              className="mt-7 shadow-sm hover:-translate-y-0.5 hover:shadow-md"
             >
-              Choose your look
-            </button>
+              {t("level_up.choose_look", "Choose your look")}
+            </Button>
           </>
         ) : (
           <>
-            <h1 className="text-xl font-semibold text-sumi">Pick a look</h1>
+            <h1 className="text-xl font-semibold text-sumi">
+              {t("level_up.pick_a_look", "Pick a look")}
+            </h1>
 
             <div className="mx-auto mt-4 flex w-40 justify-center">
               <DonguriAvatar equippedAccessory={chosen} className="w-40" />
@@ -125,16 +137,19 @@ export function LevelUpModal({
 
             <div className="mt-7 flex flex-col gap-3">
               <ShareButton
-                title="Donguri"
-                text={`I just reached Level ${newLevel} in Donguri! 🌰`}
+                title={t("level_up.share_title", "Donguri")}
+                text={t("level_up.share_text", "I just reached Level {{level}} in Donguri! 🌰", {
+                  level: newLevel,
+                })}
               />
-              <button
-                type="button"
+              <Button
+                size="lg"
+                fullWidth
                 onClick={() => onDone(chosen)}
-                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
+                className="shadow-sm hover:-translate-y-0.5 hover:shadow-md"
               >
-                Continue
-              </button>
+                {t("common.continue", "Continue")}
+              </Button>
             </div>
           </>
         )}

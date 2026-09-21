@@ -7,10 +7,8 @@ export const LoginFormSchema = z.object({
 });
 
 export const SignupFormSchema = z.object({
-  fullName: z
-    .string()
-    .min(2, { error: "Name must be at least 2 characters long." })
-    .trim(),
+  firstName: z.string().min(1, { error: "First name is required." }).trim(),
+  lastName: z.string().min(1, { error: "Last name is required." }).trim(),
   email: z.email({ error: "Please enter a valid email." }).trim(),
   password: z
     .string()
@@ -46,7 +44,8 @@ export type LoginFormState =
 export type SignupFormState =
   | {
       errors?: {
-        fullName?: string[];
+        firstName?: string[];
+        lastName?: string[];
         email?: string[];
         password?: string[];
       };
@@ -103,6 +102,8 @@ export type Profile = {
   role: UserRole;
   xp: number;
   donguriConfig: unknown;
+  first_name: string | null;
+  last_name: string | null;
 };
 
 // Streaks live on the enrollment, not the profile — each course is its own
@@ -119,7 +120,7 @@ export type QuizDirection = "term-to-translation" | "translation-to-term";
 
 // A cross-deck topical tag with its own admin-managed color — see the note
 // on the `WordCategory` Prisma model. Distinct from a "category" elsewhere
-// in this file/app, which means a deck (`Lesson`).
+// in this file/app, which means a deck (`LanguageDeck`).
 export const WORD_TYPES = [
   "noun",
   "verb",
@@ -168,6 +169,11 @@ export type RevealWord = {
   examples: WordExampleSummary[];
   image: string;
   targetLanguage: string;
+  // The originating languageDeck's path — Learn now pools vocab and grammar
+  // together (see getLearnQueueForCourse in lib/dal.ts), so each word
+  // carries its own kind rather than the whole session being one or the
+  // other.
+  path: "vocab" | "grammar";
 };
 
 export type QuizOption = {
@@ -179,6 +185,11 @@ export type QuizOption = {
 export type MultipleChoiceQuestion = {
   kind: "multiple-choice";
   wordId: string;
+  // Always "vocab" — grammar points never produce multiple-choice
+  // questions (see buildAllClozeQuestions in lib/dal.ts). Present so Test
+  // (which now pools vocab and grammar together) can label every question
+  // kind uniformly.
+  path: "vocab" | "grammar";
   direction: QuizDirection;
   prompt: string;
   // Romanization only applies to the term (the language being learned) —
@@ -206,6 +217,7 @@ type FormClozeQuestion = {
   clozeSentence: string;
   clozeSentenceJa: string;
   targetLanguage: string;
+  path: "vocab" | "grammar";
 };
 
 // Free-text version: the learner types the missing form.
@@ -214,7 +226,10 @@ export type TypeFormQuestion = FormClozeQuestion & { kind: "type-form" };
 // Multiple-choice version: the options are the word's own forms (e.g.
 // go/goes/went/gone/going) rather than other words — only generated for
 // words with 2+ forms, so there's something to choose between.
-export type FormChoiceQuestion = FormClozeQuestion & { kind: "form-choice"; options: string[] };
+export type FormChoiceQuestion = FormClozeQuestion & {
+  kind: "form-choice";
+  options: string[];
+};
 
 // A hand-authored question an admin added for this specific word (see
 // AdminQuizQuestionSummary/WordQuizQuestionInputSchema below) — mixed into
@@ -230,9 +245,13 @@ type CustomQuestionBase = {
   prompt: string;
   promptJa: string | null;
   targetLanguage: string;
+  path: "vocab" | "grammar";
 };
 
-export type CustomChoiceQuestion = CustomQuestionBase & { kind: "custom-choice"; options: string[] };
+export type CustomChoiceQuestion = CustomQuestionBase & {
+  kind: "custom-choice";
+  options: string[];
+};
 export type CustomTypeQuestion = CustomQuestionBase & { kind: "custom-type" };
 
 // The generic typed counterpart to `MultipleChoiceQuestion` — same term/
@@ -243,6 +262,13 @@ export type CustomTypeQuestion = CustomQuestionBase & { kind: "custom-type" };
 export type TypeAnswerQuestion = {
   kind: "type-answer";
   wordId: string;
+  // Always "vocab" in practice — a fresh grammar point's post-learn quiz
+  // always has cloze content to build type-form questions from instead
+  // (see buildAllClozeQuestions), and the review queue's fallback only
+  // hits this for a word with no matching forms, which grammar rows
+  // always have (see buildTypedQuestion). Present for the same uniform
+  // labelling reason as MultipleChoiceQuestion.path.
+  path: "vocab" | "grammar";
   direction: QuizDirection;
   prompt: string;
   promptRomanization: string | null;
@@ -282,7 +308,7 @@ export type ReviewQueueDebugEntry = {
   nextReviewAt: Date | null;
 };
 
-export type LessonWordSummary = {
+export type LanguageDeckWordSummary = {
   id: string;
   term: string;
   translation: string;
@@ -290,12 +316,21 @@ export type LessonWordSummary = {
   known: boolean;
 };
 
-export type LessonSummary = {
+export type LanguageDeckSummary = {
   id: string;
   title: string;
+  subheading: string | null;
+  description: string | null;
+  // Resolved bunny.net URL, or null if no cover has been uploaded — see
+  // `deckCoverImagePath` in lib/images.ts.
+  coverImage: string | null;
+  // Admin-set theme hex colors — pass through `getContrastTextClass` (see
+  // lib/utils.ts) rather than assuming light or dark text.
+  bgColor: string | null;
+  primaryColor: string | null;
   // 'vocab' | 'grammar' — lets learn/test/review pages branch behavior
-  // (e.g. one grammar point per lesson instead of three, an all-cloze quiz)
-  // without a second round trip. See the note on Lesson.path in
+  // (e.g. one grammar point per languageDeck instead of three, an all-cloze quiz)
+  // without a second round trip. See the note on LanguageDeck.path in
   // supabase/schema.sql.
   path: string;
   position: number;
@@ -304,7 +339,7 @@ export type LessonSummary = {
   // regardless of mastery — a superset of knownWords.
   learntWords: number;
   knownWords: number;
-  words: LessonWordSummary[];
+  words: LanguageDeckWordSummary[];
 };
 
 export type CourseSummary = {
@@ -320,29 +355,86 @@ export type EnrolledCourseSummary = CourseSummary &
   CourseStreak & {
     totalWords: number;
     knownWords: number;
-    totalLessons: number;
-    lessonsDone: number;
+    totalLanguageDecks: number;
+    languageDecksDone: number;
   };
 
-export const CreateCategoryFormSchema = z.object({
-  courseId: z.uuid({ error: "Missing course." }),
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+const IMAGE_FIELD_SCHEMA = z
+  .file({ error: "Choose an image." })
+  .max(MAX_IMAGE_BYTES, { error: "Image must be under 5MB." })
+  .mime(["image/webp", "image/png", "image/jpeg"], {
+    error: "Use a WebP, PNG, or JPEG image.",
+  })
+  .optional();
+
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+
+const OPTIONAL_HEX_COLOR_SCHEMA = z
+  .string()
+  .trim()
+  .regex(HEX_COLOR_REGEX, { error: "Use a hex color like #2563eb." })
+  .optional();
+
+// Shared by create and edit — only the id fields (which course, which deck)
+// differ between the two. `bgColor`/`primaryColor` aren't rendered anywhere
+// yet — just admin-editable and stored, for a later UI pass.
+const CategoryFieldsSchema = {
   title: z
     .string()
     .trim()
     .min(1, { error: "Title is required." })
     .max(100, { error: "Keep it under 100 characters." }),
+  subheading: z
+    .string()
+    .trim()
+    .max(150, { error: "Keep it under 150 characters." })
+    .optional(),
+  description: z
+    .string()
+    .trim()
+    .max(500, { error: "Keep it under 500 characters." })
+    .optional(),
+  coverImage: IMAGE_FIELD_SCHEMA,
+  bgColor: OPTIONAL_HEX_COLOR_SCHEMA,
+  primaryColor: OPTIONAL_HEX_COLOR_SCHEMA,
+};
+
+type CategoryFieldErrors = {
+  title?: string[];
+  subheading?: string[];
+  description?: string[];
+  coverImage?: string[];
+  bgColor?: string[];
+  primaryColor?: string[];
+};
+
+export const CreateCategoryFormSchema = z.object({
+  courseId: z.uuid({ error: "Missing course." }),
+  ...CategoryFieldsSchema,
 });
 
 export type CreateCategoryFormState =
   | {
-      errors?: { courseId?: string[]; title?: string[] };
+      errors?: CategoryFieldErrors & { courseId?: string[] };
       message?: string;
       success?: boolean;
-      lessonId?: string;
+      languageDeckId?: string;
     }
   | undefined;
 
-const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+export const UpdateCategoryFormSchema = z.object({
+  languageDeckId: z.uuid({ error: "Missing deck." }),
+  ...CategoryFieldsSchema,
+});
+
+export type UpdateCategoryFormState =
+  | {
+      errors?: CategoryFieldErrors & { languageDeckId?: string[] };
+      message?: string;
+    }
+  | undefined;
 
 const WordCategoryFieldsSchema = {
   name: z
@@ -379,8 +471,6 @@ export type UpdateWordCategoryFormState =
     }
   | undefined;
 
-const MAX_WORD_IMAGE_BYTES = 5 * 1024 * 1024;
-
 // Shared by create and edit — only the id field (which category vs. which
 // word) differs between the two.
 const WordFieldsSchema = {
@@ -416,13 +506,7 @@ const WordFieldsSchema = {
     .optional(),
   categoryId: z.uuid({ error: "Invalid category." }).optional(),
   wordType: z.enum(WORD_TYPES, { error: "Invalid word type." }).optional(),
-  image: z
-    .file({ error: "Choose an image." })
-    .max(MAX_WORD_IMAGE_BYTES, { error: "Image must be under 5MB." })
-    .mime(["image/webp", "image/png", "image/jpeg"], {
-      error: "Use a WebP, PNG, or JPEG image.",
-    })
-    .optional(),
+  image: IMAGE_FIELD_SCHEMA,
 };
 
 type WordFieldErrors = {
@@ -445,13 +529,25 @@ type WordFieldErrors = {
 export const WordFormInputSchema = z.object({
   clientId: z.string().min(1),
   labelEn: z.string().trim().min(1, { error: "Label is required." }).max(100),
-  labelJa: z.string().trim().min(1, { error: "Japanese label is required." }).max(100),
+  labelJa: z
+    .string()
+    .trim()
+    .min(1, { error: "Japanese label is required." })
+    .max(100),
   value: z.string().trim().min(1, { error: "Value is required." }).max(200),
 });
 
 export const WordExampleInputSchema = z.object({
-  en: z.string().trim().min(1, { error: "English sentence is required." }).max(500),
-  ja: z.string().trim().min(1, { error: "Japanese sentence is required." }).max(500),
+  en: z
+    .string()
+    .trim()
+    .min(1, { error: "English sentence is required." })
+    .max(500),
+  ja: z
+    .string()
+    .trim()
+    .min(1, { error: "Japanese sentence is required." })
+    .max(500),
   // Empty string means "not tied to a form" — the browser <select> submits
   // "" for its blank option, so this stays a string rather than an optional.
   formClientId: z.string(),
@@ -468,8 +564,16 @@ export type WordExampleInput = z.infer<typeof WordExampleInputSchema>;
 export const WordQuizQuestionInputSchema = z.object({
   prompt: z.string().trim().min(1, { error: "Prompt is required." }).max(300),
   promptJa: z.string().trim().max(300).optional(),
-  option0: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
-  option1: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
+  option0: z
+    .string()
+    .trim()
+    .min(1, { error: "At least two options are required." })
+    .max(150),
+  option1: z
+    .string()
+    .trim()
+    .min(1, { error: "At least two options are required." })
+    .max(150),
   option2: z.string().trim().max(150).optional(),
   option3: z.string().trim().max(150).optional(),
   correctIndex: z.coerce.number().int().min(0).max(3),
@@ -523,13 +627,13 @@ export type BulkImportQuizQuestionsFormState =
   | undefined;
 
 export const CreateWordFormSchema = z.object({
-  lessonId: z.uuid({ error: "Missing category." }),
+  languageDeckId: z.uuid({ error: "Missing category." }),
   ...WordFieldsSchema,
 });
 
 export type CreateWordFormState =
   | {
-      errors?: WordFieldErrors & { lessonId?: string[] };
+      errors?: WordFieldErrors & { languageDeckId?: string[] };
       message?: string;
       success?: boolean;
     }
@@ -548,15 +652,13 @@ export type UpdateWordFormState =
   | undefined;
 
 export const ImportWordsFormSchema = z.object({
-  targetLessonId: z.uuid({ error: "Missing destination category." }),
-  wordIds: z
-    .array(z.uuid())
-    .min(1, { error: "Select at least one word." }),
+  targetLanguageDeckId: z.uuid({ error: "Missing destination category." }),
+  wordIds: z.array(z.uuid()).min(1, { error: "Select at least one word." }),
 });
 
 export type ImportWordsFormState =
   | {
-      errors?: { targetLessonId?: string[]; wordIds?: string[] };
+      errors?: { targetLanguageDeckId?: string[]; wordIds?: string[] };
       message?: string;
     }
   | undefined;
@@ -575,6 +677,20 @@ export type AdminCategorySummary = {
   position: number;
   wordCount: number;
   active: boolean;
+};
+
+// Loaded by the admin deck-edit page to prefill `EditCategoryForm` — the
+// raw `coverImageKey`, not a resolved URL, since `WordImage`/`wordImagePath`-
+// style components take an already-built src, and the edit form builds that
+// itself via `deckCoverImagePath`.
+export type AdminCategoryDetail = {
+  id: string;
+  title: string;
+  subheading: string | null;
+  description: string | null;
+  coverImageKey: string | null;
+  bgColor: string | null;
+  primaryColor: string | null;
 };
 
 export type AdminWordSummary = {

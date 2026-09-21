@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 // Repeatable "custom quiz questions" section for the admin word-quiz page.
 // Submitted as indexed FormData fields (`questions.0.prompt`,
@@ -55,6 +57,7 @@ export function WordQuizQuestionsFields({
 }: {
   initialQuestions?: WordQuizQuestionsFieldsInitial[];
 }) {
+  const t = useTranslations();
   const [questions, setQuestions] = useState<QuestionRow[]>(initialQuestions.map(toRow));
 
   const addQuestion = () =>
@@ -95,19 +98,24 @@ export function WordQuizQuestionsFields({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-sumi-soft">Hand-authored questions</span>
+        <span className="text-sm font-medium text-sumi-soft">
+          {t("admin_quiz_fields.hand_authored", "Hand-authored questions")}
+        </span>
         <button
           type="button"
           onClick={addQuestion}
           className="text-sm font-medium text-ai-dark transition hover:text-ai"
         >
-          + Add question
+          {t("admin_quiz_fields.add_question", "+ Add question")}
         </button>
       </div>
 
       {questions.length === 0 && (
         <p className="text-sm text-sumi-soft">
-          No custom questions yet — they&apos;ll be mixed in with the auto-generated ones once added.
+          {t(
+            "admin_quiz_fields.no_questions",
+            "No custom questions yet — they'll be mixed in with the auto-generated ones once added.",
+          )}
         </p>
       )}
 
@@ -120,7 +128,7 @@ export function WordQuizQuestionsFields({
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-              Prompt
+              {t("admin_quiz_fields.prompt", "Prompt")}
               <input
                 name={`questions.${index}.prompt`}
                 value={question.prompt}
@@ -130,7 +138,7 @@ export function WordQuizQuestionsFields({
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-              Prompt (Japanese, optional)
+              {t("admin_quiz_fields.prompt_ja", "Prompt (Japanese, optional)")}
               <input
                 name={`questions.${index}.promptJa`}
                 value={question.promptJa}
@@ -141,14 +149,20 @@ export function WordQuizQuestionsFields({
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-sumi-soft">Options — pick the correct one</span>
+            <span className="text-xs text-sumi-soft">
+              {t("admin_quiz_fields.options_hint", "Options — pick the correct one")}
+            </span>
             {question.options.map((option, optionIndex) => (
               <div key={optionIndex} className="flex items-center gap-2">
                 <input
                   type="radio"
                   checked={question.correctIndex === optionIndex}
                   onChange={() => setCorrectIndex(question.clientId, optionIndex)}
-                  aria-label={`Option ${optionIndex + 1} is correct`}
+                  aria-label={t(
+                    "admin_quiz_fields.option_correct_aria",
+                    "Option {{number}} is correct",
+                    { number: optionIndex + 1 },
+                  )}
                   className="size-4 shrink-0"
                 />
                 <input
@@ -156,7 +170,15 @@ export function WordQuizQuestionsFields({
                   value={option}
                   onChange={(event) => updateOption(question.clientId, optionIndex, event.target.value)}
                   placeholder={
-                    optionIndex < 2 ? `Option ${optionIndex + 1}` : `Option ${optionIndex + 1} (optional)`
+                    optionIndex < 2
+                      ? t("admin_quiz_fields.option_placeholder", "Option {{number}}", {
+                          number: optionIndex + 1,
+                        })
+                      : t(
+                          "admin_quiz_fields.option_placeholder_optional",
+                          "Option {{number}} (optional)",
+                          { number: optionIndex + 1 },
+                        )
                   }
                   className={`flex-1 ${inputClass}`}
                 />
@@ -164,13 +186,14 @@ export function WordQuizQuestionsFields({
             ))}
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => removeQuestion(question.clientId)}
-            className="self-start rounded-full border border-sumi/15 px-3 py-1 text-xs font-medium text-sumi-soft transition hover:border-shu/40 hover:text-shu-dark"
+            className="h-auto self-start px-3 py-1 text-xs hover:border-shu/40 hover:text-shu-dark"
           >
-            Remove question
-          </button>
+            {t("admin_quiz_fields.remove_question", "Remove question")}
+          </Button>
         </div>
       ))}
     </div>

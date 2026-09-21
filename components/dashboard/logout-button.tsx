@@ -1,14 +1,15 @@
 import { logout } from "@/lib/actions/auth";
+import { Button } from "@/components/ui/button";
+import { getTranslator } from "@/lib/i18n/server";
 
-export function LogoutButton() {
+export async function LogoutButton() {
+  const { t } = await getTranslator();
+
   return (
     <form action={logout}>
-      <button
-        type="submit"
-        className="rounded-full border border-sumi/15 px-4 py-2 text-sm font-medium text-sumi-soft transition hover:border-sumi/30 hover:text-sumi"
-      >
-        Log out
-      </button>
+      <Button type="submit" variant="outline" size="sm">
+        {t("dashboard_layout.log_out", "Log out")}
+      </Button>
     </form>
   );
 }

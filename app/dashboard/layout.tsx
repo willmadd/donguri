@@ -1,10 +1,13 @@
-import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { HeaderXp } from "@/components/dashboard/header-xp";
 import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 import { requireProfile } from "@/lib/dal";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
+import { getTranslator } from "@/lib/i18n/server";
 
 export default async function DashboardLayout({
   children,
@@ -12,19 +15,23 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const profile = await requireProfile();
-  const equippedAccessory = (parseDonguriConfig(profile.donguriConfig).equippedAccessory ??
-    null) as AccessoryId | null;
+  const equippedAccessory = (parseDonguriConfig(profile.donguriConfig)
+    .equippedAccessory ?? null) as AccessoryId | null;
+  const { t } = await getTranslator();
 
   return (
     <div className="min-h-screen bg-washi">
-      <header className="border-b border-sumi/10 bg-washi-soft">
+      <header className="border-b border-header-border bg-header">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Logo />
           <div className="flex items-center gap-4">
             <HeaderXp xp={profile.xp} />
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 shrink-0">
-                <DonguriAvatar equippedAccessory={equippedAccessory} className="h-10 w-10" />
+                <DonguriAvatar
+                  equippedAccessory={equippedAccessory}
+                  className="h-10 w-10"
+                />
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-sumi">
@@ -37,21 +44,22 @@ export default async function DashboardLayout({
                       : "bg-matcha-soft text-matcha-dark"
                   }`}
                 >
-                  {profile.role === "admin" ? "Admin" : "Member"}
+                  {profile.role === "admin"
+                    ? t("dashboard_layout.role_admin", "Admin")
+                    : t("dashboard_layout.role_member", "Member")}
                 </span>
               </div>
             </div>
-            <Link
-              href="/dashboard/profile"
-              className="inline-flex h-9 items-center justify-center rounded-full border border-sumi/15 px-4 text-sm font-medium text-sumi-soft transition hover:border-sumi/30 hover:text-sumi"
-            >
-              Profile
-            </Link>
+            <Button href="/dashboard/profile" variant="outline" size="sm">
+              {t("dashboard_layout.profile", "Profile")}
+            </Button>
             <LogoutButton />
+            <ThemeToggle />
+            <LocaleSwitcher />
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
+      <main className="mx-auto max-w-7xl px-6 py-10">{children}</main>
     </div>
   );
 }

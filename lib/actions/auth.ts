@@ -66,7 +66,8 @@ export async function signup(
   formData: FormData,
 ): Promise<SignupFormState> {
   const validatedFields = SignupFormSchema.safeParse({
-    fullName: formData.get("fullName"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
     email: formData.get("email"),
     password: formData.get("password"),
   });
@@ -77,7 +78,8 @@ export async function signup(
     };
   }
 
-  const { fullName, email, password } = validatedFields.data;
+  const { firstName, lastName, email, password } = validatedFields.data;
+  const fullName = `${firstName} ${lastName}`.trim();
   const origin = await getOrigin();
   const supabase = await createClient();
 
@@ -87,6 +89,8 @@ export async function signup(
     options: {
       data: {
         full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
       },
       emailRedirectTo: `${origin}/auth/confirm?next=/dashboard`,
     },
@@ -122,11 +126,15 @@ export async function signup(
       update: {
         email,
         fullName,
+        firstName,
+        lastName,
       },
       create: {
         id: data.user.id,
         email,
         fullName,
+        firstName,
+        lastName,
         role: "user",
       },
     });

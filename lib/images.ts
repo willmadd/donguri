@@ -1,4 +1,4 @@
-import { wordImageUrl } from "@/lib/bunny";
+import { imageUrl } from "@/lib/bunny";
 
 // Words uploaded through the admin panel have a real `imageKey` pointing at
 // a bunny.net object. Older words with no upload yet fall back to a naming
@@ -27,9 +27,16 @@ export function wordImagePath(word: {
   imageKey?: string | null;
 }): string {
   if (word.imageKey) {
-    return wordImageUrl(word.imageKey);
+    return imageUrl(word.imageKey);
   }
 
   const label = isAsciiWord(word.term) ? word.term : word.translation;
   return `/vocab-images/${slugify(label)}.webp`;
+}
+
+// A deck's cover photo has no naming-convention fallback like words do
+// (there's nothing to slugify a deck by) — null just means "no cover set",
+// and callers render without one.
+export function deckCoverImagePath(deck: { coverImageKey?: string | null }): string | null {
+  return deck.coverImageKey ? imageUrl(deck.coverImageKey) : null;
 }

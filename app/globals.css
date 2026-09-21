@@ -1,33 +1,75 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  /* Donguri — a bright, playful palette (same roles, punchier hues) */
-  --washi: #fff9f0; /* warm paper */
-  --washi-soft: #fff0dc; /* deeper paper tone for panels */
-  --sumi: #201a15; /* ink */
-  --sumi-soft: #6b5d4f; /* muted ink for secondary text */
-  --ai: #0a5fc4; /* vivid indigo blue */
+  /* Donguri — warm cream/tan palette */
+  --outer: #241a10; /* behind the page frame — body background */
+  --washi: #fdf6ec; /* page background */
+  --washi-soft: #f8ead2; /* card background */
+  --card-border: #e3cda3;
+  --header: #f9e3c6;
+  --header-border: #eccfa3;
+  --sumi: #160d04; /* main text / ink */
+  --sumi-soft: #6f5c45; /* muted text */
+  --neutral-soft: #e4d8c2; /* neutral icon chip (e.g. the search chip) */
+
+  /* Fixed contrast ink — unlike --sumi/--washi, these never invert in
+     .dark, since they're used to contrast arbitrary DB-driven colors
+     (deck/category backgrounds) that have nothing to do with the site's
+     own light/dark theme. */
+  --ink-on-light: #160d04;
+  --ink-on-dark: #fff7ea;
+
+  --ai: #1a54c4; /* vocabulary action */
   --ai-dark: #073f82;
-  --ai-soft: #dceeff;
-  --sakura: #ff5c93; /* vivid cherry blossom pink */
+  --ai-soft: #d3e4fd; /* blue icon chip */
+  --sakura: #e23f8a; /* review action */
   --sakura-dark: #e13d74;
-  --sakura-soft: #ffe3ee;
-  --matcha: #34b24a; /* vivid matcha green */
+  --sakura-soft: #fbdcec; /* pink icon chip */
+  --matcha: #1ea346; /* grammar action */
   --matcha-dark: #237a34;
-  --matcha-soft: #dff5df;
-  --shu: #e63b24; /* vivid vermillion */
-  --shu-dark: #c22e1b;
+  --matcha-soft: #c9f2da; /* green icon chip */
+  --shu: #d13d20; /* brand / logo */
+  --shu-dark: #b23217;
   --kin: #ffb800; /* vivid gold */
 
-  --background: var(--washi);
+  /* XP pill / dark button */
+  --pill: #0f0b06;
+  --pill-foreground: #ffffff;
+  --pill-accent: #efe0c8; /* the "Lv 1" badge */
+  --pill-accent-foreground: #0f0b06;
+  --pill-icon: #332415; /* the "?" circle */
+
+  /* Ghost buttons (Profile, Log out, Dev mode) */
+  --ghost-border: #d7bd94;
+  --ghost-text: #2c1e0f;
+  --ghost-hover: #f2e2c6;
+
+  /* Tag (e.g. an active deck's name shown as a pill) */
+  --tag: #d6e4fb;
+  --tag-foreground: #1a4fc9;
+
+  /* Streak chart */
+  --chart-line: #1a54c4;
+  --chart-area: #c6bda8;
+
+  --background: var(--outer);
   --foreground: var(--sumi);
 }
 
 @theme inline {
+  --color-outer: var(--outer);
   --color-washi: var(--washi);
   --color-washi-soft: var(--washi-soft);
+  --color-card-border: var(--card-border);
+  --color-header: var(--header);
+  --color-header-border: var(--header-border);
   --color-sumi: var(--sumi);
   --color-sumi-soft: var(--sumi-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-ink-on-light: var(--ink-on-light);
+  --color-ink-on-dark: var(--ink-on-dark);
   --color-ai: var(--ai);
   --color-ai-dark: var(--ai-dark);
   --color-ai-soft: var(--ai-soft);
@@ -40,39 +82,82 @@
   --color-shu: var(--shu);
   --color-shu-dark: var(--shu-dark);
   --color-kin: var(--kin);
+  --color-pill: var(--pill);
+  --color-pill-foreground: var(--pill-foreground);
+  --color-pill-accent: var(--pill-accent);
+  --color-pill-accent-foreground: var(--pill-accent-foreground);
+  --color-pill-icon: var(--pill-icon);
+  --color-ghost-border: var(--ghost-border);
+  --color-ghost-text: var(--ghost-text);
+  --color-ghost-hover: var(--ghost-hover);
+  --color-tag: var(--tag);
+  --color-tag-foreground: var(--tag-foreground);
+  --color-chart-line: var(--chart-line);
+  --color-chart-area: var(--chart-area);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-open-sans);
   --font-mono: var(--font-geist-mono);
-  --font-fredoka: var(--font-fredoka);
-  --font-zen-maru: var(--font-zen-maru);
+  --font-nunito: var(--font-nunito);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --washi: #17130f;
-    --washi-soft: #1f1912;
-    --sumi: #fff7ea;
-    --sumi-soft: #d9c9b5;
-    --ai: #4e9cff;
-    --ai-dark: #7cb8ff;
-    --ai-soft: #163257;
-    --sakura: #ff7fae;
-    --sakura-dark: #ffa0c4;
-    --sakura-soft: #3d1f2b;
-    --matcha: #5fd470;
-    --matcha-dark: #85e393;
-    --matcha-soft: #1a3320;
-    --shu: #ff6e52;
-    --shu-dark: #ff9075;
-    --kin: #ffcb4d;
+.dark {
+  /* Not part of the light-theme spec this was written against — extrapolated
+     to keep the new tokens from silently falling through to their light
+     values, following the same relationships as the rest of this block. */
+  --outer: #0c0906;
+  --washi: #17130f;
+  --washi-soft: #1f1912;
+  --card-border: #332a1d;
+  --header: #241d14;
+  --header-border: #3a2f20;
+  --sumi: #fff7ea;
+  --sumi-soft: #d9c9b5;
+  --neutral-soft: #3a3020;
+  --ai: #4e9cff;
+  --ai-dark: #7cb8ff;
+  --ai-soft: #163257;
+  --sakura: #ff7fae;
+  --sakura-dark: #ffa0c4;
+  --sakura-soft: #3d1f2b;
+  --matcha: #5fd470;
+  --matcha-dark: #85e393;
+  --matcha-soft: #1a3320;
+  --shu: #ff6e52;
+  --shu-dark: #ff9075;
+  --kin: #ffcb4d;
 
-    --background: var(--washi);
-    --foreground: var(--sumi);
-  }
+  /* The XP pill is a fixed high-contrast dark badge by design (see the
+     light values in :root) — it reads fine on either page background, so
+     it deliberately isn't re-themed here; only the tokens below are. */
+  --ghost-border: #4a4030;
+  --ghost-text: #e8ddc9;
+  --ghost-hover: #2b2318;
+  --tag: #163257;
+  --tag-foreground: #7cb8ff;
+  --chart-line: #4e9cff;
+  --chart-area: #4a4030;
+
+  --background: var(--outer);
+  --foreground: var(--sumi);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Site titles — every heading defaults to Nunito. Must live in @layer
+   base — unlayered CSS beats every Tailwind layer regardless of selector
+   specificity, so without this the rule would win over any font utility
+   class applied to a heading instead of losing to it. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-nunito);
+  }
 }

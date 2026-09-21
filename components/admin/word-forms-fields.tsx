@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 // Repeatable "Forms" (conjugations/inflections) and "Examples" (sentence
 // pairs) sections for the word create/edit forms. Submitted as indexed
@@ -40,6 +42,7 @@ export function WordFormsFields({
   initialForms = [],
   initialExamples = [],
 }: WordFormsFieldsProps) {
+  const t = useTranslations();
   const [forms, setForms] = useState<FormRow[]>(
     initialForms.map((form) => ({ clientId: form.id, ...form })),
   );
@@ -89,14 +92,17 @@ export function WordFormsFields({
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-sumi-soft">
-            Forms <span className="opacity-70">(conjugations/inflections, optional)</span>
+            {t("admin_word_forms.forms_label", "Forms")}{" "}
+            <span className="opacity-70">
+              {t("admin_word_forms.forms_hint", "(conjugations/inflections, optional)")}
+            </span>
           </span>
           <button
             type="button"
             onClick={addForm}
             className="text-sm font-medium text-ai-dark transition hover:text-ai"
           >
-            + Add form
+            {t("admin_word_forms.add_form", "+ Add form")}
           </button>
         </div>
 
@@ -107,7 +113,7 @@ export function WordFormsFields({
           >
             <input type="hidden" name={`forms.${index}.clientId`} value={form.clientId} />
             <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-              Label (English)
+              {t("admin_word_forms.label_en", "Label (English)")}
               <input
                 name={`forms.${index}.labelEn`}
                 value={form.labelEn}
@@ -117,7 +123,7 @@ export function WordFormsFields({
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-              Label (Japanese)
+              {t("admin_word_forms.label_ja", "Label (Japanese)")}
               <input
                 name={`forms.${index}.labelJa`}
                 value={form.labelJa}
@@ -127,7 +133,7 @@ export function WordFormsFields({
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-              Value
+              {t("admin_word_forms.value", "Value")}
               <input
                 name={`forms.${index}.value`}
                 value={form.value}
@@ -136,13 +142,14 @@ export function WordFormsFields({
                 className={inputClass}
               />
             </label>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => removeForm(form.clientId)}
-              className="h-9 rounded-full border border-sumi/15 px-3 text-xs font-medium text-sumi-soft transition hover:border-shu/40 hover:text-shu-dark"
+              className="px-3 text-xs hover:border-shu/40 hover:text-shu-dark"
             >
-              Remove
-            </button>
+              {t("common.remove", "Remove")}
+            </Button>
           </div>
         ))}
       </div>
@@ -150,14 +157,15 @@ export function WordFormsFields({
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-sumi-soft">
-            Example sentences <span className="opacity-70">(optional)</span>
+            {t("admin_word_forms.examples_label", "Example sentences")}{" "}
+            <span className="opacity-70">{t("common.optional_paren", "(optional)")}</span>
           </span>
           <button
             type="button"
             onClick={addExample}
             className="text-sm font-medium text-ai-dark transition hover:text-ai"
           >
-            + Add example
+            {t("admin_word_forms.add_example", "+ Add example")}
           </button>
         </div>
 
@@ -168,7 +176,7 @@ export function WordFormsFields({
           >
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-                English sentence
+                {t("admin_word_forms.english_sentence", "English sentence")}
                 <input
                   name={`examples.${index}.en`}
                   value={example.en}
@@ -178,7 +186,7 @@ export function WordFormsFields({
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-sumi-soft">
-                Japanese sentence
+                {t("admin_word_forms.japanese_sentence", "Japanese sentence")}
                 <input
                   name={`examples.${index}.ja`}
                   value={example.ja}
@@ -190,7 +198,7 @@ export function WordFormsFields({
             </div>
             <div className="flex items-end gap-2">
               <label className="flex flex-1 flex-col gap-1 text-xs text-sumi-soft">
-                Demonstrates which form?
+                {t("admin_word_forms.demonstrates_form", "Demonstrates which form?")}
                 <select
                   name={`examples.${index}.formClientId`}
                   value={example.formClientId}
@@ -199,21 +207,24 @@ export function WordFormsFields({
                   }
                   className={inputClass}
                 >
-                  <option value="">General example (no specific form)</option>
+                  <option value="">
+                    {t("admin_word_forms.general_example", "General example (no specific form)")}
+                  </option>
                   {forms.map((form) => (
                     <option key={form.clientId} value={form.clientId}>
-                      {form.labelEn || "Untitled form"}
+                      {form.labelEn || t("admin_word_forms.untitled_form", "Untitled form")}
                     </option>
                   ))}
                 </select>
               </label>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => removeExample(example.clientId)}
-                className="h-9 rounded-full border border-sumi/15 px-3 text-xs font-medium text-sumi-soft transition hover:border-shu/40 hover:text-shu-dark"
+                className="px-3 text-xs hover:border-shu/40 hover:text-shu-dark"
               >
-                Remove
-              </button>
+                {t("common.remove", "Remove")}
+              </Button>
             </div>
           </div>
         ))}

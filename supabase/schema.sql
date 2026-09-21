@@ -120,7 +120,7 @@ create trigger prevent_role_self_update
 -- 6. Courses --------------------------------------------------------------
 -- The top-level catalog: each course is one language pair (e.g. English for
 -- Japanese speakers, Cantonese for English speakers). A user explicitly
--- enrolls in a course before its lessons/practice become reachable — see
+-- enrolls in a course before its language decks/practice become reachable — see
 -- `course_enrollments` below. Free for now; a paid tier can be added later
 -- without restructuring, since enrollment is already its own table/action.
 
@@ -142,14 +142,14 @@ create policy "Authenticated users can view courses"
   on public.courses for select
   using (auth.role() = 'authenticated');
 
--- 7. Learning content: lessons and words -----------------------------------
+-- 7. Learning content: language decks and words -----------------------------------
 -- Shared content, not user-owned, scoped to a course. `path` is 'vocab' or
 -- 'grammar' — only 'vocab' has content so far. `term` is the word in the
 -- language being learned, `translation` is its meaning in the learner's
 -- base language, and `romanization` is an optional pronunciation aid (e.g.
 -- Jyutping for Cantonese) — null for languages that don't need one.
 
-create table if not exists public.lessons (
+create table if not exists public.language_decks (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references public.courses (id) on delete cascade,
   path text not null check (path in ('vocab', 'grammar')),
@@ -159,23 +159,23 @@ create table if not exists public.lessons (
   unique (course_id, path, position)
 );
 
-alter table public.lessons enable row level security;
+alter table public.language_decks enable row level security;
 
-drop policy if exists "Authenticated users can view lessons" on public.lessons;
-create policy "Authenticated users can view lessons"
-  on public.lessons for select
+drop policy if exists "Authenticated users can view language decks" on public.language_decks;
+create policy "Authenticated users can view language decks"
+  on public.language_decks for select
   using (auth.role() = 'authenticated');
 
 create table if not exists public.words (
   id uuid primary key default gen_random_uuid(),
-  lesson_id uuid not null references public.lessons (id) on delete cascade,
+  language_deck_id uuid not null references public.language_decks (id) on delete cascade,
   term text not null,
   translation text not null,
   romanization text,
   example_sentence text,
   position integer not null,
   created_at timestamptz not null default now(),
-  unique (lesson_id, position)
+  unique (language_deck_id, position)
 );
 
 alter table public.words enable row level security;
@@ -234,7 +234,7 @@ create trigger set_user_word_progress_updated_at
 
 -- 9. Course enrollments -----------------------------------------------------
 -- "Signing up" for a course. A user can be enrolled in several at once;
--- each course's lessons/practice are only reachable once enrolled. Streaks
+-- each course's language decks/practice are only reachable once enrolled. Streaks
 -- are tracked per enrollment, not per user — each course is its own
 -- independent track, so "practiced today" means "practiced in this course."
 
@@ -269,7 +269,7 @@ insert into public.course_enrollments (user_id, course_id)
 select distinct uwp.user_id, l.course_id
 from public.user_word_progress uwp
 join public.words w on w.id = uwp.word_id
-join public.lessons l on l.id = w.lesson_id
+join public.language_decks l on l.id = w.language_deck_id
 on conflict (user_id, course_id) do nothing;
 
 -- 10. Course catalog seed data ----------------------------------------------
@@ -280,10 +280,10 @@ insert into public.courses (slug, title, target_language, source_language, descr
 on conflict (slug) do nothing;
 
 -- 11. English vocabulary seed data ------------------------------------------
--- Idempotent: looked up by (course, path, position) / (lesson, position) so
+-- Idempotent: looked up by (course, path, position) / (language deck, position) so
 -- this is safe to re-run and needs no hardcoded UUIDs.
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select c.id, 'vocab', l.title, l.position
 from public.courses c
 cross join (values
@@ -294,9 +294,9 @@ cross join (values
 where c.slug = 'en-for-ja'
 on conflict (course_id, path, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('hello', 'こんにちは', 'Hello, nice to meet you.', 1),
@@ -311,11 +311,11 @@ cross join (values
   ('name', '名前', 'What is your name?', 10)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 1
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('station', '駅', 'The station is near my house.', 1),
@@ -330,11 +330,11 @@ cross join (values
   ('taxi', 'タクシー', 'We took a taxi to the airport.', 10)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 2
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('morning', '朝', 'I drink coffee every morning.', 1),
@@ -349,22 +349,22 @@ cross join (values
   ('time', '時間', 'What time is it now?', 10)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 3
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
 -- 12. Cantonese seed data ---------------------------------------------------
--- A first lesson mirroring the English course's "Everyday Basics" concepts,
--- with Jyutping romanization. Matches "a few words" scope — one lesson, not
+-- A first language deck mirroring the English course's "Everyday Basics" concepts,
+-- with Jyutping romanization. Matches "a few words" scope — one language deck, not
 -- a full curriculum.
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select id, 'vocab', 'Everyday Basics', 1
 from public.courses
 where slug = 'yue-for-en'
 on conflict (course_id, path, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('你好', 'hello', 'nei5 hou2', '你好，你好嗎？', 1),
@@ -379,7 +379,7 @@ cross join (values
   ('名', 'name', 'meng2', '你叫咩名？', 10)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 1
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
 -- 13. Move streaks from profiles to course_enrollments, drop next_due_at ----
 -- Streaks became per-course (see the note on `course_enrollments` above), and
@@ -420,18 +420,18 @@ alter table public.profiles drop column if exists last_activity_date;
 alter table public.user_word_progress drop column if exists next_due_at;
 
 -- 14. Colours seed data ------------------------------------------------------
--- A "Colours" lesson for each course, idempotent the same way as the other
+-- A "Colours" language deck for each course, idempotent the same way as the other
 -- seed sections (looked up by course/path/position, no hardcoded UUIDs).
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select id, 'vocab', 'Colours', 4
 from public.courses
 where slug = 'en-for-ja'
 on conflict (course_id, path, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('red', '赤', 'She is wearing a red dress.', 1),
@@ -446,17 +446,17 @@ cross join (values
   ('brown', '茶色', 'The dog has brown fur.', 10)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 4
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select id, 'vocab', 'Colours', 2
 from public.courses
 where slug = 'yue-for-en'
 on conflict (course_id, path, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('紅色', 'red', 'hung4 sik1', '佢着緊紅色嘅裙。', 1),
@@ -471,7 +471,7 @@ cross join (values
   ('啡色', 'brown', 'fe1 sik1', '隻狗嘅毛係啡色嘅。', 10)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 2
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
 -- 15. New topic vocabulary: greetings, sports, actions, numbers, placements,
 --     foods, hobbies (both courses) ---------------------------------------
@@ -479,7 +479,7 @@ on conflict (lesson_id, position) do nothing;
 -- both courses so it's not repeated here. en-for-ja continues at position 5,
 -- yue-for-en at position 3.
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select id, 'vocab', l.title, l.position
 from public.courses
 cross join (values
@@ -494,7 +494,7 @@ cross join (values
 where public.courses.slug = 'en-for-ja'
 on conflict (course_id, path, position) do nothing;
 
-insert into public.lessons (course_id, path, title, position)
+insert into public.language_decks (course_id, path, title, position)
 select id, 'vocab', l.title, l.position
 from public.courses
 cross join (values
@@ -511,9 +511,9 @@ on conflict (course_id, path, position) do nothing;
 
 -- English for Japanese speakers -------------------------------------------
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('good morning', 'おはようございます', 'Good morning! Did you sleep well?', 1),
@@ -530,11 +530,11 @@ cross join (values
   ('take care', 'お大事に', 'Take care, and get well soon.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 5
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('soccer', 'サッカー', 'He plays soccer every weekend.', 1),
@@ -551,11 +551,11 @@ cross join (values
   ('judo', '柔道', 'Judo is a traditional Japanese sport.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 6
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('eat', '食べる', 'I eat breakfast at seven.', 1),
@@ -572,11 +572,11 @@ cross join (values
   ('study', '勉強する', 'I study Japanese every night.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 7
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('one', '一', 'I have one brother.', 1),
@@ -591,11 +591,11 @@ cross join (values
   ('ten', '十', 'Ten fingers, ten toes.', 10)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 8
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('next to', '隣に', 'The bank is next to the station.', 1),
@@ -612,11 +612,11 @@ cross join (values
   ('far', '遠くに', 'The airport is far from here.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 9
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('rice', 'ご飯', 'I eat rice every day.', 1),
@@ -633,11 +633,11 @@ cross join (values
   ('soup', 'スープ', 'The soup is still hot.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 10
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, example_sentence, position)
 select l.id, w.term, w.translation, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('reading', '読書', 'Reading is my favorite hobby.', 1),
@@ -654,13 +654,13 @@ cross join (values
   ('knitting', '編み物', 'Knitting is a relaxing hobby.', 12)
 ) as w(term, translation, example_sentence, position)
 where c.slug = 'en-for-ja' and l.path = 'vocab' and l.position = 11
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
 -- Cantonese for English speakers -------------------------------------------
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('早晨', 'good morning', 'zou2 san4', '早晨，你瞓得好唔好？', 1),
@@ -677,11 +677,11 @@ cross join (values
   ('保重', 'take care', 'bou2 zung6', '保重呀，早啲好返。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 3
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('足球', 'soccer', 'zuk1 kau4', '佢每個週末都踢足球。', 1),
@@ -698,11 +698,11 @@ cross join (values
   ('柔道', 'judo', 'jau4 dou6', '柔道係日本傳統運動。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 4
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('食', 'eat', 'sik6', '我七點食早餐。', 1),
@@ -719,11 +719,11 @@ cross join (values
   ('讀書', 'study', 'duk6 syu1', '我夜晚都讀緊日文。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 5
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('一', 'one', 'jat1', '而家一點。', 1),
@@ -738,11 +738,11 @@ cross join (values
   ('十', 'ten', 'sap6', '十隻手指，十隻腳趾。', 10)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 6
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('隔籬', 'next to', 'gaak3 lei4', '銀行喺車站隔籬。', 1),
@@ -759,11 +759,11 @@ cross join (values
   ('遠', 'far', 'jyun5', '機場離呢度好遠。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 7
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('飯', 'rice', 'faan6', '我日日都食飯。', 1),
@@ -780,11 +780,11 @@ cross join (values
   ('湯', 'soup', 'tong1', '碗湯仲好熱。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 8
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
-insert into public.words (lesson_id, term, translation, romanization, example_sentence, position)
+insert into public.words (language_deck_id, term, translation, romanization, example_sentence, position)
 select l.id, w.term, w.translation, w.romanization, w.example_sentence, w.position
-from public.lessons l
+from public.language_decks l
 join public.courses c on c.id = l.course_id
 cross join (values
   ('睇書', 'reading', 'tai2 syu1', '睇書係我最鍾意嘅興趣。', 1),
@@ -801,7 +801,7 @@ cross join (values
   ('織冷衫', 'knitting', 'zik1 laang1 saam1', '織冷衫係好放鬆嘅興趣。', 12)
 ) as w(term, translation, romanization, example_sentence, position)
 where c.slug = 'yue-for-en' and l.path = 'vocab' and l.position = 9
-on conflict (lesson_id, position) do nothing;
+on conflict (language_deck_id, position) do nothing;
 
 -- 16. Word images (bunny.net) ------------------------------------------------
 -- `image_key` is the object path within the `donguri` bunny.net storage zone
@@ -819,11 +819,11 @@ alter table public.words add column if not exists image_key text;
 alter table public.courses add column if not exists active boolean not null default true;
 alter table public.words add column if not exists active boolean not null default true;
 
--- 18. Active/inactive toggle for categories (lessons) -----------------------
+-- 18. Active/inactive toggle for categories (language decks) -----------------------
 -- Same purpose as section 17, one level down: hides a whole category from
 -- the learner-facing app without deleting it or its words.
 
-alter table public.lessons add column if not exists active boolean not null default true;
+alter table public.language_decks add column if not exists active boolean not null default true;
 
 -- 19. Word explanations, forms, and example sentences -----------------------
 -- Richer word content for the Learn/Test split: `explanation`/`explanation_ja`
@@ -953,7 +953,7 @@ create policy "Authenticated users can view word quiz questions"
   using (auth.role() = 'authenticated');
 
 -- 24. Word categories and word type -------------------------------------------
--- Distinct from a "category" (lesson/deck) elsewhere in this app — this is a
+-- Distinct from a "category" (language deck/deck) elsewhere in this app — this is a
 -- cross-deck topical tag with its own admin-managed color (e.g. "Colours" the
 -- tag vs. "TOEIC Basic" the deck a coloured word happens to live in), plus a
 -- fixed part-of-speech field. Both are nullable and admin-editable per word.
@@ -1147,9 +1147,9 @@ with classification (concept, category_name, word_type) as (
 update public.words w
 set category_id = coalesce(w.category_id, wc.id),
     word_type = coalesce(w.word_type, c.word_type)
-from public.lessons l, public.courses co, classification c
+from public.language_decks l, public.courses co, classification c
 join public.word_categories wc on wc.name = c.category_name
-where w.lesson_id = l.id
+where w.language_deck_id = l.id
   and l.course_id = co.id
   and (case when co.slug = 'en-for-ja' then lower(trim(w.term)) else lower(trim(w.translation)) end) = c.concept
   and (w.category_id is null or w.word_type is null);
@@ -1212,21 +1212,21 @@ where status = 'learning' and last_seen_at is null and stage <> 1;
 -- 26. Per-user deck activation ------------------------------------------------
 -- Which decks currently feed a user's Learn/Test pool (see
 -- getActiveDeckIds/getLearnQueueForCourse in lib/dal.ts) — a personal
--- selection, not an admin visibility toggle (that's `lessons.active`).
+-- selection, not an admin visibility toggle (that's `language_decks.active`).
 -- `active` is a real column, not row presence/absence, so "explicitly
 -- deactivated" stays distinguishable from "never touched" even after every
 -- deck is turned off (needed so the app only ever lazily auto-activates the
--- first deck once, on a brand-new enrollment). A `path: 'grammar'` lesson is
+-- first deck once, on a brand-new enrollment). A `path: 'grammar'` language deck is
 -- never activated directly, only implicitly via its `path: 'vocab'` sibling
 -- (same course + position).
 
 create table if not exists public.user_deck_activations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
-  lesson_id uuid not null references public.lessons (id) on delete cascade,
+  language_deck_id uuid not null references public.language_decks (id) on delete cascade,
   active boolean not null default true,
   created_at timestamptz not null default now(),
-  unique (user_id, lesson_id)
+  unique (user_id, language_deck_id)
 );
 
 alter table public.user_deck_activations add column if not exists active boolean not null default true;
@@ -1248,3 +1248,53 @@ create policy "Users can update own deck activations"
   on public.user_deck_activations for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- 27. Deck (language deck) cover photo, subheading and description ------------------
+-- Admin-editable presentation fields shown on a deck's card and detail page.
+-- `cover_image_key` follows the same convention as `words.image_key` — an
+-- object path within the `donguri` bunny.net storage zone, null until an
+-- admin uploads one.
+
+alter table public.language_decks add column if not exists cover_image_key text;
+alter table public.language_decks add column if not exists subheading text;
+alter table public.language_decks add column if not exists description text;
+
+-- 28. Deck (language deck) background and primary colors -----------------------------
+-- Admin-editable hex colors, same free-form convention as
+-- `word_categories.color` — validated at the app layer (see
+-- CategoryFieldsSchema in lib/definitions.ts), not with a DB check
+-- constraint. Not wired into any rendering yet; stored for a later UI pass.
+
+alter table public.language_decks add column if not exists bg_color text;
+alter table public.language_decks add column if not exists primary_color text;
+
+-- 29. Split profile name into first/last name -----------------------------
+-- The sign-up form now collects first and last name separately instead of
+-- one free-text name box. `full_name` stays (app-maintained, kept as
+-- `${firstName} ${lastName}`) since it's still what most of the app reads
+-- for display — this just adds the two new columns behind it and teaches
+-- the auto-create trigger to populate them from the same auth metadata
+-- signup already passes as `full_name`.
+
+alter table public.profiles add column if not exists first_name text;
+alter table public.profiles add column if not exists last_name text;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name, first_name, last_name)
+  values (
+    new.id,
+    new.email,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'first_name',
+    new.raw_user_meta_data ->> 'last_name'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;

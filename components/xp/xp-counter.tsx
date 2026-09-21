@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { levelForXp, xpRangeForLevel } from "@/lib/levels";
 import { XpInfoTooltip } from "@/components/xp/xp-info-tooltip";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 // One digit position of the counter — when its character changes, the old
 // one flips/slides out upward while the new one slides in from below, the
@@ -50,6 +51,7 @@ type XpCounterProps = {
 };
 
 export function XpCounter({ value, className = "" }: XpCounterProps) {
+  const t = useTranslations();
   const level = levelForXp(value);
   const { max } = xpRangeForLevel(level);
   // The number itself is always the running total — it never resets at a
@@ -65,18 +67,20 @@ export function XpCounter({ value, className = "" }: XpCounterProps) {
 
   return (
     <div
-      className={`inline-flex items-center gap-3 rounded-2xl bg-sumi px-4 py-2 text-washi shadow-inner ${className}`}
+      className={`inline-flex items-center gap-3 rounded-2xl bg-pill px-4 py-2 text-pill-foreground shadow-inner ${className}`}
     >
-      <span className="rounded-full bg-washi/15 px-2 py-1 text-xs font-bold whitespace-nowrap">
-        Lv {level}
+      <span className="rounded-full bg-pill-accent px-2 py-1 text-xs font-bold whitespace-nowrap text-pill-accent-foreground">
+        {t("xp_counter.level", "Lv {{level}}", { level })}
       </span>
       <div className="flex items-center gap-1.5">
         <div className="flex items-baseline">
           <AnimatedDigits value={whole} />
           {hasHalf && <span className="text-base font-bold">.5</span>}
         </div>
-        {max !== null && <span className="text-sm font-medium text-washi/70">/{max}</span>}
-        <span className="text-xs font-semibold tracking-wide text-washi/70 uppercase">XP</span>
+        {max !== null && <span className="text-sm font-medium text-pill-foreground/70">/{max}</span>}
+        <span className="text-xs font-semibold tracking-wide text-pill-foreground/70 uppercase">
+          {t("xp_counter.xp", "XP")}
+        </span>
       </div>
       <XpInfoTooltip />
     </div>

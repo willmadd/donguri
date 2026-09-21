@@ -2,8 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { resetCourseProgress } from "@/lib/actions/vocab";
+import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 export function ResetProgressButton({ courseId }: { courseId: string }) {
+  const t = useTranslations();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
 
@@ -20,18 +23,20 @@ export function ResetProgressButton({ courseId }: { courseId: string }) {
   }
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      tone={confirming ? "danger" : "neutral"}
+      size="sm"
       disabled={pending}
       onClick={handleClick}
       onBlur={() => setConfirming(false)}
-      className={`rounded-full border px-4 py-2 text-sm font-medium transition disabled:opacity-60 ${
-        confirming
-          ? "border-shu bg-shu/5 text-shu-dark"
-          : "border-sumi/15 text-sumi-soft hover:border-shu/40 hover:text-shu-dark"
-      }`}
+      className={confirming ? "border-shu bg-shu/5" : "hover:border-shu/40 hover:text-shu-dark"}
     >
-      {pending ? "Resetting…" : confirming ? "Click again to confirm" : "Reset progress"}
-    </button>
+      {pending
+        ? t("reset_progress.resetting", "Resetting…")
+        : confirming
+          ? t("reset_progress.confirm", "Click again to confirm")
+          : t("reset_progress.button", "Reset progress")}
+    </Button>
   );
 }

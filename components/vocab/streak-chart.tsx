@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DailyWordCount } from "@/lib/definitions";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 function formatDayShort(dateStr: string): string {
   return new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" }).format(
@@ -53,6 +54,7 @@ function smoothPath(points: Point[]): string {
 // A single magnitude series (words learned per day), so one hue end to end —
 // no categorical palette to assign or validate, no legend box needed.
 export function StreakChart({ data }: { data: DailyWordCount[] }) {
+  const t = useTranslations();
   const [hovered, setHovered] = useState<number | null>(null);
 
   const max = Math.max(1, ...data.map((day) => day.count));
@@ -77,9 +79,9 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
   const tooltipHeight = 36;
 
   return (
-    <div className="rounded-2xl border border-sumi/10 bg-washi-soft p-6">
+    <div className="rounded-2xl border border-card-border bg-washi-soft p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-sumi-soft">
-        Words learned this streak
+        {t("streak_chart.title", "Words learned this streak")}
       </h2>
 
       <div className="mt-4" style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}>
@@ -88,7 +90,7 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
           preserveAspectRatio="none"
           className="h-full w-full overflow-visible"
           role="img"
-          aria-label="Words learned per day this streak"
+          aria-label={t("streak_chart.aria_label", "Words learned per day this streak")}
         >
           {[0, 0.5, 1].map((fraction) => (
             <line
@@ -102,12 +104,12 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
             />
           ))}
 
-          {areaPath && <path d={areaPath} className="fill-ai/10" />}
+          {areaPath && <path d={areaPath} className="fill-chart-area/50" />}
           {linePath && (
             <path
               d={linePath}
               fill="none"
-              className="stroke-ai"
+              className="stroke-chart-line"
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -134,7 +136,7 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
                   cx={point.x}
                   cy={point.y}
                   r={isActive || isLast ? 5 : 3}
-                  className="fill-ai stroke-washi-soft"
+                  className="fill-chart-line stroke-washi-soft"
                   strokeWidth={2}
                 />
                 {/* Bigger, invisible hit target for hover + keyboard focus */}
@@ -145,7 +147,17 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
                   fill="transparent"
                   tabIndex={0}
                   role="img"
-                  aria-label={`${data[i].count} word${data[i].count === 1 ? "" : "s"} on ${formatDayFull(data[i].date)}`}
+                  aria-label={
+                    data[i].count === 1
+                      ? t("streak_chart.day_singular", "{{count}} word on {{date}}", {
+                          count: data[i].count,
+                          date: formatDayFull(data[i].date),
+                        })
+                      : t("streak_chart.day_plural", "{{count}} words on {{date}}", {
+                          count: data[i].count,
+                          date: formatDayFull(data[i].date),
+                        })
+                  }
                   onPointerEnter={() => setHovered(i)}
                   onPointerLeave={() => setHovered((current) => (current === i ? null : current))}
                   onFocus={() => setHovered(i)}
@@ -213,7 +225,9 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
                     textAnchor="middle"
                     className="fill-washi text-[10px]"
                   >
-                    {day.count} word{day.count === 1 ? "" : "s"}
+                    {day.count === 1
+                      ? t("streak_chart.tooltip_singular", "{{count}} word", { count: day.count })
+                      : t("streak_chart.tooltip_plural", "{{count}} words", { count: day.count })}
                   </text>
                 </g>
               );
@@ -222,11 +236,11 @@ export function StreakChart({ data }: { data: DailyWordCount[] }) {
       </div>
 
       <table className="sr-only">
-        <caption>Words learned per day this streak</caption>
+        <caption>{t("streak_chart.aria_label", "Words learned per day this streak")}</caption>
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Words learned</th>
+            <th>{t("streak_chart.table_date", "Date")}</th>
+            <th>{t("streak_chart.title", "Words learned this streak")}</th>
           </tr>
         </thead>
         <tbody>

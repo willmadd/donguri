@@ -8,10 +8,11 @@ import { FileField } from "@/components/ui/file-field";
 import { SelectField } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordFormsFields } from "@/components/admin/word-forms-fields";
+import { useTranslations } from "@/components/i18n/locale-provider";
 import { WORD_TYPES, type WordCategoryOption } from "@/lib/definitions";
 
 type CreateWordFormProps = {
-  lessonId: string;
+  languageDeckId: string;
   categories: WordCategoryOption[];
 };
 
@@ -20,7 +21,8 @@ const WORD_TYPE_OPTIONS = WORD_TYPES.map((type) => ({
   label: type[0].toUpperCase() + type.slice(1),
 }));
 
-export function CreateWordForm({ lessonId, categories }: CreateWordFormProps) {
+export function CreateWordForm({ languageDeckId, categories }: CreateWordFormProps) {
+  const t = useTranslations();
   const [state, action, pending] = useActionState(createWord, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -53,57 +55,60 @@ export function CreateWordForm({ lessonId, categories }: CreateWordFormProps) {
 
   return (
     <form ref={formRef} action={action} className="flex flex-col gap-4">
-      <input type="hidden" name="lessonId" value={lessonId} />
-      <TextField label="Term" name="term" errors={state?.errors?.term} />
+      <input type="hidden" name="languageDeckId" value={languageDeckId} />
+      <TextField label={t("admin_word_form.term", "Term")} name="term" errors={state?.errors?.term} />
       <TextField
-        label="Translation"
+        label={t("admin_word_form.translation", "Translation")}
         name="translation"
         errors={state?.errors?.translation}
       />
       <TextField
-        label="Romanization"
+        label={t("admin_word_form.romanization", "Romanization")}
         name="romanization"
         required={false}
-        placeholder="Optional pronunciation aid"
+        placeholder={t("admin_word_form.romanization_placeholder", "Optional pronunciation aid")}
         errors={state?.errors?.romanization}
       />
       <TextareaField
-        label="Example sentence"
+        label={t("admin_word_form.example_sentence", "Example sentence")}
         name="exampleSentence"
-        placeholder="Optional"
+        placeholder={t("common.optional", "Optional")}
         errors={state?.errors?.exampleSentence}
       />
       <TextareaField
-        label="Explanation (English)"
+        label={t("admin_word_form.explanation_en", "Explanation (English)")}
         name="explanation"
-        placeholder="Optional — a plain-language definition"
+        placeholder={t(
+          "admin_word_form.explanation_en_placeholder",
+          "Optional — a plain-language definition",
+        )}
         errors={state?.errors?.explanation}
       />
       <TextareaField
-        label="Explanation (Japanese)"
+        label={t("admin_word_form.explanation_ja", "Explanation (Japanese)")}
         name="explanationJa"
-        placeholder="Optional"
+        placeholder={t("common.optional", "Optional")}
         errors={state?.errors?.explanationJa}
       />
       <SelectField
-        label="Category"
+        label={t("admin_word_form.category", "Category")}
         name="categoryId"
         required={false}
-        placeholder="No category"
+        placeholder={t("admin_word_form.no_category", "No category")}
         options={categories.map((category) => ({ value: category.id, label: category.name }))}
         errors={state?.errors?.categoryId}
       />
       <SelectField
-        label="Word type"
+        label={t("admin_word_form.word_type", "Word type")}
         name="wordType"
         required={false}
-        placeholder="No word type"
+        placeholder={t("admin_word_form.no_word_type", "No word type")}
         options={WORD_TYPE_OPTIONS}
         errors={state?.errors?.wordType}
       />
       <WordFormsFields key={resetCount} />
       <FileField
-        label="Picture"
+        label={t("admin_word_form.picture", "Picture")}
         name="image"
         accept="image/webp,image/png,image/jpeg"
         onChange={handleImageChange}
@@ -113,7 +118,7 @@ export function CreateWordForm({ lessonId, categories }: CreateWordFormProps) {
         // eslint-disable-next-line @next/next/no-img-element -- local blob preview, not a hosted asset.
         <img
           src={previewUrl}
-          alt="Preview"
+          alt={t("common.preview", "Preview")}
           className="h-32 w-32 rounded-lg object-cover"
         />
       )}
@@ -122,8 +127,8 @@ export function CreateWordForm({ lessonId, categories }: CreateWordFormProps) {
           {state.message}
         </p>
       )}
-      <SubmitButton pending={pending} pendingText="Adding…">
-        Add word
+      <SubmitButton pending={pending} pendingText={t("admin_word_form.adding", "Adding…")}>
+        {t("admin_word_form.add_word", "Add word")}
       </SubmitButton>
     </form>
   );

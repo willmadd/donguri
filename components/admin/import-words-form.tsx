@@ -4,22 +4,24 @@ import { useActionState } from "react";
 import { importWords } from "@/lib/actions/admin-content";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordImage } from "@/components/ui/word-image";
+import { useTranslations } from "@/components/i18n/locale-provider";
 import type { AdminWordSummary } from "@/lib/definitions";
 
 type ImportWordsFormProps = {
-  targetLessonId: string;
+  targetLanguageDeckId: string;
   // `imageSrc` is precomputed server-side (via `wordImagePath`, which pulls
   // in the server-only bunny.net client) so this client component never has
   // to import that chain itself.
   words: (AdminWordSummary & { imageSrc: string })[];
 };
 
-export function ImportWordsForm({ targetLessonId, words }: ImportWordsFormProps) {
+export function ImportWordsForm({ targetLanguageDeckId, words }: ImportWordsFormProps) {
+  const t = useTranslations();
   const [state, action, pending] = useActionState(importWords, undefined);
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      <input type="hidden" name="targetLessonId" value={targetLessonId} />
+      <input type="hidden" name="targetLanguageDeckId" value={targetLanguageDeckId} />
 
       <div className="flex flex-col gap-2">
         {words.map((word) => (
@@ -47,8 +49,8 @@ export function ImportWordsForm({ targetLessonId, words }: ImportWordsFormProps)
       ))}
       {state?.message && <p className="text-sm text-shu">{state.message}</p>}
 
-      <SubmitButton pending={pending} pendingText="Importing…">
-        Import selected words
+      <SubmitButton pending={pending} pendingText={t("admin_import_form.importing", "Importing…")}>
+        {t("admin_import_form.submit", "Import selected words")}
       </SubmitButton>
     </form>
   );

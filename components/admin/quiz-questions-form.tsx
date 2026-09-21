@@ -7,6 +7,7 @@ import {
   type WordQuizQuestionsFieldsInitial,
 } from "@/components/admin/word-quiz-questions-fields";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type QuizQuestionsFormProps = {
   wordId: string;
@@ -14,6 +15,7 @@ type QuizQuestionsFormProps = {
 };
 
 export function QuizQuestionsForm({ wordId, initialQuestions }: QuizQuestionsFormProps) {
+  const t = useTranslations();
   const [state, action, pending] = useActionState(saveQuizQuestions, undefined);
 
   return (
@@ -23,8 +25,8 @@ export function QuizQuestionsForm({ wordId, initialQuestions }: QuizQuestionsFor
       {state?.message && (
         <p className={`text-sm ${state.success ? "text-matcha-dark" : "text-shu"}`}>{state.message}</p>
       )}
-      <SubmitButton pending={pending} pendingText="Saving…">
-        Save quiz questions
+      <SubmitButton pending={pending} pendingText={t("common.saving", "Saving…")}>
+        {t("admin_quiz_form.submit", "Save quiz questions")}
       </SubmitButton>
     </form>
   );

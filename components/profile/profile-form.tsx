@@ -5,6 +5,7 @@ import { updateProfile } from "@/lib/actions/profile";
 import { TextField } from "@/components/ui/text-field";
 import { TextareaField } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type ProfileFormProps = {
   fullName: string;
@@ -12,13 +13,19 @@ type ProfileFormProps = {
 };
 
 export function ProfileForm({ fullName, donguriConfigText }: ProfileFormProps) {
+  const t = useTranslations();
   const [state, action, pending] = useActionState(updateProfile, undefined);
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      <TextField label="Name" name="fullName" defaultValue={fullName} errors={state?.errors?.fullName} />
+      <TextField
+        label={t("profile_form.name", "Name")}
+        name="fullName"
+        defaultValue={fullName}
+        errors={state?.errors?.fullName}
+      />
       <TextareaField
-        label="Donguri configuration"
+        label={t("profile_form.donguri_config", "Donguri configuration")}
         name="donguriConfig"
         placeholder="{}"
         rows={8}
@@ -28,8 +35,8 @@ export function ProfileForm({ fullName, donguriConfigText }: ProfileFormProps) {
       {state?.message && (
         <p className={`text-sm ${state.success ? "text-matcha-dark" : "text-shu"}`}>{state.message}</p>
       )}
-      <SubmitButton pending={pending} pendingText="Saving…">
-        Save changes
+      <SubmitButton pending={pending} pendingText={t("profile_form.saving", "Saving…")}>
+        {t("profile_form.save_changes", "Save changes")}
       </SubmitButton>
     </form>
   );

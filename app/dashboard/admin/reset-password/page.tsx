@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { requireAdminProfile } from "@/lib/dal";
 import { AdminResetPasswordForm } from "@/components/admin/admin-reset-password-form";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { PageTitle, PageSubtitle } from "@/components/ui/page-heading";
+import { getTranslator } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: "Reset user password — Donguri",
@@ -9,27 +11,28 @@ export const metadata: Metadata = {
 
 export default async function AdminResetPasswordPage() {
   await requireAdminProfile();
+  const { t } = await getTranslator();
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <Breadcrumbs
           items={[
-            { href: "/dashboard", label: "Dashboard" },
-            { href: "/dashboard/admin", label: "Admin" },
-            { label: "Reset user password" },
+            { href: "/dashboard", label: t("breadcrumbs.dashboard", "Dashboard") },
+            { href: "/dashboard/admin", label: t("admin_hub.title", "Admin") },
+            { label: t("admin_reset_password.title", "Reset user password") },
           ]}
         />
-        <h1 className="text-2xl font-semibold text-sumi">
-          Reset a user&apos;s password
-        </h1>
-        <p className="mt-1 text-sumi-soft">
-          Enter the user&apos;s email and a new password. They won&apos;t be
-          notified automatically.
-        </p>
+        <PageTitle>{t("admin_hub.reset_password_title", "Reset a user's password")}</PageTitle>
+        <PageSubtitle>
+          {t(
+            "admin_reset_password.subtitle",
+            "Enter the user's email and a new password. They won't be notified automatically.",
+          )}
+        </PageSubtitle>
       </div>
 
-      <div className="max-w-sm rounded-2xl border border-sumi/10 bg-washi-soft p-8">
+      <div className="max-w-sm rounded-2xl border border-card-border bg-washi-soft p-8">
         <AdminResetPasswordForm />
       </div>
     </div>

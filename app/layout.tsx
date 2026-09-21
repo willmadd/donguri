@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
-import { Fredoka, Geist, Geist_Mono, Zen_Maru_Gothic } from "next/font/google";
+import { Geist_Mono, Nunito, Open_Sans } from "next/font/google";
 import "./globals.css";
 import GoogleAnalytics from "@/components/vocab/GoogleAnalytics";
 import { WebVitals } from "@/components/WebVitals";
+import { ThemeProvider } from "@/components/theme-provider";
+import { LocaleProvider } from "@/components/i18n/locale-provider";
+import { getLocale } from "@/lib/i18n/get-locale";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Site content — body text everywhere.
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -14,22 +20,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Hello Donguri brand headline font.
-const fredoka = Fredoka({
-  variable: "--font-fredoka",
+// Site titles — headings and the wordmark (see the `h1`-`h6` rule in
+// globals.css and font-nunito on the logo).
+const nunito = Nunito({
+  variable: "--font-nunito",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-// Toppan Bunkyu Midashi Gothic (the brand's Japanese headline font) isn't on
-// Google Fonts and has no next/font entry, so it can't be self-hosted here.
-// Zen Maru Gothic is a free, freely-licensed rounded gothic used as a
-// stand-in — swap this loader for next/font/local once real font files or a
-// hosted kit are available.
-const zenMaru = Zen_Maru_Gothic({
-  variable: "--font-zen-maru",
-  subsets: ["latin"],
-  weight: ["700", "900"],
+  weight: ["400", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -50,13 +46,23 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getLocale();
+  const dictionary = getDictionary(locale);
+
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} ${zenMaru.variable} h-full antialiased`}
+      lang={locale}
+      className={`${openSans.variable} ${geistMono.variable} ${nunito.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <LocaleProvider locale={locale} dictionary={dictionary}>
+            {children}
+          </LocaleProvider>
+        </ThemeProvider>
+      </body>
 
       {/* Google Analytics - @next/third-parties optimized - loads after hydration */}
       <GoogleAnalytics />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type ShareButtonProps = {
   title: string;
@@ -11,6 +13,7 @@ type ShareButtonProps = {
 // Web Share API where available (mobile browsers, most desktop Safari/Edge);
 // falls back to copying the message to the clipboard everywhere else.
 export function ShareButton({ title, text, className }: ShareButtonProps) {
+  const t = useTranslations();
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -33,15 +36,8 @@ export function ShareButton({ title, text, className }: ShareButtonProps) {
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleShare}
-      className={
-        className ??
-        "inline-flex h-11 items-center justify-center gap-2 rounded-full border border-sumi/15 px-6 font-medium text-sumi transition hover:border-sumi/30"
-      }
-    >
-      {copied ? "Copied to clipboard!" : "Share"}
-    </button>
+    <Button variant="outline" onClick={handleShare} className={className}>
+      {copied ? t("share_button.copied", "Copied to clipboard!") : t("share_button.share", "Share")}
+    </Button>
   );
 }

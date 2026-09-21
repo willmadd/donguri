@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { equipAccessory } from "@/lib/actions/donguri";
 import { ACCESSORIES, type AccessoryId } from "@/lib/levels";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type AccessoryPickerProps = {
   unlockedAccessories: AccessoryId[];
@@ -24,6 +25,7 @@ export function AccessoryPicker({
   locked = false,
   onEquipped,
 }: AccessoryPickerProps) {
+  const t = useTranslations();
   const [current, setCurrent] = useState(equippedAccessory);
   const [pending, setPending] = useState(false);
 
@@ -62,7 +64,7 @@ export function AccessoryPicker({
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-washi-soft text-2xl">
             🌰
           </span>
-          None
+          {t("accessory_picker.none", "None")}
         </button>
 
         {unlocked.map((accessory) => (
@@ -80,8 +82,8 @@ export function AccessoryPicker({
             }`}
           >
             {highlightAccessories.includes(accessory.id) && (
-              <span className="absolute -top-2 -right-2 rounded-full bg-shu px-2 py-0.5 text-[10px] font-bold text-white">
-                New!
+              <span className="absolute -top-2 -right-2 rounded-full bg-shu px-2 py-0.5 text-[10px] font-bold text-washi">
+                {t("accessory_picker.new_badge", "New!")}
               </span>
             )}
             <Image
@@ -98,7 +100,10 @@ export function AccessoryPicker({
 
       {locked && (
         <p className="mt-3 text-center text-sm text-sumi-soft">
-          Your look is locked in — change it again next time you level up.
+          {t(
+            "accessory_picker.locked",
+            "Your look is locked in — change it again next time you level up.",
+          )}
         </p>
       )}
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   submitAnswer,
   submitFormAnswer,
@@ -15,6 +14,9 @@ import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
 import { XpCounter } from "@/components/xp/xp-counter";
 import { LevelUpModal } from "@/components/donguri/level-up-modal";
+import { Button } from "@/components/ui/button";
+import { PageTitle, PageSubtitle } from "@/components/ui/page-heading";
+import { useTranslations } from "@/components/i18n/locale-provider";
 import { parseDonguriConfig, formatXp, type AccessoryId } from "@/lib/levels";
 
 type TestSessionProps = {
@@ -38,6 +40,7 @@ export const TestSession = ({
   initialXp,
   initialDonguriConfig,
 }: TestSessionProps) => {
+  const t = useTranslations();
   const [quizIndex, setQuizIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -187,27 +190,36 @@ export const TestSession = ({
     const perfectScore = totalAnswers > 0 && score.incorrect === 0;
 
     return (
-      <section className="mx-auto flex w-full max-w-lg flex-col items-center rounded-3xl border border-sumi/10 bg-washi-soft px-6 py-14 text-center shadow-sm sm:px-10">
+      <section className="mx-auto flex w-full max-w-lg flex-col items-center rounded-3xl border border-card-border bg-washi-soft px-6 py-14 text-center shadow-sm sm:px-10">
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-matcha-soft text-3xl text-matcha-dark">
           {perfectScore ? "★" : "✓"}
         </span>
 
-        <h1 className="mt-5 text-2xl font-semibold text-sumi">
-          {perfectScore ? "Perfect score!" : "Lovely work today!"}
-        </h1>
+        <PageTitle className="mt-5">
+          {perfectScore
+            ? t("test_session.perfect_score", "Perfect score!")
+            : t("test_session.lovely_work", "Lovely work today!")}
+        </PageTitle>
 
-        <p className="mt-2 max-w-sm text-sumi-soft">
-          Every practice session helps these words stick a little better.
-        </p>
+        <PageSubtitle className="mt-2 max-w-sm">
+          {t(
+            "test_session.results_subtitle",
+            "Every practice session helps these words stick a little better.",
+          )}
+        </PageSubtitle>
 
         <div className="mt-6 flex flex-col items-center gap-2">
           <XpCounter value={xp} />
           {bonusAwarded && (
-            <span className="text-sm font-medium text-matcha-dark">+5 bonus for a perfect quiz!</span>
+            <span className="text-sm font-medium text-matcha-dark">
+              {t("test_session.perfect_bonus", "+5 bonus for a perfect quiz!")}
+            </span>
           )}
           {streakBonus > 0 && (
             <span className="text-sm font-medium text-matcha-dark">
-              +{formatXp(streakBonus)} streak bonus!
+              {t("test_session.streak_bonus", "+{{amount}} streak bonus!", {
+                amount: formatXp(streakBonus),
+              })}
             </span>
           )}
         </div>
@@ -215,21 +227,27 @@ export const TestSession = ({
         <div className="mt-7 grid w-full grid-cols-2 gap-3">
           <div className="rounded-2xl bg-matcha-soft px-4 py-5">
             <p className="text-2xl font-semibold text-matcha-dark">{score.correct}</p>
-            <p className="mt-1 text-sm text-matcha-dark/80">Correct</p>
+            <p className="mt-1 text-sm text-matcha-dark/80">
+              {t("test_session.correct", "Correct")}
+            </p>
           </div>
 
           <div className="rounded-2xl bg-ai-soft px-4 py-5">
             <p className="text-2xl font-semibold text-ai-dark">{score.incorrect}</p>
-            <p className="mt-1 text-sm text-ai-dark/80">To practise again</p>
+            <p className="mt-1 text-sm text-ai-dark/80">
+              {t("test_session.to_practise_again", "To practise again")}
+            </p>
           </div>
         </div>
 
-        <Link
+        <Button
           href={`/dashboard/courses/${courseSlug}`}
-          className="mt-8 inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
+          size="lg"
+          fullWidth
+          className="mt-8 shadow-sm hover:-translate-y-0.5 hover:shadow-md"
         >
-          Back to course
-        </Link>
+          {t("test_session.back_to_course", "Back to course")}
+        </Button>
 
         {levelUpInfo && (
           <LevelUpModal
@@ -255,12 +273,23 @@ export const TestSession = ({
       </div>
 
       <div className="mb-7 flex flex-col items-center gap-3 text-center">
-        <span className="rounded-full bg-ai-soft px-4 py-1.5 text-sm font-medium text-ai-dark">
-          Quick review
+        <span
+          className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+            question.path === "grammar"
+              ? "bg-matcha-soft text-matcha-dark"
+              : "bg-ai-soft text-ai-dark"
+          }`}
+        >
+          {question.path === "grammar"
+            ? t("course_home.grammar", "Grammar")
+            : t("course_home.vocabulary", "Vocabulary")}
         </span>
 
         <p className="text-sm text-sumi-soft">
-          Question {quizIndex + 1} of {quiz.length}
+          {t("test_session.question_progress", "Question {{current}} of {{total}}", {
+            current: quizIndex + 1,
+            total: quiz.length,
+          })}
         </p>
 
         <ProgressDots current={quizIndex + 1} total={quiz.length} />
@@ -268,9 +297,9 @@ export const TestSession = ({
 
       {question.kind === "type-form" || question.kind === "form-choice" ? (
         <>
-          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+          <div className="w-full rounded-3xl border border-card-border bg-washi-soft p-7 text-center shadow-sm sm:p-9">
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
-              Fill in the blank
+              {t("test_session.fill_in_the_blank", "Fill in the blank")}
             </p>
             <p className="mt-3 text-lg text-sumi-soft">{question.clozeSentenceJa}</p>
             <p className="mt-2 text-2xl font-semibold text-sumi">{question.clozeSentence}</p>
@@ -293,18 +322,20 @@ export const TestSession = ({
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
-                placeholder="Type your answer"
+                placeholder={t("test_session.type_answer_placeholder", "Type your answer")}
                 className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
               />
 
               {!feedback && (
-                <button
+                <Button
                   type="submit"
                   disabled={pending || typedAnswer.trim() === ""}
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
+                  size="lg"
+                  fullWidth
+                  className="shadow-sm hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0"
                 >
-                  Check
-                </button>
+                  {t("test_session.check", "Check")}
+                </Button>
               )}
             </form>
           ) : (
@@ -341,8 +372,10 @@ export const TestSession = ({
         </>
       ) : question.kind === "custom-choice" || question.kind === "custom-type" ? (
         <>
-          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
-            <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">Quiz question</p>
+          <div className="w-full rounded-3xl border border-card-border bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+            <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
+              {t("test_session.quiz_question", "Quiz question")}
+            </p>
             <p className="mt-3 text-2xl font-semibold text-sumi">{question.prompt}</p>
             {question.promptJa && <p className="mt-2 text-sumi-soft">{question.promptJa}</p>}
           </div>
@@ -364,18 +397,20 @@ export const TestSession = ({
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
-                placeholder="Type your answer"
+                placeholder={t("test_session.type_answer_placeholder", "Type your answer")}
                 className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
               />
 
               {!feedback && (
-                <button
+                <Button
                   type="submit"
                   disabled={pending || typedAnswer.trim() === ""}
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
+                  size="lg"
+                  fullWidth
+                  className="shadow-sm hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0"
                 >
-                  Check
-                </button>
+                  {t("test_session.check", "Check")}
+                </Button>
               )}
             </form>
           ) : (
@@ -412,7 +447,7 @@ export const TestSession = ({
         </>
       ) : question.kind === "type-answer" ? (
         <>
-          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+          <div className="w-full rounded-3xl border border-card-border bg-washi-soft p-7 text-center shadow-sm sm:p-9">
             {question.direction === "translation-to-term" ? null : (
               <WordImage
                 src={question.image}
@@ -421,7 +456,9 @@ export const TestSession = ({
               />
             )}
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
-              {question.direction === "translation-to-term" ? "What does this mean?" : "Type the word"}
+              {question.direction === "translation-to-term"
+                ? t("test_session.what_does_this_mean", "What does this mean?")
+                : t("test_session.type_the_word", "Type the word")}
             </p>
             <div className="mt-3 flex items-center justify-center gap-3">
               <p className="text-3xl font-semibold text-sumi capitalize">{question.prompt}</p>
@@ -451,24 +488,26 @@ export const TestSession = ({
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              placeholder="Type your answer"
+              placeholder={t("test_session.type_answer_placeholder", "Type your answer")}
               className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
             />
 
             {!feedback && (
-              <button
+              <Button
                 type="submit"
                 disabled={pending || typedAnswer.trim() === ""}
-                className="inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
+                size="lg"
+                fullWidth
+                className="shadow-sm hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0"
               >
-                Check
-              </button>
+                {t("test_session.check", "Check")}
+              </Button>
             )}
           </form>
         </>
       ) : (
         <>
-          <div className="w-full rounded-3xl border border-sumi/10 bg-washi-soft p-7 text-center shadow-sm sm:p-9">
+          <div className="w-full rounded-3xl border border-card-border bg-washi-soft p-7 text-center shadow-sm sm:p-9">
             {question.direction === "translation-to-term" ? null : (
               <WordImage
                 src={question.image}
@@ -478,8 +517,8 @@ export const TestSession = ({
             )}
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
               {question.direction === "translation-to-term"
-                ? "What does this mean?"
-                : "Can you find the right word?"}
+                ? t("test_session.what_does_this_mean", "What does this mean?")
+                : t("test_session.find_the_right_word", "Can you find the right word?")}
             </p>
             <div className="mt-3 flex items-center justify-center gap-3">
               <p className="text-3xl font-semibold text-sumi capitalize">{question.prompt}</p>
@@ -526,7 +565,9 @@ export const TestSession = ({
                     type="button"
                     disabled={pending || Boolean(feedback)}
                     onClick={() => handleMultipleChoiceAnswer(option)}
-                    aria-label={`Choose ${option.text}`}
+                    aria-label={t("test_session.choose_option", "Choose {{option}}", {
+                      option: option.text,
+                    })}
                     className="flex min-w-0 flex-1 items-center self-stretch text-left font-medium disabled:cursor-not-allowed"
                   >
                     <span className="capitalize">
@@ -540,16 +581,16 @@ export const TestSession = ({
                   </button>
                   {feedback && isCorrectOption && (
                     <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-matcha text-sm text-white"
-                      aria-label="Correct answer"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-matcha text-sm text-washi"
+                      aria-label={t("test_session.correct_answer_aria", "Correct answer")}
                     >
                       ✓
                     </span>
                   )}
                   {feedback && isSelected && !feedback.correct && (
                     <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-shu text-sm text-white"
-                      aria-label="Incorrect answer"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-shu text-sm text-washi"
+                      aria-label={t("test_session.incorrect_answer_aria", "Incorrect answer")}
                     >
                       ×
                     </span>
@@ -572,25 +613,31 @@ export const TestSession = ({
           }`}
         >
           <p className="font-semibold">
-            {feedback.correct ? "Great job! You got it." : "Almost! You’ll get it next time."}
+            {feedback.correct
+              ? t("test_session.great_job", "Great job! You got it.")
+              : t("test_session.almost", "Almost! You'll get it next time.")}
           </p>
 
           {!feedback.correct && (
             <p className="mt-1 text-sm">
-              The correct answer is <strong>{feedback.correctAnswer}</strong>.
+              {t("test_session.correct_answer_is", "The correct answer is")}{" "}
+              <strong>{feedback.correctAnswer}</strong>.
             </p>
           )}
         </div>
       )}
 
       {feedback && (
-        <button
-          type="button"
+        <Button
           onClick={advance}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-ai px-7 font-medium text-washi shadow-sm transition hover:-translate-y-0.5 hover:bg-ai-dark hover:shadow-md"
+          size="lg"
+          fullWidth
+          className="mt-5 shadow-sm hover:-translate-y-0.5 hover:shadow-md"
         >
-          {quizIndex + 1 < quiz.length ? "Next question" : "See my results"}
-        </button>
+          {quizIndex + 1 < quiz.length
+            ? t("test_session.next_question", "Next question")
+            : t("test_session.see_my_results", "See my results")}
+        </Button>
       )}
     </section>
   );

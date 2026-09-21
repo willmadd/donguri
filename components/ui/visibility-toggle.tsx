@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useTransition } from "react";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type VisibilityToggleProps = {
   active: boolean;
@@ -23,8 +24,13 @@ export function VisibilityToggle({
   active,
   toggleAction,
   label,
-  statusLabels = { on: "Visible", off: "Hidden" },
+  statusLabels,
 }: VisibilityToggleProps) {
+  const t = useTranslations();
+  const resolvedStatusLabels = statusLabels ?? {
+    on: t("visibility_toggle.visible", "Visible"),
+    off: t("visibility_toggle.hidden", "Hidden"),
+  };
   const [optimisticActive, setOptimisticActive] = useOptimistic(active);
   const [pending, startTransition] = useTransition();
 
@@ -39,13 +45,17 @@ export function VisibilityToggle({
   return (
     <div className="flex shrink-0 items-center gap-2">
       <span className="text-sm text-sumi-soft">
-        {optimisticActive ? statusLabels.on : statusLabels.off}
+        {optimisticActive ? resolvedStatusLabels.on : resolvedStatusLabels.off}
       </span>
       <button
         type="button"
         role="switch"
         aria-checked={optimisticActive}
-        aria-label={`${optimisticActive ? "Hide" : "Show"} ${label}`}
+        aria-label={
+          optimisticActive
+            ? t("visibility_toggle.hide_aria", "Hide {{label}}", { label })
+            : t("visibility_toggle.show_aria", "Show {{label}}", { label })
+        }
         onClick={handleClick}
         disabled={pending}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${

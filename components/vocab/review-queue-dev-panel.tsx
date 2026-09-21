@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReviewQueueDebugEntry } from "@/lib/definitions";
+import { useTranslations } from "@/components/i18n/locale-provider";
 
 type ReviewQueueDevPanelProps = {
   entries: ReviewQueueDebugEntry[];
@@ -36,6 +37,7 @@ function formatDueIn(date: Date): string {
 }
 
 export function ReviewQueueDevPanel({ entries }: ReviewQueueDevPanelProps) {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
 
   return (
@@ -46,32 +48,38 @@ export function ReviewQueueDevPanel({ entries }: ReviewQueueDevPanelProps) {
         className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition ${
           open
             ? "border-kin bg-kin/15 text-sumi"
-            : "border-sumi/15 text-sumi-soft hover:border-sumi/30 hover:text-sumi"
+            : "border-ghost-border text-ghost-text hover:bg-ghost-hover"
         }`}
       >
-        🛠 Dev mode
+        {t("review_queue_dev.toggle", "🛠 Dev mode")}
       </button>
 
       {open && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-sumi/10 bg-washi-soft">
+        <div className="mt-4 overflow-hidden rounded-2xl border border-card-border bg-washi-soft">
           <div className="border-b border-sumi/10 px-4 py-3">
-            <p className="text-sm font-semibold text-sumi">Review queue (admin only)</p>
+            <p className="text-sm font-semibold text-sumi">
+              {t("review_queue_dev.title", "Review queue (admin only)")}
+            </p>
             <p className="text-xs text-sumi-soft">
-              Every word tracked for this deck — vocabulary and grammar together — and when each
-              one is next due.
+              {t(
+                "review_queue_dev.subtitle",
+                "Every word tracked for this deck — vocabulary and grammar together — and when each one is next due.",
+              )}
             </p>
           </div>
 
           {entries.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-sumi-soft">Nothing learned in this deck yet.</p>
+            <p className="px-4 py-4 text-sm text-sumi-soft">
+              {t("review_queue_dev.empty", "Nothing learned in this deck yet.")}
+            </p>
           ) : (
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-washi-soft text-xs uppercase tracking-wide text-sumi-soft">
                   <tr>
-                    <th className="px-4 py-2 font-medium">Term</th>
-                    <th className="px-4 py-2 font-medium">Stage</th>
-                    <th className="px-4 py-2 font-medium">Due</th>
+                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.term", "Term")}</th>
+                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.stage", "Stage")}</th>
+                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.due", "Due")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -86,9 +94,9 @@ export function ReviewQueueDevPanel({ entries }: ReviewQueueDevPanelProps) {
                       </td>
                       <td className="px-4 py-2 text-sumi-soft">
                         {entry.lastSeenAt === null
-                          ? "not quizzed yet"
+                          ? t("review_queue_dev.not_quizzed", "not quizzed yet")
                           : entry.nextReviewAt === null
-                            ? "mastered"
+                            ? t("review_queue_dev.mastered", "mastered")
                             : formatDueIn(entry.nextReviewAt)}
                       </td>
                     </tr>

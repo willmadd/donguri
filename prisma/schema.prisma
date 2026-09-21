@@ -11,6 +11,8 @@ model Profile {
   id              String               @id @db.Uuid
   email           String
   fullName        String?              @map("full_name")
+  firstName       String?              @map("first_name")
+  lastName        String?              @map("last_name")
   role            String               @default("user")
   createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
@@ -60,7 +62,7 @@ model Course {
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   active         Boolean            @default(true)
   enrollments    CourseEnrollment[]
-  lessons        Lesson[]
+  languageDecks  LanguageDeck[]
 
   @@map("courses")
 }
@@ -86,49 +88,54 @@ model CourseEnrollment {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Lesson {
-  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  path        String
-  title       String
-  position    Int
-  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  courseId    String               @map("course_id") @db.Uuid
-  active      Boolean              @default(true)
-  course      Course               @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  activations UserDeckActivation[]
-  words       Word[]
+model LanguageDeck {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  path          String
+  title         String
+  subheading    String?
+  description   String?
+  coverImageKey String?              @map("cover_image_key")
+  bgColor       String?              @map("bg_color")
+  primaryColor  String?              @map("primary_color")
+  position      Int
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  courseId      String               @map("course_id") @db.Uuid
+  active        Boolean              @default(true)
+  course        Course               @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  activations   UserDeckActivation[]
+  words         Word[]
 
   @@unique([courseId, path, position])
-  @@map("lessons")
+  @@map("language_decks")
 }
 
 // A user's personal "active decks" list within a course — which decks
 // currently feed the Learn/Test pool (see getActiveDeckIds/
 // getLearnQueueForCourse in lib/dal.ts). Only ever keyed by a `path: 'vocab'`
-// Lesson (a "deck"); its grammar sibling, if any, activates implicitly along
-// with it. `active` is a real column (not row presence/absence) so
+// LanguageDeck (a "deck"); its grammar sibling, if any, activates implicitly
+// along with it. `active` is a real column (not row presence/absence) so
 // "explicitly deactivated" stays distinguishable from "never touched" even
 // after every deck is turned off — getActiveDeckIds needs that distinction
 // to only lazily auto-activate the first deck once, on a brand-new
 // enrollment, never re-activating something the user deliberately turned off.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model UserDeckActivation {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  lessonId  String   @map("lesson_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  active    Boolean  @default(true)
-  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  languageDeckId String       @map("language_deck_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  active         Boolean      @default(true)
+  languageDeck   LanguageDeck @relation(fields: [languageDeckId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile        Profile      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([userId, lessonId])
+  @@unique([userId, languageDeckId])
   @@map("user_deck_activations")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Word {
   id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lessonId        String             @map("lesson_id") @db.Uuid
+  languageDeckId  String             @map("language_deck_id") @db.Uuid
   term            String
   translation     String
   exampleSentence String?            @map("example_sentence")
@@ -146,9 +153,9 @@ model Word {
   forms           WordForm[]
   quizQuestions   WordQuizQuestion[]
   category        WordCategory?      @relation(fields: [categoryId], references: [id], onUpdate: NoAction)
-  lesson          Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  languageDeck    LanguageDeck       @relation(fields: [languageDeckId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([lessonId, position])
+  @@unique([languageDeckId, position])
   @@map("words")
 }
 
@@ -241,7 +248,7 @@ model UserWordProgress {
 
 // A cross-deck topical tag with its own admin-managed color — distinct from
 // a "category" elsewhere in this app, which is the admin UI's name for a
-// `Lesson` (deck). E.g. the "Colours" word-category can appear on words
+// `LanguageDeck` (deck). E.g. the "Colours" word-category can appear on words
 // inside a "TOEIC Basic" deck.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model WordCategory {

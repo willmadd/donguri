@@ -23,11 +23,19 @@ function extensionForMime(mime: string): string {
   }
 }
 
-export function buildWordImageKey(mime: string): string {
-  return `words/${crypto.randomUUID()}.${extensionForMime(mime)}`;
+function buildImageKey(prefix: string, mime: string): string {
+  return `${prefix}/${crypto.randomUUID()}.${extensionForMime(mime)}`;
 }
 
-export async function uploadWordImage(file: File, key: string): Promise<void> {
+export function buildWordImageKey(mime: string): string {
+  return buildImageKey("words", mime);
+}
+
+export function buildDeckCoverImageKey(mime: string): string {
+  return buildImageKey("decks", mime);
+}
+
+export async function uploadImage(file: File, key: string): Promise<void> {
   const endpoint =
     process.env.BUNNY_STORAGE_ENDPOINT || "https://storage.bunnycdn.com";
   const zone = requireEnv("BUNNY_STORAGE_ZONE");
@@ -48,6 +56,6 @@ export async function uploadWordImage(file: File, key: string): Promise<void> {
   }
 }
 
-export function wordImageUrl(imageKey: string): string {
+export function imageUrl(imageKey: string): string {
   return `https://${requireEnv("BUNNY_PULL_ZONE_HOST")}/${imageKey}`;
 }

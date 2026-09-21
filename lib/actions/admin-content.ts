@@ -5,13 +5,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { buildWordImageKey, uploadWordImage } from "@/lib/bunny";
+import { buildDeckCoverImageKey, buildWordImageKey, uploadImage } from "@/lib/bunny";
 import {
   BulkQuizQuestionsSchema,
   CreateCategoryFormSchema,
   CreateWordCategoryFormSchema,
   CreateWordFormSchema,
   ImportWordsFormSchema,
+  UpdateCategoryFormSchema,
   UpdateWordCategoryFormSchema,
   UpdateWordFormSchema,
   WordExampleInputSchema,
@@ -23,6 +24,7 @@ import {
   type CreateWordFormState,
   type ImportWordsFormState,
   type SaveQuizQuestionsFormState,
+  type UpdateCategoryFormState,
   type UpdateWordCategoryFormState,
   type UpdateWordFormState,
 } from "@/lib/definitions";
@@ -131,7 +133,7 @@ export async function saveQuizQuestions(
 
   const word = await prisma.word.findUnique({
     where: { id: wordId },
-    select: { lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+    select: { languageDeckId: true, languageDeck: { select: { course: { select: { slug: true } } } } },
   });
 
   if (!word) {
@@ -166,7 +168,7 @@ export async function saveQuizQuestions(
   ]);
 
   revalidatePath(
-    `/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}/words/${wordId}/quiz`,
+    `/dashboard/admin/courses/${word.languageDeck.course.slug}/categories/${word.languageDeckId}/words/${wordId}/quiz`,
   );
 
   return { success: true, message: "Quiz questions saved." };
@@ -218,7 +220,7 @@ export async function bulkImportQuizQuestions(
 
   const word = await prisma.word.findUnique({
     where: { id: wordId },
-    select: { lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+    select: { languageDeckId: true, languageDeck: { select: { course: { select: { slug: true } } } } },
   });
 
   if (!word) {
@@ -242,7 +244,7 @@ export async function bulkImportQuizQuestions(
   });
 
   revalidatePath(
-    `/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}/words/${wordId}/quiz`,
+    `/dashboard/admin/courses/${word.languageDeck.course.slug}/categories/${word.languageDeckId}/words/${wordId}/quiz`,
   );
 
   return {
@@ -266,16 +268,32 @@ export async function createCategory(
     return { message: "You don't have permission to do that." };
   }
 
+  const rawCoverImage = formData.get("coverImage");
+  const coverImage = rawCoverImage instanceof File && rawCoverImage.size > 0 ? rawCoverImage : undefined;
+
   const validatedFields = CreateCategoryFormSchema.safeParse({
     courseId: formData.get("courseId"),
     title: formData.get("title"),
+    subheading: formData.get("subheading") || undefined,
+    description: formData.get("description") || undefined,
+    coverImage,
+    bgColor: formData.get("bgColor") || undefined,
+    primaryColor: formData.get("primaryColor") || undefined,
   });
 
   if (!validatedFields.success) {
     return { errors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { courseId, title } = validatedFields.data;
+  const {
+    courseId,
+    title,
+    subheading,
+    description,
+    coverImage: validCoverImage,
+    bgColor,
+    primaryColor,
+  } = validatedFields.data;
 
   const course = await prisma.course.findUnique({
     where: { id: courseId },
@@ -286,21 +304,127 @@ export async function createCategory(
     return { message: "That course no longer exists." };
   }
 
-  // Category (Lesson) content only exists under `path: "vocab"` today — see
+  let coverImageKey: string | null = null;
+
+  if (validCoverImage) {
+    coverImageKey = buildDeckCoverImageKey(validCoverImage.type);
+
+    try {
+      await uploadImage(validCoverImage, coverImageKey);
+    } catch (error) {
+      console.error("Bunny image upload failed:", error);
+      return { message: "Cover image upload failed. Try again." };
+    }
+  }
+
+  // Category (LanguageDeck) content only exists under `path: "vocab"` today — see
   // the note in supabase/schema.sql. Not exposed as a form field.
-  const { _max } = await prisma.lesson.aggregate({
+  const { _max } = await prisma.languageDeck.aggregate({
     where: { courseId, path: "vocab" },
     _max: { position: true },
   });
 
-  const lesson = await prisma.lesson.create({
-    data: { courseId, path: "vocab", title, position: (_max.position ?? 0) + 1 },
+  const languageDeck = await prisma.languageDeck.create({
+    data: {
+      courseId,
+      path: "vocab",
+      title,
+      subheading: subheading || null,
+      description: description || null,
+      coverImageKey,
+      bgColor: bgColor || null,
+      primaryColor: primaryColor || null,
+      position: (_max.position ?? 0) + 1,
+    },
   });
 
   revalidatePath(`/dashboard/admin/courses/${course.slug}`);
   revalidatePath(`/dashboard/courses/${course.slug}`);
 
-  return { success: true, message: `"${title}" created.`, lessonId: lesson.id };
+  return { success: true, message: `"${title}" created.`, languageDeckId: languageDeck.id };
+}
+
+// A new cover image replaces the old one (fresh key, old bunny.net object
+// left orphaned — same tradeoff as `updateWord`'s image handling below);
+// omitting it keeps whatever is already there.
+export async function updateCategory(
+  _state: UpdateCategoryFormState,
+  formData: FormData,
+): Promise<UpdateCategoryFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const rawCoverImage = formData.get("coverImage");
+  const coverImage = rawCoverImage instanceof File && rawCoverImage.size > 0 ? rawCoverImage : undefined;
+
+  const validatedFields = UpdateCategoryFormSchema.safeParse({
+    languageDeckId: formData.get("languageDeckId"),
+    title: formData.get("title"),
+    subheading: formData.get("subheading") || undefined,
+    description: formData.get("description") || undefined,
+    coverImage,
+    bgColor: formData.get("bgColor") || undefined,
+    primaryColor: formData.get("primaryColor") || undefined,
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const {
+    languageDeckId,
+    title,
+    subheading,
+    description,
+    coverImage: validCoverImage,
+    bgColor,
+    primaryColor,
+  } = validatedFields.data;
+
+  const existing = await prisma.languageDeck.findUnique({
+    where: { id: languageDeckId },
+    select: { coverImageKey: true, course: { select: { slug: true } } },
+  });
+
+  if (!existing) {
+    return { message: "That deck no longer exists." };
+  }
+
+  let coverImageKey = existing.coverImageKey;
+
+  if (validCoverImage) {
+    coverImageKey = buildDeckCoverImageKey(validCoverImage.type);
+
+    try {
+      await uploadImage(validCoverImage, coverImageKey);
+    } catch (error) {
+      console.error("Bunny image upload failed:", error);
+      return { message: "Cover image upload failed. Try again." };
+    }
+  }
+
+  await prisma.languageDeck.update({
+    where: { id: languageDeckId },
+    data: {
+      title,
+      subheading: subheading || null,
+      description: description || null,
+      coverImageKey,
+      bgColor: bgColor || null,
+      primaryColor: primaryColor || null,
+    },
+  });
+
+  const courseSlug = existing.course.slug;
+  revalidatePath(`/dashboard/admin/courses/${courseSlug}`);
+  revalidatePath(`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}`);
+  revalidatePath(`/dashboard/courses/${courseSlug}`);
+  revalidatePath(`/dashboard/courses/${courseSlug}/decks/${languageDeckId}`);
+
+  redirect(`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}`);
 }
 
 export async function createWord(
@@ -319,7 +443,7 @@ export async function createWord(
   const image = rawImage instanceof File && rawImage.size > 0 ? rawImage : undefined;
 
   const validatedFields = CreateWordFormSchema.safeParse({
-    lessonId: formData.get("lessonId"),
+    languageDeckId: formData.get("languageDeckId"),
     term: formData.get("term"),
     translation: formData.get("translation"),
     romanization: formData.get("romanization") || undefined,
@@ -336,7 +460,7 @@ export async function createWord(
   }
 
   const {
-    lessonId,
+    languageDeckId,
     term,
     translation,
     romanization,
@@ -348,17 +472,17 @@ export async function createWord(
     image: validImage,
   } = validatedFields.data;
 
-  const lesson = await prisma.lesson.findUnique({
-    where: { id: lessonId },
+  const languageDeck = await prisma.languageDeck.findUnique({
+    where: { id: languageDeckId },
     select: { id: true, course: { select: { slug: true } } },
   });
 
-  if (!lesson) {
+  if (!languageDeck) {
     return { message: "That category no longer exists." };
   }
 
   const { _max } = await prisma.word.aggregate({
-    where: { lessonId },
+    where: { languageDeckId },
     _max: { position: true },
   });
 
@@ -368,7 +492,7 @@ export async function createWord(
     imageKey = buildWordImageKey(validImage.type);
 
     try {
-      await uploadWordImage(validImage, imageKey);
+      await uploadImage(validImage, imageKey);
     } catch (error) {
       console.error("Bunny image upload failed:", error);
       return { message: "Image upload failed. Try again." };
@@ -377,7 +501,7 @@ export async function createWord(
 
   const word = await prisma.word.create({
     data: {
-      lessonId,
+      languageDeckId,
       term,
       translation,
       romanization: romanization || null,
@@ -393,8 +517,8 @@ export async function createWord(
 
   await replaceWordFormsAndExamples(word.id, formData);
 
-  revalidatePath(`/dashboard/admin/courses/${lesson.course.slug}/categories/${lessonId}/words/new`);
-  revalidatePath(`/dashboard/courses/${lesson.course.slug}/decks/${lessonId}`);
+  revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}/words/new`);
+  revalidatePath(`/dashboard/courses/${languageDeck.course.slug}/decks/${languageDeckId}`);
 
   return { success: true, message: `"${term}" added.` };
 }
@@ -447,7 +571,7 @@ export async function updateWord(
 
   const existing = await prisma.word.findUnique({
     where: { id: wordId },
-    select: { imageKey: true, lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+    select: { imageKey: true, languageDeckId: true, languageDeck: { select: { course: { select: { slug: true } } } } },
   });
 
   if (!existing) {
@@ -460,7 +584,7 @@ export async function updateWord(
     imageKey = buildWordImageKey(validImage.type);
 
     try {
-      await uploadWordImage(validImage, imageKey);
+      await uploadImage(validImage, imageKey);
     } catch (error) {
       console.error("Bunny image upload failed:", error);
       return { message: "Image upload failed. Try again." };
@@ -484,11 +608,11 @@ export async function updateWord(
 
   await replaceWordFormsAndExamples(wordId, formData);
 
-  const courseSlug = existing.lesson.course.slug;
-  revalidatePath(`/dashboard/admin/courses/${courseSlug}/categories/${existing.lessonId}`);
-  revalidatePath(`/dashboard/courses/${courseSlug}/decks/${existing.lessonId}`);
+  const courseSlug = existing.languageDeck.course.slug;
+  revalidatePath(`/dashboard/admin/courses/${courseSlug}/categories/${existing.languageDeckId}`);
+  revalidatePath(`/dashboard/courses/${courseSlug}/decks/${existing.languageDeckId}`);
 
-  redirect(`/dashboard/admin/courses/${courseSlug}/categories/${existing.lessonId}`);
+  redirect(`/dashboard/admin/courses/${courseSlug}/categories/${existing.languageDeckId}`);
 }
 
 export async function setWordActive(wordId: string, active: boolean): Promise<void> {
@@ -501,28 +625,28 @@ export async function setWordActive(wordId: string, active: boolean): Promise<vo
   const word = await prisma.word.update({
     where: { id: wordId },
     data: { active },
-    select: { lessonId: true, lesson: { select: { course: { select: { slug: true } } } } },
+    select: { languageDeckId: true, languageDeck: { select: { course: { select: { slug: true } } } } },
   });
 
-  revalidatePath(`/dashboard/admin/courses/${word.lesson.course.slug}/categories/${word.lessonId}`);
-  revalidatePath(`/dashboard/courses/${word.lesson.course.slug}/decks/${word.lessonId}`);
+  revalidatePath(`/dashboard/admin/courses/${word.languageDeck.course.slug}/categories/${word.languageDeckId}`);
+  revalidatePath(`/dashboard/courses/${word.languageDeck.course.slug}/decks/${word.languageDeckId}`);
 }
 
-export async function setCategoryActive(lessonId: string, active: boolean): Promise<void> {
+export async function setCategoryActive(languageDeckId: string, active: boolean): Promise<void> {
   const profile = await requireProfile();
 
   if (profile.role !== "admin") {
     return;
   }
 
-  const lesson = await prisma.lesson.update({
-    where: { id: lessonId },
+  const languageDeck = await prisma.languageDeck.update({
+    where: { id: languageDeckId },
     data: { active },
     select: { course: { select: { slug: true } } },
   });
 
-  revalidatePath(`/dashboard/admin/courses/${lesson.course.slug}`);
-  revalidatePath(`/dashboard/courses/${lesson.course.slug}`);
+  revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}`);
+  revalidatePath(`/dashboard/courses/${languageDeck.course.slug}`);
 }
 
 export async function setCourseActive(courseId: string, active: boolean): Promise<void> {
@@ -541,8 +665,8 @@ export async function setCourseActive(courseId: string, active: boolean): Promis
   revalidatePath("/dashboard/courses");
 }
 
-// Clones the given words (by id, from whichever lesson they currently belong
-// to) into `targetLessonId`, appending position. Fresh ids/timestamps via
+// Clones the given words (by id, from whichever languageDeck they currently belong
+// to) into `targetLanguageDeckId`, appending position. Fresh ids/timestamps via
 // Prisma defaults; `UserWordProgress` is per-user and is never read or
 // written here. Unlike the other actions in this file, it redirects back to
 // the destination category on success rather than returning a FormState —
@@ -560,7 +684,7 @@ export async function importWords(
   }
 
   const validatedFields = ImportWordsFormSchema.safeParse({
-    targetLessonId: formData.get("targetLessonId"),
+    targetLanguageDeckId: formData.get("targetLanguageDeckId"),
     wordIds: formData.getAll("wordIds"),
   });
 
@@ -568,14 +692,14 @@ export async function importWords(
     return { errors: validatedFields.error.flatten().fieldErrors };
   }
 
-  const { targetLessonId, wordIds } = validatedFields.data;
+  const { targetLanguageDeckId, wordIds } = validatedFields.data;
 
-  const targetLesson = await prisma.lesson.findUnique({
-    where: { id: targetLessonId },
+  const targetLanguageDeck = await prisma.languageDeck.findUnique({
+    where: { id: targetLanguageDeckId },
     select: { id: true, course: { select: { slug: true } } },
   });
 
-  if (!targetLesson) {
+  if (!targetLanguageDeck) {
     return { message: "That category no longer exists." };
   }
 
@@ -589,7 +713,7 @@ export async function importWords(
   }
 
   const { _max } = await prisma.word.aggregate({
-    where: { lessonId: targetLessonId },
+    where: { languageDeckId: targetLanguageDeckId },
     _max: { position: true },
   });
 
@@ -608,7 +732,7 @@ export async function importWords(
         prisma.word.create({
           data: {
             id: newWordId,
-            lessonId: targetLessonId,
+            languageDeckId: targetLanguageDeckId,
             term: word.term,
             translation: word.translation,
             romanization: word.romanization,
@@ -652,12 +776,12 @@ export async function importWords(
     }),
   );
 
-  revalidatePath(`/dashboard/courses/${targetLesson.course.slug}/decks/${targetLessonId}`);
-  redirect(`/dashboard/admin/courses/${targetLesson.course.slug}/categories/${targetLessonId}`);
+  revalidatePath(`/dashboard/courses/${targetLanguageDeck.course.slug}/decks/${targetLanguageDeckId}`);
+  redirect(`/dashboard/admin/courses/${targetLanguageDeck.course.slug}/categories/${targetLanguageDeckId}`);
 }
 
 // Word categories (see the `WordCategory` model note in prisma/schema.prisma
-// for how this differs from a "category"/`Lesson` elsewhere in this file) —
+// for how this differs from a "category"/`LanguageDeck` elsewhere in this file) —
 // a small global lookup list, not scoped to a course, so create/update/delete
 // only ever revalidate the word-category admin page itself plus the generic
 // course-content paths a word's category badge could show up on.
