@@ -58,10 +58,16 @@
      (see the light-theme category checks in the dataviz skill): the action
      colors above sit too close in lightness/contrast to double as stacked
      bar fills, so these are tuned separately for that job while staying on
-     the same hues. */
-  --chart-vocab: #1a54c4;
-  --chart-grammar: #1ea346;
-  --chart-challenge: #d13d20;
+     the same hues.
+     Vocab and grammar intentionally share the blue hue family (both are
+     "core learning" content) with only lightness/chroma separating them —
+     validated at ΔE 16.0 normal-vision, below the categorical 8-color
+     adjacency floor but readable because the legend, tooltip and sr-only
+     table all carry identity as a secondary channel. Challenge gets its
+     own green so the one non-lesson activity stays visually distinct. */
+  --chart-vocab: #3d84e0;
+  --chart-grammar: #2354a0;
+  --chart-challenge: #178a3d;
 
   --background: var(--outer);
   --foreground: var(--sumi);
@@ -149,9 +155,9 @@
   --tag-foreground: #7cb8ff;
   --chart-line: #4e9cff;
   --chart-area: #4a4030;
-  --chart-vocab: #3d84e0;
-  --chart-grammar: #2f9c48;
-  --chart-challenge: #e2553c;
+  --chart-vocab: #4f8fe0;
+  --chart-grammar: #3a6099;
+  --chart-challenge: #2fae54;
 
   --background: var(--outer);
   --foreground: var(--sumi);

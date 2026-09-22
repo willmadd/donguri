@@ -47,6 +47,16 @@ export function CreateCategoryForm({ courseId }: CreateCategoryFormProps) {
         placeholder={t("common.optional", "Optional")}
         errors={state?.errors?.description}
       />
+      <TextField
+        label={t("admin_create_category.tags_label", "Tags")}
+        name="tags"
+        required={false}
+        placeholder={t(
+          "admin_create_category.tags_placeholder",
+          "e.g. Beginner, JLPT N5 (comma-separated)",
+        )}
+        errors={state?.errors?.tags}
+      />
       <FileField
         label={t("admin_create_category.cover_image_label", "Cover photo")}
         name="coverImage"

@@ -1330,3 +1330,12 @@ drop policy if exists "Users can create own daily challenge attempts" on public.
 create policy "Users can create own daily challenge attempts"
   on public.daily_challenge_attempts for insert
   with check (auth.uid() = user_id);
+
+-- 31. Deck tags -----------------------------------------------------------
+-- Short, free-text tags an admin can attach to a deck (e.g. "Beginner",
+-- "JLPT N5") — shown as small badges on the deck cards learners browse.
+-- A plain array column, not a normalized/shared table like word_categories:
+-- these are per-deck labels, not a reusable cross-deck taxonomy with its
+-- own admin-managed color.
+
+alter table public.language_decks add column if not exists tags text[] not null default '{}';

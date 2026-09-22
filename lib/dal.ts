@@ -14,6 +14,7 @@ import type {
   DailyActivityCount,
   DailyChallengeStatus,
   EnrolledCourseSummary,
+  GlobalStreak,
   LeaderboardEntry,
   LanguageDeckSummary,
   Profile,
@@ -30,11 +31,13 @@ import type {
 import {
   addDays,
   applyDailyActivity,
+  computeStreakFromActiveDays,
   MAX_STAGE,
   nextReviewAtForStage,
   SET_SIZE,
   stageInfo,
   startOfUTCDay,
+  toUTCDateString,
 } from "@/lib/srs";
 import { deckCoverImagePath, wordImagePath } from "@/lib/images";
 import { findClozeMatchesByForm, pickRandomClozeMatch } from "@/lib/cloze";
@@ -250,6 +253,7 @@ export const getAdminCategoryOverview = cache(
         position: languageDeck.position,
         wordCount: languageDeck._count.words,
         active: languageDeck.active,
+        tags: languageDeck.tags,
       })),
     };
   },
@@ -316,6 +320,7 @@ export const getAdminCategory = cache(async (languageDeckId: string) => {
     coverImageKey: languageDeck.coverImageKey,
     bgColor: languageDeck.bgColor,
     primaryColor: languageDeck.primaryColor,
+    tags: languageDeck.tags,
   };
 
   return { category, course: languageDeck.course };
@@ -553,6 +558,7 @@ function toLanguageDeckSummary(languageDeck: {
   coverImageKey: string | null;
   bgColor: string | null;
   primaryColor: string | null;
+  tags: string[];
   path: string;
   position: number;
   words: LanguageDeckWordRow[];
@@ -573,6 +579,7 @@ function toLanguageDeckSummary(languageDeck: {
     coverImage: deckCoverImagePath(languageDeck),
     bgColor: languageDeck.bgColor,
     primaryColor: languageDeck.primaryColor,
+    tags: languageDeck.tags,
     path: languageDeck.path,
     position: languageDeck.position,
     totalWords: words.length,
@@ -850,6 +857,39 @@ export const getDailyActivityCounts = cache(
     return days;
   },
 );
+
+// Account-wide streak, spanning every course the user is enrolled in —
+// deliberately not scoped to (or derived from) any single course's activity
+// chart, so switching which course gets practiced on a given day never
+// looks like a broken streak. See `computeStreakFromActiveDays` in
+// lib/srs.ts for the "what counts as an active day" rule. XP/level are
+// deliberately not duplicated here — they're read straight from
+// `Profile.xp` wherever they're shown, same as the header badge.
+export const getGlobalStreak = cache(async (): Promise<GlobalStreak> => {
+  const user = await requireUser();
+
+  const [progress, attempts] = await Promise.all([
+    prisma.userWordProgress.findMany({
+      where: { userId: user.id },
+      select: { introducedAt: true, lastSeenAt: true },
+    }),
+    prisma.dailyChallengeAttempt.findMany({
+      where: { userId: user.id },
+      select: { challengeDate: true },
+    }),
+  ]);
+
+  const activeDays = new Set<string>();
+  for (const { introducedAt, lastSeenAt } of progress) {
+    activeDays.add(toUTCDateString(introducedAt));
+    if (lastSeenAt) activeDays.add(toUTCDateString(lastSeenAt));
+  }
+  for (const { challengeDate } of attempts) {
+    activeDays.add(toUTCDateString(challengeDate));
+  }
+
+  return computeStreakFromActiveDays(activeDays);
+});
 
 // How many of today's (UTC) 3 daily-challenge attempts this user has used up
 // for this course — see completeDailyChallenge in
@@ -1261,7 +1301,7 @@ export const getReviewQueue = cache(
   },
 );
 
-async function bumpStreak(userId: string, courseId: string, now: Date) {
+export async function bumpStreak(userId: string, courseId: string, now: Date) {
   const enrollment = await prisma.courseEnrollment.findUniqueOrThrow({
     where: { userId_courseId: { userId, courseId } },
     select: {

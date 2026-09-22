@@ -1,15 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser, MAX_DAILY_CHALLENGE_ATTEMPTS } from "@/lib/dal";
+import { requireUser, MAX_DAILY_CHALLENGE_ATTEMPTS, bumpStreak } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { startOfUTCDay } from "@/lib/srs";
+import { startOfUTCDay, DAILY_CHALLENGE_XP } from "@/lib/srs";
 
-// Flat XP reward for completing one daily-challenge attempt. There's no real
-// challenge content yet (see the note on DailyChallengeAttempt in
-// prisma/schema.prisma) — this just records the attempt and pays out a small
-// bonus so the button is worth pressing until real content replaces it.
-const DAILY_CHALLENGE_XP = 2;
+// There's no real challenge content yet (see the note on
+// DailyChallengeAttempt in prisma/schema.prisma) — this just records the
+// attempt and pays out a small flat bonus (DAILY_CHALLENGE_XP, in
+// lib/srs.ts) so the button is worth pressing until real content replaces
+// it.
 
 export type CompleteDailyChallengeResult =
   | { ok: true; attemptsToday: number; xp: number }
@@ -45,6 +45,8 @@ export async function completeDailyChallenge(
   await prisma.dailyChallengeAttempt.create({
     data: { userId: user.id, courseId: enrollment.courseId, challengeDate: today },
   });
+
+  await bumpStreak(user.id, enrollment.courseId, today);
 
   const profile = await prisma.profile.update({
     where: { id: user.id },

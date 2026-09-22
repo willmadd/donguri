@@ -55,6 +55,18 @@ export default async function DeckPage({ params }: PageProps) {
         )}
         <PageTitle className="mt-4">{deck.title}</PageTitle>
         {deck.subheading && <PageSubtitle>{deck.subheading}</PageSubtitle>}
+        {deck.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {deck.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-sumi/15 bg-washi-soft px-2.5 py-0.5 text-xs font-medium text-sumi-soft"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
         {deck.description && <p className="mt-3 text-sumi-soft">{deck.description}</p>}
       </div>
 

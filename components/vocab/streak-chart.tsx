@@ -33,9 +33,11 @@ const SEGMENT_GAP = 2;
 const BAR_RADIUS = 4;
 const MAX_STREAK_DOTS = 14;
 
-// Stack order matters for colorblind-safe adjacency: vocab sits in the
-// middle so the two hues nearer each other in hue-space (grammar's green and
-// the daily challenge's red) never touch — see the CVD separation check run
+// Vocab and grammar deliberately share the blue hue family (both are core
+// lesson content); the daily challenge gets its own green so the one
+// non-lesson activity reads apart from the other two at a glance. Because
+// two series share a hue, identity leans on the legend + tooltip + sr-only
+// table rather than color-matching alone — see the CVD separation check run
 // against --chart-vocab/--chart-grammar/--chart-challenge before picking
 // these colors.
 // Tailwind's scanner needs each class spelled out as a literal somewhere in
@@ -47,7 +49,6 @@ const SERIES = [
     key: "grammar",
     labelKey: "streak_chart.series_grammar",
     fallback: "Grammar",
-    fillClass: "fill-chart-grammar",
     bgClass: "bg-chart-grammar",
     strokeClass: "stroke-chart-grammar",
   },
@@ -55,7 +56,6 @@ const SERIES = [
     key: "vocab",
     labelKey: "streak_chart.series_vocab",
     fallback: "Vocabulary",
-    fillClass: "fill-chart-vocab",
     bgClass: "bg-chart-vocab",
     strokeClass: "stroke-chart-vocab",
   },
@@ -63,7 +63,6 @@ const SERIES = [
     key: "challenge",
     labelKey: "streak_chart.series_challenge",
     fallback: "Daily challenge",
-    fillClass: "fill-chart-challenge",
     bgClass: "bg-chart-challenge",
     strokeClass: "stroke-chart-challenge",
   },
@@ -71,7 +70,6 @@ const SERIES = [
   key: keyof Pick<DailyActivityCount, "vocab" | "grammar" | "challenge">;
   labelKey: string;
   fallback: string;
-  fillClass: string;
   bgClass: string;
   strokeClass: string;
 }[];
@@ -94,7 +92,6 @@ function roundedTopRectPath(x: number, y: number, width: number, height: number,
 
 type Segment = {
   key: string;
-  fillClass: string;
   value: number;
   y: number;
   height: number;
@@ -105,7 +102,7 @@ type Segment = {
 // (so the 2px gap never appears twice in a row) and rounding only the top
 // edge of whichever segment ends up on top.
 function stackSegments(
-  values: readonly { key: string; fillClass: string; value: number }[],
+  values: readonly { key: string; value: number }[],
   max: number,
 ): Segment[] {
   const present = values.filter((v) => v.value > 0);
@@ -117,7 +114,7 @@ function stackSegments(
     cursor -= gap;
     const y = cursor - height;
     cursor = y;
-    return { key: v.key, fillClass: v.fillClass, value: v.value, y, height, isTop: false };
+    return { key: v.key, value: v.value, y, height, isTop: false };
   });
   if (segments.length > 0) segments[segments.length - 1].isTop = true;
   return segments;
@@ -126,9 +123,11 @@ function stackSegments(
 export function StreakChart({
   data,
   currentStreak,
+  longestStreak,
 }: {
   data: DailyActivityCount[];
   currentStreak: number;
+  longestStreak?: number;
 }) {
   const t = useTranslations();
   const [hovered, setHovered] = useState<number | null>(null);
@@ -143,7 +142,7 @@ export function StreakChart({
   const days = data.map((day, i) => {
     const x = PAD_LEFT + slot * (i + 0.5);
     const segments = stackSegments(
-      SERIES.map((series) => ({ key: series.key, fillClass: series.fillClass, value: day[series.key] })),
+      SERIES.map((series) => ({ key: series.key, value: day[series.key] })),
       max,
     );
     const topY = segments.length > 0 ? segments[segments.length - 1].y : BASELINE_Y;
@@ -159,7 +158,7 @@ export function StreakChart({
   const tooltipHeight = 20 + SERIES.length * 14 + 6;
 
   return (
-    <div className="rounded-2xl border border-card-border bg-washi-soft p-6">
+    <div className="min-w-0 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-sumi-soft">
           {t("streak_chart.title", "Learning activity")}
@@ -168,7 +167,7 @@ export function StreakChart({
         {currentStreak > 0 && (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-sm font-semibold text-sumi">
-              <Flame className="h-4 w-4 fill-kin text-kin" />
+              <Flame className="h-4 w-4 fill-kin text-kin drop-shadow-[0_0_6px_var(--kin)]" />
               {t("streak_chart.day_streak", "{{count}} day streak", { count: currentStreak })}
             </div>
             <div className="flex items-center gap-1" aria-hidden>
@@ -181,6 +180,11 @@ export function StreakChart({
                 </span>
               )}
             </div>
+            {Boolean(longestStreak) && longestStreak! > currentStreak && (
+              <span className="text-xs text-sumi-soft">
+                {t("streak_chart.best_streak", "Best: {{count}}", { count: longestStreak! })}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -204,6 +208,21 @@ export function StreakChart({
           role="img"
           aria-label={t("streak_chart.aria_label", "Vocabulary, grammar and daily challenges completed per day")}
         >
+          <defs>
+            {/* A subtle lighter-at-the-top wash per series — same hue and
+                value as the flat fill, just enough lift to keep the bars
+                from reading as flat cutouts. */}
+            {SERIES.map((series) => (
+              <linearGradient key={series.key} id={`grad-${series.key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={`color-mix(in oklab, var(--chart-${series.key}) 80%, white)`} />
+                <stop offset="100%" stopColor={`var(--chart-${series.key})`} />
+              </linearGradient>
+            ))}
+            <filter id="bar-shadow" x="-20%" y="-10%" width="140%" height="130%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000000" floodOpacity="0.14" />
+            </filter>
+          </defs>
+
           {[0, 0.5, 1].map((fraction) => (
             <line
               key={fraction}
@@ -216,10 +235,27 @@ export function StreakChart({
             />
           ))}
 
+          {/* A soft column wash behind today so it reads as "where you are"
+              at a glance, without competing with the bars themselves. */}
+          {n > 0 && (
+            <rect
+              x={days[lastIndex].x - slot / 2}
+              y={PAD_TOP}
+              width={slot}
+              height={INNER_HEIGHT}
+              rx={6}
+              className="fill-kin/10"
+            />
+          )}
+
           {days.map(({ day, x, segments, total, topY }, i) => {
             const isActive = hovered === i;
             return (
-              <g key={day.date} className={isActive ? "opacity-90" : undefined}>
+              <g
+                key={day.date}
+                className={isActive ? "opacity-90" : undefined}
+                filter={segments.length > 0 ? "url(#bar-shadow)" : undefined}
+              >
                 {segments.map((segment) => (
                   <path
                     key={segment.key}
@@ -228,7 +264,7 @@ export function StreakChart({
                         ? roundedTopRectPath(x - barWidth / 2, segment.y, barWidth, segment.height, BAR_RADIUS)
                         : `M ${x - barWidth / 2},${segment.y} h ${barWidth} v ${segment.height} h ${-barWidth} Z`
                     }
-                    className={segment.fillClass}
+                    fill={`url(#grad-${segment.key})`}
                   />
                 ))}
                 {segments.length === 0 && (
@@ -281,9 +317,11 @@ export function StreakChart({
                 x={days[i].x}
                 y={HEIGHT - 6}
                 textAnchor="middle"
-                className="fill-sumi-soft text-[10px]"
+                className={
+                  i === lastIndex ? "fill-sumi text-[10px] font-semibold" : "fill-sumi-soft text-[10px]"
+                }
               >
-                {formatDayShort(day.date)}
+                {i === lastIndex ? t("streak_chart.today", "Today") : formatDayShort(day.date)}
               </text>
             ) : null,
           )}

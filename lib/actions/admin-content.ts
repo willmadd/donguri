@@ -279,6 +279,7 @@ export async function createCategory(
     coverImage,
     bgColor: formData.get("bgColor") || undefined,
     primaryColor: formData.get("primaryColor") || undefined,
+    tags: formData.get("tags") || "",
   });
 
   if (!validatedFields.success) {
@@ -293,6 +294,7 @@ export async function createCategory(
     coverImage: validCoverImage,
     bgColor,
     primaryColor,
+    tags,
   } = validatedFields.data;
 
   const course = await prisma.course.findUnique({
@@ -334,6 +336,7 @@ export async function createCategory(
       coverImageKey,
       bgColor: bgColor || null,
       primaryColor: primaryColor || null,
+      tags,
       position: (_max.position ?? 0) + 1,
     },
   });
@@ -368,6 +371,7 @@ export async function updateCategory(
     coverImage,
     bgColor: formData.get("bgColor") || undefined,
     primaryColor: formData.get("primaryColor") || undefined,
+    tags: formData.get("tags") || "",
   });
 
   if (!validatedFields.success) {
@@ -382,6 +386,7 @@ export async function updateCategory(
     coverImage: validCoverImage,
     bgColor,
     primaryColor,
+    tags,
   } = validatedFields.data;
 
   const existing = await prisma.languageDeck.findUnique({
@@ -415,6 +420,7 @@ export async function updateCategory(
       coverImageKey,
       bgColor: bgColor || null,
       primaryColor: primaryColor || null,
+      tags,
     },
   });
 

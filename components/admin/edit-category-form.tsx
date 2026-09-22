@@ -44,6 +44,17 @@ export function EditCategoryForm({ category, currentCoverImageSrc }: EditCategor
         defaultValue={category.description ?? ""}
         errors={state?.errors?.description}
       />
+      <TextField
+        label={t("admin_create_category.tags_label", "Tags")}
+        name="tags"
+        required={false}
+        placeholder={t(
+          "admin_create_category.tags_placeholder",
+          "e.g. Beginner, JLPT N5 (comma-separated)",
+        )}
+        defaultValue={category.tags.join(", ")}
+        errors={state?.errors?.tags}
+      />
 
       {currentCoverImageSrc && (
         <div className="flex flex-col gap-1.5">

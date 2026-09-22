@@ -106,9 +106,21 @@ export type Profile = {
   last_name: string | null;
 };
 
-// Streaks live on the enrollment, not the profile — each course is its own
-// independent track.
+// Per-course streaks live on the enrollment (see `CourseStreak` below) and
+// back the per-course dashboard list; the headline streak shown on a
+// course's own activity chart is account-wide instead (`GlobalStreak`), so
+// switching which course you practice on a given day doesn't reset it.
 export type CourseStreak = {
+  currentStreak: number;
+  longestStreak: number;
+};
+
+// Account-wide streak — not scoped to any one course. See the note on
+// `computeStreakFromActiveDays` in lib/srs.ts for how it's derived. XP and
+// level are never duplicated here: they're shown straight from
+// `Profile.xp` via the same `XpCounter` the header badge uses, so there's
+// only one place that number can come from.
+export type GlobalStreak = {
   currentStreak: number;
   longestStreak: number;
 };
@@ -333,6 +345,9 @@ export type LanguageDeckSummary = {
   // lib/utils.ts) rather than assuming light or dark text.
   bgColor: string | null;
   primaryColor: string | null;
+  // Short admin-set labels shown as badges on the deck card — e.g.
+  // "Beginner", "JLPT N5". Never empty-string entries; may be [].
+  tags: string[];
   // 'vocab' | 'grammar' — lets learn/test/review pages branch behavior
   // (e.g. one grammar point per languageDeck instead of three, an all-cloze quiz)
   // without a second round trip. See the note on LanguageDeck.path in
@@ -382,6 +397,31 @@ const OPTIONAL_HEX_COLOR_SCHEMA = z
   .regex(HEX_COLOR_REGEX, { error: "Use a hex color like #2563eb." })
   .optional();
 
+const TAGS_MAX_COUNT = 6;
+const TAG_MAX_LENGTH = 24;
+
+// Submitted as one comma-separated text field (see TagsField), parsed into
+// a deduped, trimmed, capped array — same free-text-in/array-out shape as
+// the admin word-import textarea, just for a handful of short labels
+// instead of rows.
+const TAGS_FIELD_SCHEMA = z
+  .string()
+  .trim()
+  .max(300, { error: "Keep the tags under 300 characters total." })
+  .transform((value) =>
+    Array.from(
+      new Set(
+        value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0),
+      ),
+    ).slice(0, TAGS_MAX_COUNT),
+  )
+  .refine((tags) => tags.every((tag) => tag.length <= TAG_MAX_LENGTH), {
+    error: `Keep each tag under ${TAG_MAX_LENGTH} characters.`,
+  });
+
 // Shared by create and edit — only the id fields (which course, which deck)
 // differ between the two. `bgColor`/`primaryColor` aren't rendered anywhere
 // yet — just admin-editable and stored, for a later UI pass.
@@ -404,6 +444,7 @@ const CategoryFieldsSchema = {
   coverImage: IMAGE_FIELD_SCHEMA,
   bgColor: OPTIONAL_HEX_COLOR_SCHEMA,
   primaryColor: OPTIONAL_HEX_COLOR_SCHEMA,
+  tags: TAGS_FIELD_SCHEMA,
 };
 
 type CategoryFieldErrors = {
@@ -413,6 +454,7 @@ type CategoryFieldErrors = {
   coverImage?: string[];
   bgColor?: string[];
   primaryColor?: string[];
+  tags?: string[];
 };
 
 export const CreateCategoryFormSchema = z.object({
@@ -682,6 +724,7 @@ export type AdminCategorySummary = {
   position: number;
   wordCount: number;
   active: boolean;
+  tags: string[];
 };
 
 // Loaded by the admin deck-edit page to prefill `EditCategoryForm` — the
@@ -696,6 +739,7 @@ export type AdminCategoryDetail = {
   coverImageKey: string | null;
   bgColor: string | null;
   primaryColor: string | null;
+  tags: string[];
 };
 
 export type AdminWordSummary = {

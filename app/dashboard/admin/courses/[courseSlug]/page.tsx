@@ -75,6 +75,14 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
                       ? t("course_home.grammar", "Grammar")
                       : t("course_home.vocabulary", "Vocabulary")}
                   </span>
+                  {category.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-sumi/15 bg-washi px-2 py-0.5 text-xs font-medium text-sumi-soft"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
                 <p className="mt-1 text-sm text-sumi-soft">
                   {t("deck_list.content_breakdown", "{{vocab}} vocab · {{grammar}} grammar", {

@@ -103,6 +103,14 @@ export function DeckList({ slug, decks, activeDeckIds }: DeckListProps) {
                       ? t("course_home.grammar", "Grammar")
                       : t("course_home.vocabulary", "Vocabulary")}
                   </span>
+                  {deck.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-sumi/15 bg-washi px-2 py-0.5 text-xs font-medium text-sumi-soft"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
                 {deck.subheading && (
                   <p className="mt-0.5 text-sm text-sumi-soft">{deck.subheading}</p>

@@ -65,6 +65,52 @@ export function streakBonusXp(currentStreak: number): number {
   return currentStreak >= 2 ? (currentStreak - 1) * 0.5 : 0;
 }
 
+// Flat XP reward for completing one daily-challenge attempt — shared by the
+// action that awards it (lib/actions/daily-challenge.ts) and the DAL's XP
+// breakdown, which needs the same figure to back out how much of a user's
+// total XP came from challenges (there's no per-award XP ledger to sum
+// instead).
+export const DAILY_CHALLENGE_XP = 2;
+
+// Every UTC day with any recorded activity — a word introduced, a word
+// reviewed (correct or not), or a daily-challenge attempt — across every
+// course the user is enrolled in. This is the ground truth for the
+// account-wide streak: rather than an imperatively bumped counter that only
+// some actions remember to touch, the streak is recomputed from these
+// timestamps every time, so it can't drift out of sync with what the user
+// actually did.
+export function computeStreakFromActiveDays(
+  activeDays: ReadonlySet<string>,
+  today: Date = new Date(),
+): { currentStreak: number; longestStreak: number } {
+  let longestStreak = 0;
+  let run = 0;
+  let prevDay: string | null = null;
+  for (const day of [...activeDays].sort()) {
+    const isConsecutive = prevDay !== null && toUTCDateString(addDays(new Date(`${prevDay}T00:00:00Z`), 1)) === day;
+    run = isConsecutive ? run + 1 : 1;
+    longestStreak = Math.max(longestStreak, run);
+    prevDay = day;
+  }
+
+  // The streak survives until the day actually lapses: if today has no
+  // activity yet, it's still "alive" through yesterday rather than reading
+  // as broken the moment the clock rolls over UTC midnight.
+  let anchor = startOfUTCDay(today);
+  if (!activeDays.has(toUTCDateString(anchor))) {
+    anchor = addDays(anchor, -1);
+  }
+
+  let currentStreak = 0;
+  let cursor = anchor;
+  while (activeDays.has(toUTCDateString(cursor))) {
+    currentStreak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return { currentStreak, longestStreak: Math.max(longestStreak, currentStreak) };
+}
+
 type StreakFields = {
   currentStreak: number;
   longestStreak: number;
