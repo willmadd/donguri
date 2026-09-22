@@ -8,28 +8,29 @@ datasource db {
 }
 
 model Profile {
-  id              String               @id @db.Uuid
-  email           String
-  fullName        String?              @map("full_name")
-  firstName       String?              @map("first_name")
-  lastName        String?              @map("last_name")
-  role            String               @default("user")
-  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id                     String                  @id @db.Uuid
+  email                  String
+  fullName               String?                 @map("full_name")
+  firstName              String?                 @map("first_name")
+  lastName               String?                 @map("last_name")
+  role                   String                  @default("user")
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @default(now()) @map("updated_at") @db.Timestamptz(6)
   // Total experience points — incremented only by the vocab quiz actions in
   // lib/actions/vocab.ts (+1 per correct answer, +5 bonus for a perfect
   // quiz, plus a half-point-per-day streak bonus), never set directly from
   // a user-editable form field. A float (not Int) because the streak bonus
   // is awarded in 0.5 increments.
-  xp              Float                @default(0)
+  xp                     Float                   @default(0)
   // Free-form settings blob the user can view/edit as raw JSON from their
   // profile page — no fixed shape yet, deliberately generic.
-  donguriConfig   Json?                @map("donguri_config")
-  enrollments     CourseEnrollment[]
-  addedByOthers   Friendship[]         @relation("FriendshipsAsFriend")
-  friendsAdded    Friendship[]         @relation("FriendshipsAsUser")
-  deckActivations UserDeckActivation[]
-  wordProgress    UserWordProgress[]
+  donguriConfig          Json?                   @map("donguri_config")
+  enrollments            CourseEnrollment[]
+  addedByOthers          Friendship[]            @relation("FriendshipsAsFriend")
+  friendsAdded           Friendship[]            @relation("FriendshipsAsUser")
+  deckActivations        UserDeckActivation[]
+  wordProgress           UserWordProgress[]
+  dailyChallengeAttempts DailyChallengeAttempt[]
 
   @@map("profiles")
 }
@@ -52,17 +53,18 @@ model Friendship {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Course {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug           String             @unique
-  title          String
-  targetLanguage String             @map("target_language")
-  sourceLanguage String             @map("source_language")
-  description    String?
-  position       Int
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  active         Boolean            @default(true)
-  enrollments    CourseEnrollment[]
-  languageDecks  LanguageDeck[]
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                   String                  @unique
+  title                  String
+  targetLanguage         String                  @map("target_language")
+  sourceLanguage         String                  @map("source_language")
+  description            String?
+  position               Int
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  active                 Boolean                 @default(true)
+  enrollments            CourseEnrollment[]
+  languageDecks          LanguageDeck[]
+  dailyChallengeAttempts DailyChallengeAttempt[]
 
   @@map("courses")
 }
@@ -260,4 +262,25 @@ model WordCategory {
   words     Word[]
 
   @@map("word_categories")
+}
+
+// One row per attempt of the (currently stub) daily challenge — capped at 3
+// per user per course per UTC day, enforced in the app layer (see
+// completeDailyChallenge in lib/actions/daily-challenge.ts) rather than a DB
+// constraint, since the cap is a product rule that may change.
+// `challengeDate` is stored explicitly (rather than derived from
+// `createdAt`) so "how many today" is a plain equality filter regardless of
+// query-time timezone, matching `lastActivityDate` on `CourseEnrollment`.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model DailyChallengeAttempt {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  courseId      String   @map("course_id") @db.Uuid
+  challengeDate DateTime @map("challenge_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile       Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, courseId, challengeDate], map: "daily_challenge_attempts_user_course_date_idx")
+  @@map("daily_challenge_attempts")
 }

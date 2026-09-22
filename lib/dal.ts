@@ -11,7 +11,8 @@ import type {
   AdminQuizQuestionSummary,
   AdminWordSummary,
   CourseSummary,
-  DailyWordCount,
+  DailyActivityCount,
+  DailyChallengeStatus,
   EnrolledCourseSummary,
   LeaderboardEntry,
   LanguageDeckSummary,
@@ -37,26 +38,36 @@ import {
 } from "@/lib/srs";
 import { deckCoverImagePath, wordImagePath } from "@/lib/images";
 import { findClozeMatchesByForm, pickRandomClozeMatch } from "@/lib/cloze";
+import { isLatinTypeable } from "@/lib/language";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
+// Shared with completeDailyChallenge in lib/actions/daily-challenge.ts,
+// which enforces the same cap on write.
+export const MAX_DAILY_CHALLENGE_ATTEMPTS = 3;
+
+// A plain cookie read (no network round-trip to Supabase's auth server) —
+// safe here specifically because proxy.ts already calls the network-
+// validating `getUser()` for every request this route tree is reached
+// through, before any Server Component runs, and propagates any refreshed
+// cookies onto the same request. Re-validating again here would just add a
+// second sequential auth round-trip to every single navigation (this was
+// previously the #1 source of navigation latency) for no extra security,
+// since the token was already confirmed valid moments earlier in the same
+// request. Do not use this pattern anywhere the proxy might not have run.
 export const getSession = cache(async () => {
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: { session },
     error,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getSession();
 
   if (error) {
-    // "No session" is the normal state for a signed-out visitor (e.g. every
-    // anonymous homepage visit) — only log genuinely unexpected failures.
-    if (error.name !== "AuthSessionMissingError") {
-      console.error("Failed to retrieve Supabase user:", error);
-    }
+    console.error("Failed to retrieve Supabase session:", error);
     return null;
   }
 
-  return user;
+  return session?.user ?? null;
 });
 
 export const requireUser = cache(async () => {
@@ -763,46 +774,99 @@ export const getDeckDetail = cache(
 );
 
 // One entry per day in the current streak's date range (zero-filled for a
-// day with no *new* words — a review-only day is still a valid streak day),
+// day with no activity — a review-only day is still a valid streak day),
 // always at least the trailing 7 days so a short or empty streak still
-// renders as a proper week-wide chart instead of one or two bars.
-export const getDailyWordCounts = cache(
-  async (courseSlug: string): Promise<DailyWordCount[]> => {
+// renders as a proper week-wide chart instead of one or two bars. Splits
+// each day's total across vocab words learned, grammar points learned
+// (both from `UserWordProgress.introducedAt`, keyed by the word's
+// `languageDeck.path`), and daily challenge attempts completed.
+export const getDailyActivityCounts = cache(
+  async (courseSlug: string): Promise<DailyActivityCount[]> => {
     const { user, course, enrollment } =
       await requireEnrolledCourse(courseSlug);
 
-    const rangeEnd = enrollment.lastActivityDate
+    // The streak's own date range is anchored on the last day it was
+    // actually extended, but the chart itself always runs through today —
+    // even before today has any activity of its own — so a day with
+    // nothing logged yet still shows up as an empty bar to fill in, rather
+    // than silently disappearing from the chart until something is learned.
+    const today = startOfUTCDay(new Date());
+    const lastActive = enrollment.lastActivityDate
       ? startOfUTCDay(enrollment.lastActivityDate)
-      : startOfUTCDay(new Date());
+      : today;
     const streakStart =
       enrollment.currentStreak > 0
-        ? addDays(rangeEnd, -(enrollment.currentStreak - 1))
-        : rangeEnd;
-    const weekStart = addDays(rangeEnd, -6);
+        ? addDays(lastActive, -(enrollment.currentStreak - 1))
+        : lastActive;
+    const weekStart = addDays(today, -6);
     const rangeStart = streakStart < weekStart ? streakStart : weekStart;
+    const rangeEnd = today;
+    const rangeEndExclusive = addDays(rangeEnd, 1);
 
-    const progress = await prisma.userWordProgress.findMany({
-      where: {
-        userId: user.id,
-        word: { languageDeck: { courseId: course.id } },
-        introducedAt: { gte: rangeStart, lt: addDays(rangeEnd, 1) },
-      },
-      select: { introducedAt: true },
-    });
+    const [progress, challengeAttempts] = await Promise.all([
+      prisma.userWordProgress.findMany({
+        where: {
+          userId: user.id,
+          word: { languageDeck: { courseId: course.id } },
+          introducedAt: { gte: rangeStart, lt: rangeEndExclusive },
+        },
+        select: { introducedAt: true, word: { select: { languageDeck: { select: { path: true } } } } },
+      }),
+      prisma.dailyChallengeAttempt.findMany({
+        where: {
+          userId: user.id,
+          courseId: course.id,
+          challengeDate: { gte: rangeStart, lt: rangeEndExclusive },
+        },
+        select: { challengeDate: true },
+      }),
+    ]);
 
-    const counts = new Map<string, number>();
-    for (const { introducedAt } of progress) {
+    const vocabCounts = new Map<string, number>();
+    const grammarCounts = new Map<string, number>();
+    for (const { introducedAt, word } of progress) {
       const day = startOfUTCDay(introducedAt).toISOString().slice(0, 10);
+      const counts = word.languageDeck.path === "grammar" ? grammarCounts : vocabCounts;
       counts.set(day, (counts.get(day) ?? 0) + 1);
     }
 
-    const days: DailyWordCount[] = [];
+    const challengeCounts = new Map<string, number>();
+    for (const { challengeDate } of challengeAttempts) {
+      const day = challengeDate.toISOString().slice(0, 10);
+      challengeCounts.set(day, (challengeCounts.get(day) ?? 0) + 1);
+    }
+
+    const days: DailyActivityCount[] = [];
     for (let day = rangeStart; day <= rangeEnd; day = addDays(day, 1)) {
       const date = day.toISOString().slice(0, 10);
-      days.push({ date, count: counts.get(date) ?? 0 });
+      days.push({
+        date,
+        vocab: vocabCounts.get(date) ?? 0,
+        grammar: grammarCounts.get(date) ?? 0,
+        challenge: challengeCounts.get(date) ?? 0,
+      });
     }
 
     return days;
+  },
+);
+
+// How many of today's (UTC) 3 daily-challenge attempts this user has used up
+// for this course — see completeDailyChallenge in
+// lib/actions/daily-challenge.ts, which enforces the same cap on write.
+export const getDailyChallengeStatus = cache(
+  async (courseSlug: string): Promise<DailyChallengeStatus> => {
+    const { user, course } = await requireEnrolledCourse(courseSlug);
+
+    const attemptsToday = await prisma.dailyChallengeAttempt.count({
+      where: {
+        userId: user.id,
+        courseId: course.id,
+        challengeDate: startOfUTCDay(new Date()),
+      },
+    });
+
+    return { attemptsToday, maxAttemptsPerDay: MAX_DAILY_CHALLENGE_ATTEMPTS };
   },
 );
 
@@ -1344,8 +1408,22 @@ function buildTypedQuestion(
     };
   }
 
-  const direction: QuizDirection =
-    Math.random() < 0.5 ? "term-to-translation" : "translation-to-term";
+  // A word whose term isn't Latin-typeable can only be typed *back* (the
+  // translation-to-term direction) when its romanization is a full
+  // transliteration of the term — true for vocab, not for grammar (see
+  // isLatinTypeable in lib/language.ts). Otherwise translation-to-term is
+  // skipped entirely rather than asking for an untypeable answer.
+  const termIsTypeable = isLatinTypeable(word.term);
+  const canTypeTermBack =
+    termIsTypeable || (word.path === "vocab" && Boolean(word.romanization));
+
+  const direction: QuizDirection = !canTypeTermBack
+    ? "term-to-translation"
+    : Math.random() < 0.5
+      ? "term-to-translation"
+      : "translation-to-term";
+
+  const answerRomanized = direction === "translation-to-term" && !termIsTypeable;
 
   return {
     kind: "type-answer",
@@ -1355,6 +1433,7 @@ function buildTypedQuestion(
     prompt: direction === "term-to-translation" ? word.term : word.translation,
     promptRomanization:
       direction === "term-to-translation" ? word.romanization : null,
+    answerRomanized,
     targetLanguage: course.targetLanguage,
     image: wordImagePath(word),
   };

@@ -456,9 +456,11 @@ export const TestSession = ({
               />
             )}
             <p className="text-xs font-medium uppercase tracking-wide text-sumi-soft">
-              {question.direction === "translation-to-term"
-                ? t("test_session.what_does_this_mean", "What does this mean?")
-                : t("test_session.type_the_word", "Type the word")}
+              {question.answerRomanized
+                ? t("test_session.type_the_romanized_word", "Type the romanized word")
+                : question.direction === "translation-to-term"
+                  ? t("test_session.what_does_this_mean", "What does this mean?")
+                  : t("test_session.type_the_word", "Type the word")}
             </p>
             <div className="mt-3 flex items-center justify-center gap-3">
               <p className="text-3xl font-semibold text-sumi capitalize">{question.prompt}</p>
@@ -488,7 +490,11 @@ export const TestSession = ({
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
-              placeholder={t("test_session.type_answer_placeholder", "Type your answer")}
+              placeholder={
+                question.answerRomanized
+                  ? t("test_session.type_romanized_placeholder", "Type the romanization")
+                  : t("test_session.type_answer_placeholder", "Type your answer")
+              }
               className="h-14 w-full rounded-2xl border border-sumi/15 bg-washi px-5 text-lg text-sumi outline-none transition focus:border-ai/50 disabled:opacity-60"
             />
 

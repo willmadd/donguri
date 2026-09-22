@@ -5,6 +5,12 @@ const PROTECTED_ROUTES = ["/dashboard"];
 const AUTH_ROUTES = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+    path.startsWith(route),
+  );
+  const isAuthRoute = AUTH_ROUTES.includes(path);
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -34,12 +40,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    path.startsWith(route),
-  );
-  const isAuthRoute = AUTH_ROUTES.includes(path);
-
   if (isProtectedRoute && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -57,8 +57,15 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+// Scoped to exactly the routes that read `user` below (PROTECTED_ROUTES +
+// AUTH_ROUTES) — statically excluding the whole public site (marketing
+// pages, /chat, static assets, ...) means Next.js skips invoking the proxy
+// for those requests entirely, rather than running it and immediately
+// returning. Every one of those navigations used to pay a full Supabase
+// auth-server round-trip for a `user` value it never used; none of those
+// routes read the session via lib/dal.ts either (grep confirms it), so this
+// is a pure latency win, not a security trade-off — that route tree simply
+// isn't session-gated.
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/dashboard/:path*", "/login", "/signup"],
 };

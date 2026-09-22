@@ -1298,3 +1298,35 @@ begin
   return new;
 end;
 $$;
+
+-- 30. Daily challenge attempts ------------------------------------------------
+-- One row per attempt of the (currently stub) daily challenge — capped at 3
+-- per user per course per UTC day, enforced in the app layer (see
+-- completeDailyChallenge in lib/actions/daily-challenge.ts), not with a DB
+-- constraint, since the cap is a product rule that may change. `challenge_date`
+-- is stored explicitly (rather than derived from `created_at`) so "how many
+-- today" is a plain equality filter regardless of query-time timezone,
+-- matching the `last_activity_date` convention on `course_enrollments`.
+
+create table if not exists public.daily_challenge_attempts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  course_id uuid not null references public.courses (id) on delete cascade,
+  challenge_date date not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists daily_challenge_attempts_user_course_date_idx
+  on public.daily_challenge_attempts (user_id, course_id, challenge_date);
+
+alter table public.daily_challenge_attempts enable row level security;
+
+drop policy if exists "Users can view own daily challenge attempts" on public.daily_challenge_attempts;
+create policy "Users can view own daily challenge attempts"
+  on public.daily_challenge_attempts for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can create own daily challenge attempts" on public.daily_challenge_attempts;
+create policy "Users can create own daily challenge attempts"
+  on public.daily_challenge_attempts for insert
+  with check (auth.uid() = user_id);

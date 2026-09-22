@@ -12,6 +12,7 @@ import {
 } from "@/lib/srs";
 import { ACCESSORIES, levelForXp, parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 import type { QuizDirection } from "@/lib/definitions";
+import { isLatinTypeable } from "@/lib/language";
 
 // Case-insensitive, whitespace-trimmed match against one candidate answer —
 // or, when the stored value is a comma-separated list (e.g. a translation
@@ -145,10 +146,29 @@ export async function submitTypedAnswer(
 
   const word = await prisma.word.findUniqueOrThrow({
     where: { id: wordId },
-    select: { term: true, translation: true },
+    select: {
+      term: true,
+      translation: true,
+      romanization: true,
+      languageDeck: { select: { path: true } },
+    },
   });
 
-  const storedAnswer = direction === "term-to-translation" ? word.translation : word.term;
+  // Mirrors the direction/answer logic in buildTypedQuestion (lib/dal.ts):
+  // a non-Latin-typeable vocab term is checked against its romanization
+  // instead, since that's the only typeable form of the correct answer.
+  const useRomanizedAnswer =
+    direction === "translation-to-term" &&
+    !isLatinTypeable(word.term) &&
+    word.languageDeck.path === "vocab" &&
+    Boolean(word.romanization);
+
+  const storedAnswer =
+    direction === "term-to-translation"
+      ? word.translation
+      : useRomanizedAnswer
+        ? word.romanization!
+        : word.term;
   const correct = matchesTypedAnswer(typedAnswer, storedAnswer);
   const correctAnswer = storedAnswer.split(",")[0].trim();
 

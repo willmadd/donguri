@@ -272,6 +272,11 @@ export type TypeAnswerQuestion = {
   direction: QuizDirection;
   prompt: string;
   promptRomanization: string | null;
+  // True when the term isn't Latin-typeable and the expected typed answer
+  // is therefore the term's romanization rather than the term itself (see
+  // isLatinTypeable in lib/language.ts) — lets the UI ask for "the
+  // romanized word" instead of just "the word".
+  answerRomanized: boolean;
   targetLanguage: string;
   image: string;
 };
@@ -710,9 +715,21 @@ export type AdminWordSummary = {
   examples: WordExampleSummary[];
 };
 
-export type DailyWordCount = {
+// One entry per day, split by the three things that feed the course-home
+// activity chart: vocab words learned, grammar points learned, and daily
+// challenge attempts completed that day.
+export type DailyActivityCount = {
   date: string;
-  count: number;
+  vocab: number;
+  grammar: number;
+  challenge: number;
+};
+
+// Today's daily-challenge attempt count for a course, and the fixed cap —
+// see completeDailyChallenge in lib/actions/daily-challenge.ts.
+export type DailyChallengeStatus = {
+  attemptsToday: number;
+  maxAttemptsPerDay: number;
 };
 
 // `donguriConfig` is submitted as raw JSON text from a textarea — validated

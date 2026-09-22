@@ -54,6 +54,15 @@
   --chart-line: #1a54c4;
   --chart-area: #c6bda8;
 
+  /* Activity chart series — deliberately distinct from --ai/--matcha/--shu
+     (see the light-theme category checks in the dataviz skill): the action
+     colors above sit too close in lightness/contrast to double as stacked
+     bar fills, so these are tuned separately for that job while staying on
+     the same hues. */
+  --chart-vocab: #1a54c4;
+  --chart-grammar: #1ea346;
+  --chart-challenge: #d13d20;
+
   --background: var(--outer);
   --foreground: var(--sumi);
 }
@@ -94,6 +103,9 @@
   --color-tag-foreground: var(--tag-foreground);
   --color-chart-line: var(--chart-line);
   --color-chart-area: var(--chart-area);
+  --color-chart-vocab: var(--chart-vocab);
+  --color-chart-grammar: var(--chart-grammar);
+  --color-chart-challenge: var(--chart-challenge);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-open-sans);
@@ -137,6 +149,9 @@
   --tag-foreground: #7cb8ff;
   --chart-line: #4e9cff;
   --chart-area: #4a4030;
+  --chart-vocab: #3d84e0;
+  --chart-grammar: #2f9c48;
+  --chart-challenge: #e2553c;
 
   --background: var(--outer);
   --foreground: var(--sumi);

@@ -42,7 +42,7 @@ export function FindDeckModal({
     <>
       <section className="flex  flex-col items-center gap-3 rounded-2xl border border-card-border bg-washi-soft p-6 text-center">
         <div className="flex w-full items-center justify-between">
-          <h2 className="font-bold" text-xl>
+          <h2 className="text-xl font-bold">
             {t("find_deck.your_active_decks", "Your Active Decks.")}
           </h2>
           <button
