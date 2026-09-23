@@ -7,7 +7,13 @@ import { requireProfile } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { buildDeckCoverImageKey, buildWordImageKey, uploadImage } from "@/lib/bunny";
-import { parseExamplesColumns, parseFormsCell, parseWordImportWorkbook } from "@/lib/word-import";
+import {
+  parseExamplesColumns,
+  parseFormsCell,
+  parseWordImportWorkbook,
+  type ParsedSheetRow,
+  type ParsedWordImportRow,
+} from "@/lib/word-import";
 import {
   BulkQuizQuestionsSchema,
   CreateCategoryFormSchema,
@@ -359,17 +365,14 @@ export async function createCategory(
     }
   }
 
-  // Category (LanguageDeck) content only exists under `path: "vocab"` today — see
-  // the note in supabase/schema.sql. Not exposed as a form field.
   const { _max } = await prisma.languageDeck.aggregate({
-    where: { courseId, path: "vocab" },
+    where: { courseId },
     _max: { position: true },
   });
 
   const languageDeck = await prisma.languageDeck.create({
     data: {
       courseId,
-      path: "vocab",
       title,
       subheading: subheading || null,
       description: description || null,
@@ -384,7 +387,7 @@ export async function createCategory(
   revalidatePath(`/dashboard/admin/courses/${course.slug}`);
   revalidatePath(`/dashboard/courses/${course.slug}`);
 
-  return { success: true, message: `"${title}" created.`, languageDeckId: languageDeck.id };
+  redirect(`/dashboard/admin/courses/${course.slug}/categories/${languageDeck.id}`);
 }
 
 // A new cover image replaces the old one (fresh key, old bunny.net object
@@ -498,6 +501,7 @@ export async function createWord(
     explanationJa: formData.get("explanationJa") || undefined,
     categoryId: formData.get("categoryId") || undefined,
     wordType: formData.get("wordType") || undefined,
+    path: formData.get("path"),
     image,
   });
 
@@ -515,6 +519,7 @@ export async function createWord(
     explanationJa,
     categoryId,
     wordType,
+    path,
     image: validImage,
   } = validatedFields.data;
 
@@ -556,6 +561,7 @@ export async function createWord(
       explanationJa: explanationJa || null,
       categoryId: categoryId || null,
       wordType: wordType || null,
+      path,
       position: (_max.position ?? 0) + 1,
       imageKey,
     },
@@ -596,6 +602,7 @@ export async function updateWord(
     explanationJa: formData.get("explanationJa") || undefined,
     categoryId: formData.get("categoryId") || undefined,
     wordType: formData.get("wordType") || undefined,
+    path: formData.get("path"),
     image,
   });
 
@@ -613,6 +620,7 @@ export async function updateWord(
     explanationJa,
     categoryId,
     wordType,
+    path,
     image: validImage,
   } = validatedFields.data;
 
@@ -649,6 +657,7 @@ export async function updateWord(
       explanationJa: explanationJa || null,
       categoryId: categoryId || null,
       wordType: wordType || null,
+      path,
       imageKey,
     },
   });
@@ -713,6 +722,30 @@ export async function setCategoryActive(languageDeckId: string, active: boolean)
   const languageDeck = await prisma.languageDeck.update({
     where: { id: languageDeckId },
     data: { active },
+    select: { course: { select: { slug: true } } },
+  });
+
+  revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}`);
+  revalidatePath(`/dashboard/courses/${languageDeck.course.slug}`);
+}
+
+// Unlike setCategoryActive (reversible — hide the deck, keep everything),
+// this is permanent: every Word in it cascade-deletes, which cascades
+// further to each word's WordForm/WordExample/WordQuizQuestion/
+// WordAlternateAnswer AND — critically — every learner's UserWordProgress
+// on every one of those words (see the cascade chain in
+// prisma/schema.prisma), plus this deck's own UserDeckActivation rows. The
+// caller is expected to have already confirmed with the admin; this action
+// itself has no confirmation step of its own.
+export async function deleteCategory(languageDeckId: string): Promise<void> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return;
+  }
+
+  const languageDeck = await prisma.languageDeck.delete({
+    where: { id: languageDeckId },
     select: { course: { select: { slug: true } } },
   });
 
@@ -804,6 +837,7 @@ export async function importWords(
           data: {
             id: newWordId,
             languageDeckId: targetLanguageDeckId,
+            path: word.path,
             term: word.term,
             translation: word.translation,
             romanization: word.romanization,
@@ -851,87 +885,60 @@ export async function importWords(
   redirect(`/dashboard/admin/courses/${targetLanguageDeck.course.slug}/categories/${targetLanguageDeckId}`);
 }
 
-// Bulk-creates words (plus their forms, example sentences, and hand-authored
-// quiz questions) in one deck from an uploaded .xlsx (see lib/word-import.ts
-// for the template/parser, built around this template's exact column
-// headers/sheet names). All-or-nothing on structural problems — a row
-// missing its required fields, or a Forms/Examples/Quiz questions row whose
-// "Word #" doesn't match any word row, blocks the whole batch, same as
-// `bulkImportQuizQuestions`'s all-or-nothing JSON validation — but an
-// unrecognized Category or Word type is just a warning: that one field is
-// left blank and the row still imports, since a name that doesn't match
-// isn't evidence of a typo needing a re-upload the way a missing Term is.
-export async function importWordsFromSpreadsheet(
-  _state: ImportWordsFromSpreadsheetFormState,
-  formData: FormData,
-): Promise<ImportWordsFromSpreadsheetFormState> {
-  const profile = await requireProfile();
+type ImportedWordRow = {
+  id: string;
+  isUpdate: boolean;
+  path: "vocab" | "grammar";
+  wordNumber: string | null;
+  term: string;
+  translation: string;
+  romanization: string | null;
+  exampleSentence: string | null;
+  explanation: string | null;
+  explanationJa: string | null;
+  categoryId: string | null;
+  wordType: string | null;
+};
+type ImportedFormRow = { id: string; wordId: string; labelEn: string; labelJa: string; value: string };
+type ImportedExampleRow = { wordId: string; formId: string | null; en: string; ja: string };
+type ImportedQuizRow = { wordId: string; prompt: string; promptJa: string | null; options: string[]; correctIndex: number };
 
-  if (profile.role !== "admin") {
-    return { message: "You don't have permission to do that." };
-  }
+type ProcessedWordSheet = {
+  rowErrors: string[];
+  warnings: string[];
+  validRows: ImportedWordRow[];
+  alternateAnswersByWordId: Map<string, string[]>;
+  formsByWordId: Map<string, ImportedFormRow[]>;
+  examplesByWordId: Map<string, ImportedExampleRow[]>;
+  quizByWordId: Map<string, ImportedQuizRow[]>;
+};
 
-  const rawFile = formData.get("file");
-  const file = rawFile instanceof File && rawFile.size > 0 ? rawFile : undefined;
-  // A plain checkbox flag, not spreadsheet data — read straight off the
-  // FormData rather than through the zod schema below, which validates what
-  // came from the uploaded file itself.
-  const deactivateMissing = formData.get("deactivateMissing") === "on";
-
-  const validatedFields = ImportWordsFromSpreadsheetFormSchema.safeParse({
-    languageDeckId: formData.get("languageDeckId"),
-    file,
-  });
-
-  if (!validatedFields.success) {
-    return { errors: validatedFields.error.flatten().fieldErrors };
-  }
-
-  const { languageDeckId, file: validFile } = validatedFields.data;
-
-  const languageDeck = await prisma.languageDeck.findUnique({
-    where: { id: languageDeckId },
-    select: { id: true, course: { select: { slug: true } } },
-  });
-
-  if (!languageDeck) {
-    return { message: "That category no longer exists." };
-  }
-
-  const buffer = Buffer.from(await validFile.arrayBuffer());
-  const parsed = await parseWordImportWorkbook(buffer);
-
-  if (!parsed.ok) {
-    return { message: parsed.message };
-  }
-
-  if (parsed.rows.length === 0) {
-    return { message: "That spreadsheet has no words in it." };
-  }
-
-  if (parsed.rows.length > MAX_IMPORT_ROWS) {
-    return { message: `That's ${parsed.rows.length} rows — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
-  }
-
-  if (parsed.quizRows.length > MAX_IMPORT_ROWS) {
-    return { message: `That's ${parsed.quizRows.length} rows on the Quiz questions sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
-  }
-
-  const categories = await prisma.wordCategory.findMany({ select: { id: true, name: true } });
-  const categoryIdByName = new Map(categories.map((category) => [category.name.toLowerCase(), category.id]));
-  const wordTypes: readonly string[] = WORD_TYPES;
-
-  // Scoped to this deck, so a "Word ID" cell (or a Term match — see below)
-  // can never make a row update a word that lives in a different deck.
-  const existingWords = await prisma.word.findMany({ where: { languageDeckId }, select: { id: true, term: true } });
-  const existingWordIds = new Set(existingWords.map((word) => word.id));
+// One path's worth of a spreadsheet import — called once for the Words/Quiz
+// questions sheets (`path: "vocab"`) and once for Grammar/Grammar quiz
+// questions (`path: "grammar"`), both writing into the same deck (see
+// GRAMMAR_SHEET_NAME's comment in lib/word-import.ts for why grammar gets
+// its own sheet pair instead of a column on Words). `existingWordsForPath`
+// must already be filtered to this path, so a Word ID or Term match can
+// never cross paths — a Grammar row can't silently update a vocab word,
+// or vice versa.
+function processWordSheet(
+  rows: ParsedWordImportRow[],
+  quizRows: ParsedSheetRow[],
+  path: "vocab" | "grammar",
+  sheetLabel: string,
+  quizSheetLabel: string,
+  existingWordsForPath: { id: string; term: string }[],
+  categoryIdByName: Map<string, string>,
+  wordTypes: readonly string[],
+): ProcessedWordSheet {
+  const existingWordIds = new Set(existingWordsForPath.map((word) => word.id));
   // Fallback match for a row with no (or no *matching*) Word ID — e.g. every
   // row from the blank template — so re-uploading a file of words that
   // already exist in this deck updates them instead of piling up duplicates
   // each time. First existing word wins if this deck already has more than
   // one with the same term.
   const existingIdByTerm = new Map<string, string>();
-  for (const word of existingWords) {
+  for (const word of existingWordsForPath) {
     const key = word.term.trim().toLowerCase();
     if (!existingIdByTerm.has(key)) existingIdByTerm.set(key, word.id);
   }
@@ -939,32 +946,18 @@ export async function importWordsFromSpreadsheet(
 
   const rowErrors: string[] = [];
   const warnings: string[] = [];
-  const validRows: {
-    id: string;
-    isUpdate: boolean;
-    wordNumber: string | null;
-    term: string;
-    translation: string;
-    romanization: string | null;
-    exampleSentence: string | null;
-    explanation: string | null;
-    explanationJa: string | null;
-    categoryId: string | null;
-    wordType: string | null;
-  }[] = [];
+  const validRows: ImportedWordRow[] = [];
   // Semicolon-separated within the "Alternative spellings" cell — split out
   // here per word id, same shape as formsByWordId/examplesByWordId below.
   const alternateAnswersByWordId = new Map<string, string[]>();
-  type FormRowData = { id: string; wordId: string; labelEn: string; labelJa: string; value: string };
-  const formsByWordId = new Map<string, FormRowData[]>();
-  type ExampleRowData = { wordId: string; formId: string | null; en: string; ja: string };
-  const examplesByWordId = new Map<string, ExampleRowData[]>();
+  const formsByWordId = new Map<string, ImportedFormRow[]>();
+  const examplesByWordId = new Map<string, ImportedExampleRow[]>();
 
-  for (const row of parsed.rows) {
+  for (const row of rows) {
     const result = WordImportRowSchema.safeParse(row.values);
 
     if (!result.success) {
-      rowErrors.push(`Words row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
+      rowErrors.push(`${sheetLabel} row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
       continue;
     }
 
@@ -972,13 +965,13 @@ export async function importWordsFromSpreadsheet(
 
     const formsResult = parseFormsCell(data.forms ?? "");
     if (!formsResult.ok) {
-      rowErrors.push(`Words row ${row.rowNumber}: Forms — ${formsResult.error}`);
+      rowErrors.push(`${sheetLabel} row ${row.rowNumber}: Forms — ${formsResult.error}`);
       continue;
     }
 
     const examplesResult = parseExamplesColumns(data.examplesEn ?? "", data.examplesJa ?? "");
     if (!examplesResult.ok) {
-      rowErrors.push(`Words row ${row.rowNumber}: ${examplesResult.error}`);
+      rowErrors.push(`${sheetLabel} row ${row.rowNumber}: ${examplesResult.error}`);
       continue;
     }
 
@@ -988,7 +981,7 @@ export async function importWordsFromSpreadsheet(
       if (match) {
         categoryId = match;
       } else {
-        warnings.push(`Words row ${row.rowNumber}: category "${data.category}" doesn't exist — imported without one.`);
+        warnings.push(`${sheetLabel} row ${row.rowNumber}: category "${data.category}" doesn't exist — imported without one.`);
       }
     }
 
@@ -998,7 +991,7 @@ export async function importWordsFromSpreadsheet(
       if (wordTypes.includes(normalized)) {
         wordType = normalized;
       } else {
-        warnings.push(`Words row ${row.rowNumber}: word type "${data.wordType}" isn't recognized — imported without one.`);
+        warnings.push(`${sheetLabel} row ${row.rowNumber}: word type "${data.wordType}" isn't recognized — imported without one.`);
       }
     }
 
@@ -1009,7 +1002,7 @@ export async function importWordsFromSpreadsheet(
 
     if (providedWordId && existingWordIds.has(providedWordId)) {
       if (seenWordIds.has(providedWordId)) {
-        rowErrors.push(`Words row ${row.rowNumber}: Word ID "${providedWordId}" is used more than once — remove the duplicate row.`);
+        rowErrors.push(`${sheetLabel} row ${row.rowNumber}: Word ID "${providedWordId}" is used more than once — remove the duplicate row.`);
         continue;
       }
       seenWordIds.add(providedWordId);
@@ -1024,13 +1017,13 @@ export async function importWordsFromSpreadsheet(
         isUpdate = true;
         if (providedWordId) {
           warnings.push(
-            `Words row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — matched to the existing word "${data.term}" by Term instead.`,
+            `${sheetLabel} row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — matched to the existing word "${data.term}" by Term instead.`,
           );
         }
       } else {
         if (providedWordId) {
           warnings.push(
-            `Words row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — imported as a new word instead.`,
+            `${sheetLabel} row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — imported as a new word instead.`,
           );
         }
         id = randomUUID();
@@ -1040,6 +1033,7 @@ export async function importWordsFromSpreadsheet(
     validRows.push({
       id,
       isUpdate,
+      path,
       wordNumber: data.wordNumber || null,
       term: data.term,
       translation: data.translation,
@@ -1089,27 +1083,26 @@ export async function importWordsFromSpreadsheet(
   }
 
   // Maps each spreadsheet-assigned "Word #" to the word it labels — how the
-  // Quiz questions sheet says which word a row belongs to, since those rows
-  // are validated (and need a real wordId to insert against) before any word
+  // quiz sheet says which word a row belongs to, since those rows are
+  // validated (and need a real wordId to insert against) before any word
   // has an id a spreadsheet cell could reference.
   const wordIdByNumber = new Map<string, string>();
   for (const row of validRows) {
     if (!row.wordNumber) continue;
     if (wordIdByNumber.has(row.wordNumber)) {
-      rowErrors.push(`Words row: "Word #" ${row.wordNumber} is used more than once — each must be unique.`);
+      rowErrors.push(`${sheetLabel} row: "Word #" ${row.wordNumber} is used more than once — each must be unique.`);
       continue;
     }
     wordIdByNumber.set(row.wordNumber, row.id);
   }
 
-  type QuizRowData = { wordId: string; prompt: string; promptJa: string | null; options: string[]; correctIndex: number };
-  const quizByWordId = new Map<string, QuizRowData[]>();
+  const quizByWordId = new Map<string, ImportedQuizRow[]>();
 
-  for (const row of parsed.quizRows) {
+  for (const row of quizRows) {
     const result = WordImportQuizRowSchema.safeParse(row.values);
 
     if (!result.success) {
-      rowErrors.push(`Quiz questions row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
+      rowErrors.push(`${quizSheetLabel} row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
       continue;
     }
 
@@ -1117,7 +1110,7 @@ export async function importWordsFromSpreadsheet(
     const wordId = wordIdByNumber.get(data.wordNumber);
 
     if (!wordId) {
-      rowErrors.push(`Quiz questions row ${row.rowNumber}: Word # "${data.wordNumber}" doesn't match any row on the Words sheet.`);
+      rowErrors.push(`${quizSheetLabel} row ${row.rowNumber}: Word # "${data.wordNumber}" doesn't match any row on the ${sheetLabel} sheet.`);
       continue;
     }
 
@@ -1136,12 +1129,137 @@ export async function importWordsFromSpreadsheet(
     quizByWordId.set(wordId, quizQuestions);
   }
 
+  return { rowErrors, warnings, validRows, alternateAnswersByWordId, formsByWordId, examplesByWordId, quizByWordId };
+}
+
+// Bulk-creates words (plus their forms, example sentences, and hand-authored
+// quiz questions) in one deck from an uploaded .xlsx (see lib/word-import.ts
+// for the template/parser, built around this template's exact column
+// headers/sheet names). Vocab (Words/Quiz questions) and grammar
+// (Grammar/Grammar quiz questions) are each processed independently by
+// `processWordSheet` and merged below — see its comment for why they can
+// never cross-match. All-or-nothing on structural problems — a row missing
+// its required fields, or a Quiz questions row whose "Word #" doesn't match
+// any word row, blocks the whole batch, same as `bulkImportQuizQuestions`'s
+// all-or-nothing JSON validation — but an unrecognized Category or Word type
+// is just a warning: that one field is left blank and the row still
+// imports, since a name that doesn't match isn't evidence of a typo needing
+// a re-upload the way a missing Term is.
+export async function importWordsFromSpreadsheet(
+  _state: ImportWordsFromSpreadsheetFormState,
+  formData: FormData,
+): Promise<ImportWordsFromSpreadsheetFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const rawFile = formData.get("file");
+  const file = rawFile instanceof File && rawFile.size > 0 ? rawFile : undefined;
+  // A plain checkbox flag, not spreadsheet data — read straight off the
+  // FormData rather than through the zod schema below, which validates what
+  // came from the uploaded file itself.
+  const deactivateMissing = formData.get("deactivateMissing") === "on";
+
+  const validatedFields = ImportWordsFromSpreadsheetFormSchema.safeParse({
+    languageDeckId: formData.get("languageDeckId"),
+    file,
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { languageDeckId, file: validFile } = validatedFields.data;
+
+  const languageDeck = await prisma.languageDeck.findUnique({
+    where: { id: languageDeckId },
+    select: { id: true, course: { select: { slug: true } } },
+  });
+
+  if (!languageDeck) {
+    return { message: "That category no longer exists." };
+  }
+
+  const buffer = Buffer.from(await validFile.arrayBuffer());
+  const parsed = await parseWordImportWorkbook(buffer);
+
+  if (!parsed.ok) {
+    return { message: parsed.message };
+  }
+
+  if (parsed.rows.length === 0 && parsed.grammarRows.length === 0) {
+    return { message: "That spreadsheet has no words in it." };
+  }
+
+  if (parsed.rows.length > MAX_IMPORT_ROWS) {
+    return { message: `That's ${parsed.rows.length} rows on the Words sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
+  }
+
+  if (parsed.grammarRows.length > MAX_IMPORT_ROWS) {
+    return { message: `That's ${parsed.grammarRows.length} rows on the Grammar sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
+  }
+
+  if (parsed.quizRows.length > MAX_IMPORT_ROWS) {
+    return { message: `That's ${parsed.quizRows.length} rows on the Quiz questions sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
+  }
+
+  if (parsed.grammarQuizRows.length > MAX_IMPORT_ROWS) {
+    return {
+      message: `That's ${parsed.grammarQuizRows.length} rows on the Grammar quiz questions sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.`,
+    };
+  }
+
+  const categories = await prisma.wordCategory.findMany({ select: { id: true, name: true } });
+  const categoryIdByName = new Map(categories.map((category) => [category.name.toLowerCase(), category.id]));
+  const wordTypes: readonly string[] = WORD_TYPES;
+
+  // Split by path so a Words-sheet row can never Word ID/Term-match a
+  // grammar point, or vice versa — see processWordSheet's comment.
+  const existingWords = await prisma.word.findMany({
+    where: { languageDeckId },
+    select: { id: true, term: true, path: true },
+  });
+  const existingVocabWords = existingWords.filter((word) => word.path === "vocab");
+  const existingGrammarWords = existingWords.filter((word) => word.path === "grammar");
+
+  const vocab = processWordSheet(
+    parsed.rows,
+    parsed.quizRows,
+    "vocab",
+    "Words",
+    "Quiz questions",
+    existingVocabWords,
+    categoryIdByName,
+    wordTypes,
+  );
+  const grammar = processWordSheet(
+    parsed.grammarRows,
+    parsed.grammarQuizRows,
+    "grammar",
+    "Grammar",
+    "Grammar quiz questions",
+    existingGrammarWords,
+    categoryIdByName,
+    wordTypes,
+  );
+
+  const rowErrors = [...vocab.rowErrors, ...grammar.rowErrors];
+  const warnings = [...vocab.warnings, ...grammar.warnings];
+
   if (rowErrors.length > 0) {
     return {
       message: `${rowErrors.length} row${rowErrors.length === 1 ? "" : "s"} couldn't be imported — fix these and re-upload the whole file:`,
       rowErrors,
     };
   }
+
+  const validRows = [...vocab.validRows, ...grammar.validRows];
+  const alternateAnswersByWordId = new Map([...vocab.alternateAnswersByWordId, ...grammar.alternateAnswersByWordId]);
+  const formsByWordId = new Map([...vocab.formsByWordId, ...grammar.formsByWordId]);
+  const examplesByWordId = new Map([...vocab.examplesByWordId, ...grammar.examplesByWordId]);
+  const quizByWordId = new Map([...vocab.quizByWordId, ...grammar.quizByWordId]);
 
   const { _max } = await prisma.word.aggregate({
     where: { languageDeckId },
@@ -1153,6 +1271,8 @@ export async function importWordsFromSpreadsheet(
   const newRows = validRows.filter((row) => !row.isUpdate);
   const updatedRows = validRows.filter((row) => row.isUpdate);
   const updatedWordIds = updatedRows.map((row) => row.id);
+  const updatedVocabWordIds = vocab.validRows.filter((row) => row.isUpdate).map((row) => row.id);
+  const updatedGrammarWordIds = grammar.validRows.filter((row) => row.isUpdate).map((row) => row.id);
 
   const formsData = [...formsByWordId.values()].flatMap((forms) =>
     forms.map((form, index) => ({ ...form, position: index + 1 })),
@@ -1176,6 +1296,7 @@ export async function importWordsFromSpreadsheet(
         data: newRows.map((row, index) => ({
           id: row.id,
           languageDeckId,
+          path: row.path,
           term: row.term,
           translation: row.translation,
           romanization: row.romanization,
@@ -1255,13 +1376,28 @@ export async function importWordsFromSpreadsheet(
   // opt-in per upload rather than inferred from the file's shape, since a
   // small file (the blank template, or a hand-made one with no "Word ID"
   // column at all) uploaded without meaning to sync the whole deck must
-  // never silently deactivate everything it left out.
-  let deactivateResultIndex = -1;
-  if (deactivateMissing && updatedWordIds.length > 0) {
-    deactivateResultIndex = ops.length;
+  // never silently deactivate everything it left out. Applied independently
+  // per path: a file with a Words sheet but no Grammar rows at all never
+  // deactivates grammar points, even with the checkbox ticked — each
+  // `updatedXWordIds` set only reliably represents "everything that sheet
+  // covers" because processWordSheet never lets a match cross paths.
+  let vocabDeactivateResultIndex = -1;
+  if (deactivateMissing && updatedVocabWordIds.length > 0) {
+    vocabDeactivateResultIndex = ops.length;
     ops.push(
       prisma.word.updateMany({
-        where: { languageDeckId, active: true, id: { notIn: updatedWordIds } },
+        where: { languageDeckId, path: "vocab", active: true, id: { notIn: updatedVocabWordIds } },
+        data: { active: false },
+      }),
+    );
+  }
+
+  let grammarDeactivateResultIndex = -1;
+  if (deactivateMissing && updatedGrammarWordIds.length > 0) {
+    grammarDeactivateResultIndex = ops.length;
+    ops.push(
+      prisma.word.updateMany({
+        where: { languageDeckId, path: "grammar", active: true, id: { notIn: updatedGrammarWordIds } },
         data: { active: false },
       }),
     );
@@ -1274,10 +1410,22 @@ export async function importWordsFromSpreadsheet(
   // it close even for a handful of rows before that fix.
   const results = await prisma.$transaction(ops, { timeout: 20_000 });
   const deactivatedCount =
-    deactivateResultIndex >= 0 ? (results[deactivateResultIndex] as { count: number }).count : 0;
+    (vocabDeactivateResultIndex >= 0 ? (results[vocabDeactivateResultIndex] as { count: number }).count : 0) +
+    (grammarDeactivateResultIndex >= 0 ? (results[grammarDeactivateResultIndex] as { count: number }).count : 0);
 
   revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}`);
   revalidatePath(`/dashboard/courses/${languageDeck.course.slug}/decks/${languageDeckId}`);
+
+  // A clean import (nothing for the admin to double-check) goes straight to
+  // the deck's word list, so they land on what they just imported instead
+  // of a message they then have to navigate away from. A row-level warning
+  // (unrecognized category/word type, a Word ID that fell back to a Term
+  // match, etc.) holds here instead — those are worth reading before moving
+  // on, and this codebase has no cross-navigation flash-message mechanism
+  // (see ShareProgressButton's note) to carry them across a redirect.
+  if (warnings.length === 0) {
+    redirect(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}`);
+  }
 
   let summary = `Imported ${validRows.length} word${validRows.length === 1 ? "" : "s"}`;
   summary += updatedRows.length > 0 ? ` (${newRows.length} new, ${updatedRows.length} updated).` : ".";
@@ -1288,7 +1436,7 @@ export async function importWordsFromSpreadsheet(
   return {
     success: true,
     message: summary,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
   };
 }
 

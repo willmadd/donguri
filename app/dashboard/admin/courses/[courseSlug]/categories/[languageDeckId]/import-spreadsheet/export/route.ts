@@ -39,6 +39,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       orderBy: { position: "asc" },
       select: {
         id: true,
+        path: true,
         term: true,
         translation: true,
         romanization: true,
@@ -64,6 +65,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
   const exportRows: WordExportRow[] = words.map((word) => ({
     id: word.id,
+    path: word.path as "vocab" | "grammar",
     term: word.term,
     translation: word.translation,
     romanization: word.romanization,

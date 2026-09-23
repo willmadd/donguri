@@ -343,6 +343,9 @@ export type LanguageDeckWordSummary = {
   translation: string;
   romanization: string | null;
   known: boolean;
+  // 'vocab' | 'grammar' — see the note on `Word.path` in
+  // prisma/schema.prisma. Per-word now that a deck can mix both.
+  path: string;
 };
 
 export type LanguageDeckSummary = {
@@ -360,11 +363,11 @@ export type LanguageDeckSummary = {
   // Short admin-set labels shown as badges on the deck card — e.g.
   // "Beginner", "JLPT N5". Never empty-string entries; may be [].
   tags: string[];
-  // 'vocab' | 'grammar' — lets learn/test/review pages branch behavior
-  // (e.g. one grammar point per languageDeck instead of three, an all-cloze quiz)
-  // without a second round trip. See the note on LanguageDeck.path in
-  // supabase/schema.sql.
-  path: string;
+  // A deck's content mix, computed from its words' own `path` (a deck can
+  // hold both) — lets learn/test/review pages branch behavior (e.g. an
+  // all-cloze quiz for the grammar half) without a second round trip.
+  vocabCount: number;
+  grammarCount: number;
   position: number;
   totalWords: number;
   // Words with any practice history (revealed or quizzed at least once),
@@ -478,8 +481,6 @@ export type CreateCategoryFormState =
   | {
       errors?: CategoryFieldErrors & { courseId?: string[] };
       message?: string;
-      success?: boolean;
-      languageDeckId?: string;
     }
   | undefined;
 
@@ -565,6 +566,10 @@ const WordFieldsSchema = {
     .optional(),
   categoryId: z.uuid({ error: "Invalid category." }).optional(),
   wordType: z.enum(WORD_TYPES, { error: "Invalid word type." }).optional(),
+  // Whether this is a vocab word or a grammar point — a deck can hold both,
+  // so unlike everything else here this isn't inherited from the deck (see
+  // the note on `Word.path` in prisma/schema.prisma).
+  path: z.enum(["vocab", "grammar"], { error: "Choose vocabulary or grammar." }),
   image: IMAGE_FIELD_SCHEMA,
 };
 
@@ -577,6 +582,7 @@ type WordFieldErrors = {
   explanationJa?: string[];
   categoryId?: string[];
   wordType?: string[];
+  path?: string[];
   image?: string[];
 };
 
@@ -846,9 +852,12 @@ export type AdminCourseOption = {
 export type AdminCategorySummary = {
   id: string;
   title: string;
-  path: string;
+  // A deck's content mix — computed from its words' own `path` (see the
+  // note on `Word.path` in prisma/schema.prisma) rather than a single
+  // deck-level type, since a deck can hold both.
+  vocabCount: number;
+  grammarCount: number;
   position: number;
-  wordCount: number;
   active: boolean;
   tags: string[];
 };
@@ -881,6 +890,7 @@ export type AdminWordSummary = {
   active: boolean;
   category: WordCategoryOption | null;
   wordType: WordType | null;
+  path: "vocab" | "grammar";
   forms: WordFormSummary[];
   examples: WordExampleSummary[];
   alternateAnswers: WordAlternateAnswerSummary[];

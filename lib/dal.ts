@@ -223,9 +223,9 @@ export const getAdminCourses = cache(async (): Promise<AdminCourseOption[]> => {
   });
 });
 
-// Category (LanguageDeck) list for the admin content-management pages — includes
-// every languageDeck regardless of `path`, unlike `getCourseDecks`'s learner-facing
-// filter to active `path: 'vocab'` languageDecks only.
+// Category (LanguageDeck) list for the admin content-management pages —
+// includes every languageDeck regardless of active state, unlike
+// `getCourseDecks`'s learner-facing active-only filter.
 export const getAdminCategoryOverview = cache(
   async (
     courseSlug: string,
@@ -241,20 +241,25 @@ export const getAdminCategoryOverview = cache(
     const languageDecks = await prisma.languageDeck.findMany({
       where: { courseId: course.id },
       orderBy: { position: "asc" },
-      include: { _count: { select: { words: true } } },
+      include: { words: { select: { path: true } } },
     });
 
     return {
       course: toCourseSummary(course),
-      categories: languageDecks.map((languageDeck) => ({
-        id: languageDeck.id,
-        title: languageDeck.title,
-        path: languageDeck.path,
-        position: languageDeck.position,
-        wordCount: languageDeck._count.words,
-        active: languageDeck.active,
-        tags: languageDeck.tags,
-      })),
+      categories: languageDecks.map((languageDeck) => {
+        const vocabCount = languageDeck.words.filter((word) => word.path === "vocab").length;
+        const grammarCount = languageDeck.words.length - vocabCount;
+
+        return {
+          id: languageDeck.id,
+          title: languageDeck.title,
+          vocabCount,
+          grammarCount,
+          position: languageDeck.position,
+          active: languageDeck.active,
+          tags: languageDeck.tags,
+        };
+      }),
     };
   },
 );
@@ -383,6 +388,7 @@ function toAdminWordSummary(word: {
   imageKey: string | null;
   active: boolean;
   wordType: string | null;
+  path: string;
   category: { id: string; name: string; color: string } | null;
   forms: { id: string; labelEn: string; labelJa: string; value: string }[];
   examples: { id: string; formId: string | null; en: string; ja: string }[];
@@ -400,6 +406,7 @@ function toAdminWordSummary(word: {
     imageKey: word.imageKey,
     active: word.active,
     wordType: word.wordType as WordType | null,
+    path: word.path as "vocab" | "grammar",
     category: word.category,
     forms: word.forms.map((form) => ({
       id: form.id,
@@ -551,6 +558,7 @@ type LanguageDeckWordRow = {
   term: string;
   translation: string;
   romanization: string | null;
+  path: string;
   progress: { status: string }[];
 };
 
@@ -563,7 +571,6 @@ function toLanguageDeckSummary(languageDeck: {
   bgColor: string | null;
   primaryColor: string | null;
   tags: string[];
-  path: string;
   position: number;
   words: LanguageDeckWordRow[];
 }): LanguageDeckSummary {
@@ -573,7 +580,9 @@ function toLanguageDeckSummary(languageDeck: {
     translation: word.translation,
     romanization: word.romanization,
     known: word.progress.some((p) => p.status === "known"),
+    path: word.path,
   }));
+  const vocabCount = words.filter((word) => word.path === "vocab").length;
 
   return {
     id: languageDeck.id,
@@ -584,7 +593,8 @@ function toLanguageDeckSummary(languageDeck: {
     bgColor: languageDeck.bgColor,
     primaryColor: languageDeck.primaryColor,
     tags: languageDeck.tags,
-    path: languageDeck.path,
+    vocabCount,
+    grammarCount: words.length - vocabCount,
     position: languageDeck.position,
     totalWords: words.length,
     learntWords: languageDeck.words.filter((word) => word.progress.length > 0)
@@ -599,21 +609,19 @@ const LANGUAGE_DECK_WORDS_SELECT = {
   term: true,
   translation: true,
   romanization: true,
+  path: true,
   progress: { select: { status: true } },
 } as const;
 
-// A "deck" is a LanguageDeck — vocab and grammar languageDecks are both independently
-// pickable here (see the note on `LanguageDeck.path` in supabase/schema.sql
-// section 19: a vocab languageDeck and its grammar sibling share one `position`,
-// but each is its own row, its own title, and its own activation). Sorted
-// by position, vocab before grammar within a position, so a pair still
-// reads as adjacent. `activeDeckIds` is this user's personal "active decks"
-// selection (see `getActiveDeckIds`) — which decks currently feed their
-// Learn/Test pool, not an admin visibility toggle.
+// A "deck" is a LanguageDeck, which can hold a mixture of vocab words and
+// grammar points (see the note on `Word.path` in prisma/schema.prisma).
+// `activeDeckIds` is this user's personal "active decks" selection (see
+// `getActiveDeckIds`) — which decks currently feed their Learn/Test pool,
+// not an admin visibility toggle.
 export const getCourseDecks = cache(async (courseSlug: string) => {
   const { user, course } = await requireEnrolledCourse(courseSlug);
 
-  const [languageDecks, activeVocabIds, activeGrammarIds] = await Promise.all([
+  const [languageDecks, activeDeckIds] = await Promise.all([
     prisma.languageDeck.findMany({
       where: { courseId: course.id, active: true },
       orderBy: { position: "asc" },
@@ -628,111 +636,40 @@ export const getCourseDecks = cache(async (courseSlug: string) => {
         },
       },
     }),
-    getActiveDeckIds(course.id, user.id, "vocab"),
-    getActiveDeckIds(course.id, user.id, "grammar"),
+    getActiveDeckIds(course.id, user.id),
   ]);
-
-  const sortedLanguageDecks = [...languageDecks].sort((a, b) => {
-    if (a.position !== b.position) return a.position - b.position;
-    if (a.path === b.path) return 0;
-    return a.path === "vocab" ? -1 : 1;
-  });
 
   return {
     course: toCourseSummary(course),
-    decks: sortedLanguageDecks.map((languageDeck) =>
+    decks: languageDecks.map((languageDeck) =>
       toLanguageDeckSummary(languageDeck),
     ),
-    activeDeckIds: [...activeVocabIds, ...activeGrammarIds],
+    activeDeckIds,
   };
 });
 
-// This user's personal "active decks" selection within a course, for one
-// path — which decks currently feed the Learn/Test pool (see
-// `getLearnQueueForCourse`). Vocab and grammar are independent selections;
-// a brand-new enrollment has no activation rows yet for either, so:
-//   - vocab lazily activates the first vocab deck (lowest position) the
-//     first time it's read, so Learn isn't dead on arrival.
-//   - grammar, the first time *it's* read with no rows of its own,
-//     defaults to whichever grammar languageDecks share a position with the
-//     user's currently-active vocab decks — the same pairing grammar
-//     implicitly followed before it became independently activatable — and
-//     persists that as real rows, so it's a one-time migration default, not
-//     a standing behavior.
-// From then on it's purely the user's own selection per path — deactivating
-// a deck later is respected, not re-activated. Wrapped in `cache()`: the
-// grammar branch below recursively calls this for "vocab" with the same
-// args `getCourseDecks` already called directly in the same Promise.all —
-// without memoizing, every course-home-page view ran that lookup (and,
-// worse, its auto-activate-first-deck fallback and write) twice.
+// This user's personal "active decks" selection within a course — which
+// decks currently feed the Learn/Test pool (see `getLearnQueueForCourse`).
+// A brand-new enrollment has no activation rows yet, so it lazily activates
+// the first deck (lowest position) the first time this is read, so Learn
+// isn't dead on arrival. From then on it's purely the user's own selection
+// — deactivating a deck later is respected, not re-activated ("any row at
+// all, active or not, means the user has touched this before").
 const getActiveDeckIds = cache(
-  async (
-    courseId: string,
-    userId: string,
-    path: "vocab" | "grammar",
-  ): Promise<string[]> => {
+  async (courseId: string, userId: string): Promise<string[]> => {
     const activations = await prisma.userDeckActivation.findMany({
-      where: { userId, languageDeck: { courseId, path } },
+      where: { userId, languageDeck: { courseId } },
       select: { languageDeckId: true, active: true },
     });
 
-    // Any row at all (active or not) means the user has touched deck
-    // activation for this path before — respect it exactly, including
-    // "everything's off," rather than second-guessing it.
     if (activations.length > 0) {
       return activations
         .filter((activation) => activation.active)
         .map((activation) => activation.languageDeckId);
     }
 
-    if (path === "grammar") {
-      const activeVocabIds = await getActiveDeckIds(courseId, userId, "vocab");
-      if (activeVocabIds.length === 0) {
-        return [];
-      }
-
-      const activeVocabLanguageDecks = await prisma.languageDeck.findMany({
-        where: { id: { in: activeVocabIds }, courseId, path: "vocab" },
-        select: { position: true },
-      });
-      const positions = activeVocabLanguageDecks.map(
-        (languageDeck) => languageDeck.position,
-      );
-
-      if (positions.length === 0) {
-        return [];
-      }
-
-      const grammarLanguageDecks = await prisma.languageDeck.findMany({
-        where: {
-          courseId,
-          path: "grammar",
-          position: { in: positions },
-          active: true,
-        },
-        select: { id: true },
-      });
-
-      if (grammarLanguageDecks.length === 0) {
-        return [];
-      }
-
-      await prisma.userDeckActivation.createMany({
-        data: grammarLanguageDecks.map((languageDeck) => ({
-          userId,
-          languageDeckId: languageDeck.id,
-          active: true,
-        })),
-        skipDuplicates: true,
-      });
-
-      return grammarLanguageDecks.map((languageDeck) => languageDeck.id);
-    }
-
-    // vocab, never touched — auto-activate the first deck so Learn isn't dead
-    // on arrival for a brand-new enrollment.
     const firstDeck = await prisma.languageDeck.findFirst({
-      where: { courseId, path: "vocab", active: true },
+      where: { courseId, active: true },
       orderBy: { position: "asc" },
       select: { id: true },
     });
@@ -750,11 +687,11 @@ const getActiveDeckIds = cache(
 );
 
 // Single languageDeck's stats/words for the deck detail and learn/test/review
-// pages — deliberately path-agnostic (unlike `getCourseDecks`), so it
-// resolves a `path: 'grammar'` languageDeck by its own id exactly like a vocab
-// one; the learn/quiz/review-queue mechanics never cared about path in the
-// first place (see `requireDeck`). Redirects to the deck list if the id
-// doesn't resolve to an active languageDeck in this course.
+// pages — a deck can hold vocab words, grammar points, or a mix (see the
+// note on `Word.path` in prisma/schema.prisma); the learn/quiz/review-queue
+// mechanics never cared about a deck's own identity, only each word's.
+// Redirects to the deck list if the id doesn't resolve to an active
+// languageDeck in this course.
 export const getDeckDetail = cache(
   async (courseSlug: string, deckId: string) => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
@@ -789,8 +726,8 @@ export const getDeckDetail = cache(
 // always at least the trailing 7 days so a short or empty streak still
 // renders as a proper week-wide chart instead of one or two bars. Splits
 // each day's total across vocab words learned, grammar points learned
-// (both from `UserWordProgress.introducedAt`, keyed by the word's
-// `languageDeck.path`), and daily challenge attempts completed.
+// (both from `UserWordProgress.introducedAt`, keyed by the word's own
+// `path`), and daily challenge attempts completed.
 export const getDailyActivityCounts = cache(
   async (courseSlug: string): Promise<DailyActivityCount[]> => {
     const { user, course, enrollment } =
@@ -821,7 +758,7 @@ export const getDailyActivityCounts = cache(
           word: { languageDeck: { courseId: course.id } },
           introducedAt: { gte: rangeStart, lt: rangeEndExclusive },
         },
-        select: { introducedAt: true, word: { select: { languageDeck: { select: { path: true } } } } },
+        select: { introducedAt: true, word: { select: { path: true } } },
       }),
       prisma.dailyChallengeAttempt.findMany({
         where: {
@@ -837,7 +774,7 @@ export const getDailyActivityCounts = cache(
     const grammarCounts = new Map<string, number>();
     for (const { introducedAt, word } of progress) {
       const day = startOfUTCDay(introducedAt).toISOString().slice(0, 10);
-      const counts = word.languageDeck.path === "grammar" ? grammarCounts : vocabCounts;
+      const counts = word.path === "grammar" ? grammarCounts : vocabCounts;
       counts.set(day, (counts.get(day) ?? 0) + 1);
     }
 
@@ -1010,11 +947,7 @@ export const getLeaderboards = cache(
 export const getLearnQueueForCourse = cache(
   async (courseSlug: string): Promise<RevealWord[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const [vocabIds, grammarIds] = await Promise.all([
-      getActiveDeckIds(course.id, user.id, "vocab"),
-      getActiveDeckIds(course.id, user.id, "grammar"),
-    ]);
-    const languageDeckIds = [...vocabIds, ...grammarIds];
+    const languageDeckIds = await getActiveDeckIds(course.id, user.id);
 
     if (languageDeckIds.length === 0) {
       return [];
@@ -1029,7 +962,6 @@ export const getLearnQueueForCourse = cache(
       include: {
         forms: { orderBy: { position: "asc" } },
         examples: { orderBy: { position: "asc" } },
-        languageDeck: { select: { path: true } },
       },
     });
 
@@ -1076,7 +1008,7 @@ export const getLearnQueueForCourse = cache(
       })),
       image: wordImagePath(word),
       targetLanguage: course.targetLanguage,
-      path: word.languageDeck.path as "vocab" | "grammar",
+      path: word.path as "vocab" | "grammar",
     }));
   },
 );
@@ -1120,7 +1052,6 @@ export const getTestQueueForCourse = cache(
           include: {
             forms: { orderBy: { position: "asc" } },
             examples: { orderBy: { position: "asc" } },
-            languageDeck: { select: { path: true } },
           },
         },
       },
@@ -1133,10 +1064,10 @@ export const getTestQueueForCourse = cache(
     await bumpStreak(user.id, course.id, new Date());
 
     const grammarWords = freshProgress
-      .filter((progress) => progress.word.languageDeck.path === "grammar")
+      .filter((progress) => progress.word.path === "grammar")
       .map((progress) => ({ ...progress.word, path: "grammar" as const }));
     const vocabWords = freshProgress
-      .filter((progress) => progress.word.languageDeck.path === "vocab")
+      .filter((progress) => progress.word.path === "vocab")
       .map((progress) => ({ ...progress.word, path: "vocab" as const }));
 
     const grammarQuestions = grammarWords.flatMap((word) =>
@@ -1147,7 +1078,8 @@ export const getTestQueueForCourse = cache(
     if (vocabWords.length > 0) {
       const distractorPool = await prisma.word.findMany({
         where: {
-          languageDeck: { courseId: course.id, path: "vocab", active: true },
+          languageDeck: { courseId: course.id, active: true },
+          path: "vocab",
           active: true,
         },
         select: {
@@ -1279,7 +1211,6 @@ export const getReviewQueue = cache(
           include: {
             forms: { orderBy: { position: "asc" } },
             examples: { orderBy: { position: "asc" } },
-            languageDeck: { select: { path: true } },
           },
         },
       },
@@ -1296,7 +1227,7 @@ export const getReviewQueue = cache(
         buildTypedQuestion(
           {
             ...progress.word,
-            path: progress.word.languageDeck.path as "vocab" | "grammar",
+            path: progress.word.path as "vocab" | "grammar",
           },
           course,
         ),

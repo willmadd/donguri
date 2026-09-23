@@ -154,7 +154,7 @@ export async function submitTypedAnswer(
       term: true,
       translation: true,
       romanization: true,
-      languageDeck: { select: { path: true } },
+      path: true,
       alternateAnswers: { select: { value: true } },
     },
   });
@@ -165,7 +165,7 @@ export async function submitTypedAnswer(
   const useRomanizedAnswer =
     direction === "translation-to-term" &&
     !isLatinTypeable(word.term) &&
-    word.languageDeck.path === "vocab" &&
+    word.path === "vocab" &&
     Boolean(word.romanization);
 
   const storedAnswer =
@@ -427,9 +427,10 @@ export async function skipLanguageDeck(languageDeckId: string): Promise<void> {
 // course (see getActiveDeckIds in lib/dal.ts) — upserts rather than
 // creating/deleting the row, since `active` being a real column (not row
 // presence) is what lets getActiveDeckIds tell "explicitly deactivated"
-// apart from "never touched" even once every deck is off. `deckId` can be
-// either a vocab or a grammar languageDeck id — the two paths are independently
-// activated (see getActiveDeckIds's per-path lookup in lib/dal.ts).
+// apart from "never touched" even once every deck is off. A deck can hold
+// vocab words, grammar points, or a mix (see the note on `Word.path` in
+// prisma/schema.prisma) — activation is purely per-deck, not per content
+// type.
 export async function toggleDeckActivation(
   courseSlug: string,
   deckId: string,

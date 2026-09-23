@@ -1362,3 +1362,118 @@ drop policy if exists "Authenticated users can view word alternate answers" on p
 create policy "Authenticated users can view word alternate answers"
   on public.word_alternate_answers for select
   using (auth.role() = 'authenticated');
+
+-- 33. Move vocab/grammar path from decks to words ------------------------------
+-- A deck's content is a mixture of vocab words and grammar points, not
+-- purely one or the other — `path` moves from language_decks (one type per
+-- deck, with a same-position "grammar sibling" deck standing in for mixed
+-- content — see section 7's note, now stale) to words (each word its own
+-- type). Turned out not to be the no-op section 7's "only 'vocab' has
+-- content so far" note implied: two courses already had a real
+-- "Basic Grammar" deck sharing a position with a "Basic Vocabulary" deck,
+-- each with real words and learner progress — so this also has to merge
+-- every such pair into one deck before the structural change below, or the
+-- new `(course_id, position)` uniqueness (replacing the old
+-- `(course_id, path, position)`, since decks no longer carry a path to pair
+-- on) would reject the duplicate position outright.
+
+-- 33a. Add words.path and backfill it from the current deck, while decks
+-- still carry it — must run before the merge below (33b), which deletes any
+-- grammar deck that shares a position with a vocab deck; once that row is
+-- gone, there's no longer anywhere to read its words' correct path from.
+
+alter table public.words
+  add column if not exists path text not null default 'vocab' check (path in ('vocab', 'grammar'));
+
+update public.words w
+set path = l.path
+from public.language_decks l
+where w.language_deck_id = l.id and l.path = 'grammar';
+
+-- 33b. Merge same-position vocab/grammar deck pairs into one deck — the
+-- vocab deck survives (ties broken by id); every other deck at that
+-- position has its words moved in (each word's `path`, set in 33a above,
+-- travels with it — repositioned after the survivor's current max word
+-- position, preserving their relative order) and its per-user activation
+-- state OR'd into the survivor's (so merging never silently turns off
+-- content a learner had enabled), then the leftover deck row is deleted
+-- (cascading its own now-empty activation rows away).
+
+do $$
+declare
+  grp record;
+  survivor_id uuid;
+  loser_id uuid;
+  max_word_position int;
+begin
+  for grp in
+    select course_id, position
+    from public.language_decks
+    group by course_id, position
+    having count(*) > 1
+  loop
+    select id into survivor_id
+    from public.language_decks
+    where course_id = grp.course_id and position = grp.position
+    order by (path <> 'vocab'), id
+    limit 1;
+
+    for loser_id in
+      select id
+      from public.language_decks
+      where course_id = grp.course_id and position = grp.position and id <> survivor_id
+    loop
+      select coalesce(max(position), 0) into max_word_position
+      from public.words
+      where language_deck_id = survivor_id;
+
+      with ranked as (
+        select id, row_number() over (order by position) as rn
+        from public.words
+        where language_deck_id = loser_id
+      )
+      update public.words w
+      set language_deck_id = survivor_id,
+          position = max_word_position + ranked.rn
+      from ranked
+      where w.id = ranked.id;
+
+      insert into public.user_deck_activations (user_id, language_deck_id, active)
+      select uda.user_id, survivor_id, uda.active
+      from public.user_deck_activations uda
+      where uda.language_deck_id = loser_id
+      on conflict (user_id, language_deck_id)
+      do update set active = public.user_deck_activations.active or excluded.active;
+
+      delete from public.language_decks where id = loser_id;
+    end loop;
+  end loop;
+end $$;
+
+-- 33c. Drop path from language_decks, now that every word carries its own —
+-- looked up dynamically (not by a hardcoded name) since it was created in
+-- section 7 as an unnamed inline `unique (...)`, so Postgres chose its name.
+
+do $$
+declare
+  deck_path_unique_constraint text;
+begin
+  select tc.constraint_name into deck_path_unique_constraint
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu on kcu.constraint_name = tc.constraint_name
+    and kcu.table_schema = tc.table_schema
+  where tc.table_schema = 'public'
+    and tc.table_name = 'language_decks'
+    and tc.constraint_type = 'UNIQUE'
+    and kcu.column_name = 'path'
+  limit 1;
+
+  if deck_path_unique_constraint is not null then
+    execute format('alter table public.language_decks drop constraint %I', deck_path_unique_constraint);
+  end if;
+end $$;
+
+alter table public.language_decks
+  add constraint language_decks_course_id_position_key unique (course_id, position);
+
+alter table public.language_decks drop column if exists path;

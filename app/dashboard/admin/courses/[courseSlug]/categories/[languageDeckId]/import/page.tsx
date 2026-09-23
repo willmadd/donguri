@@ -99,7 +99,7 @@ export default async function ImportWordsPage({ params, searchParams }: PageProp
               value: category.id,
               label: t("admin_import.source_deck_option", "{{title}} ({{count}} words)", {
                 title: category.title,
-                count: category.wordCount,
+                count: category.vocabCount + category.grammarCount,
               }),
             }))}
           />

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdminProfile, getAdminCategoryOverview } from "@/lib/dal";
 import { setCategoryActive } from "@/lib/actions/admin-content";
+import { DeleteDeckButton } from "@/components/admin/delete-deck-button";
 import { VisibilityToggle } from "@/components/ui/visibility-toggle";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -51,9 +52,21 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
           <p className="text-sumi-soft">{t("admin_course_decks.no_decks", "No decks yet.")}</p>
         )}
         {categories.map((category) => {
-          const isGrammar = category.path === "grammar";
-          const vocabCount = isGrammar ? 0 : category.wordCount;
-          const grammarCount = isGrammar ? category.wordCount : 0;
+          const { vocabCount, grammarCount } = category;
+          const hasVocab = vocabCount > 0;
+          const hasGrammar = grammarCount > 0;
+          const badgeLabel =
+            hasVocab && hasGrammar
+              ? t("course_home.mixed", "Mixed")
+              : hasGrammar
+                ? t("course_home.grammar", "Grammar")
+                : t("course_home.vocabulary", "Vocabulary");
+          const badgeClass =
+            hasVocab && hasGrammar
+              ? "bg-sakura-soft text-sakura-dark"
+              : hasGrammar
+                ? "bg-matcha-soft text-matcha-dark"
+                : "bg-ai-soft text-ai-dark";
 
           return (
             <div
@@ -66,14 +79,8 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold text-sumi">{category.title}</h2>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      isGrammar ? "bg-matcha-soft text-matcha-dark" : "bg-ai-soft text-ai-dark"
-                    }`}
-                  >
-                    {isGrammar
-                      ? t("course_home.grammar", "Grammar")
-                      : t("course_home.vocabulary", "Vocabulary")}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                    {badgeLabel}
                   </span>
                   {category.tags.map((tag) => (
                     <span
@@ -91,11 +98,18 @@ export default async function AdminCourseCategoriesPage({ params }: PageProps) {
                   })}
                 </p>
               </Link>
-              <VisibilityToggle
-                active={category.active}
-                toggleAction={setCategoryActive.bind(null, category.id)}
-                label={category.title}
-              />
+              <div className="flex shrink-0 items-center gap-3">
+                <VisibilityToggle
+                  active={category.active}
+                  toggleAction={setCategoryActive.bind(null, category.id)}
+                  label={category.title}
+                />
+                <DeleteDeckButton
+                  languageDeckId={category.id}
+                  label={category.title}
+                  wordCount={vocabCount + grammarCount}
+                />
+              </div>
             </div>
           );
         })}

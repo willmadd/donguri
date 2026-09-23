@@ -140,84 +140,92 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {words.length === 0 && (
-          <p className="text-sumi-soft">
-            {t("admin_category_words.no_words", "No words yet.")}
-          </p>
-        )}
-        {words.map((word) => (
-          <div
-            key={word.id}
-            className="flex items-center justify-between gap-4 rounded-2xl border border-card-border bg-washi-soft p-4"
-          >
-            <div className="flex items-center gap-4">
-              <WordImage
-                src={wordImagePath(word)}
-                alt={word.term}
-                className="h-14 w-14 shrink-0 rounded-lg object-cover"
-              />
-              <div>
-                <h2 className="font-semibold text-sumi">
-                  {word.term} — {word.translation}
-                </h2>
-                {word.romanization && (
-                  <p className="mt-0.5 text-sm text-sumi-soft">
-                    {word.romanization}
-                  </p>
-                )}
-                {word.exampleSentence && (
-                  <p className="mt-0.5 text-sm text-sumi-soft">
-                    {word.exampleSentence}
-                  </p>
-                )}
-                {(word.category || word.wordType) && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {word.category && (
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                          getContrastTextClass(word.category.color),
-                        )}
-                        style={{ backgroundColor: word.category.color }}
-                      >
-                        {word.category.name}
-                      </span>
-                    )}
-                    {word.wordType && (
-                      <span className="inline-flex items-center rounded-full border border-sumi/15 px-2.5 py-0.5 text-xs font-medium text-sumi-soft">
-                        {word.wordType}
-                      </span>
-                    )}
-                  </div>
-                )}
+      {words.length === 0 ? (
+        <p className="text-sumi-soft">
+          {t("admin_category_words.no_words", "No words yet.")}
+        </p>
+      ) : (
+        // A grid rather than one long single-column stack — with a deck's
+        // worth of imported words (spreadsheet imports easily run to the
+        // hundreds), a single column meant scrolling through a very tall
+        // page to find anything.
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {words.map((word) => (
+            <div
+              key={word.id}
+              className="flex flex-col gap-3 rounded-2xl border border-card-border bg-washi-soft p-4"
+            >
+              <div className="flex items-center gap-3">
+                <WordImage
+                  src={wordImagePath(word)}
+                  alt={word.term}
+                  className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                />
+                <div className="min-w-0">
+                  <h2 className="truncate font-semibold text-sumi">
+                    {word.term} — {word.translation}
+                  </h2>
+                  {word.romanization && (
+                    <p className="truncate text-sm text-sumi-soft">
+                      {word.romanization}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {word.exampleSentence && (
+                <p className="line-clamp-2 text-sm text-sumi-soft">
+                  {word.exampleSentence}
+                </p>
+              )}
+
+              {(word.category || word.wordType) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {word.category && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        getContrastTextClass(word.category.color),
+                      )}
+                      style={{ backgroundColor: word.category.color }}
+                    >
+                      {word.category.name}
+                    </span>
+                  )}
+                  {word.wordType && (
+                    <span className="inline-flex items-center rounded-full border border-sumi/15 px-2.5 py-0.5 text-xs font-medium text-sumi-soft">
+                      {word.wordType}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/words/${word.id}/quiz`}
+                  variant="outline"
+                  size="sm"
+                >
+                  {t("admin_category_words.quiz", "Quiz")}
+                </Button>
+                <Button
+                  href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/words/${word.id}/edit`}
+                  variant="outline"
+                  size="sm"
+                >
+                  {t("admin_category_words.edit", "Edit")}
+                </Button>
+                <VisibilityToggle
+                  active={word.active}
+                  toggleAction={setWordActive.bind(null, word.id)}
+                  label={`${word.term} — ${word.translation}`}
+                />
+                <DeleteWordButton wordId={word.id} label={`${word.term} — ${word.translation}`} />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <Button
-                href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/words/${word.id}/quiz`}
-                variant="outline"
-                size="sm"
-              >
-                {t("admin_category_words.quiz", "Quiz")}
-              </Button>
-              <Button
-                href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/words/${word.id}/edit`}
-                variant="outline"
-                size="sm"
-              >
-                {t("admin_category_words.edit", "Edit")}
-              </Button>
-              <VisibilityToggle
-                active={word.active}
-                toggleAction={setWordActive.bind(null, word.id)}
-                label={`${word.term} — ${word.translation}`}
-              />
-              <DeleteWordButton wordId={word.id} label={`${word.term} — ${word.translation}`} />
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

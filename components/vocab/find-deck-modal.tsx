@@ -60,7 +60,14 @@ export function FindDeckModal({
           {activeDecks.length > 0 ? (
             <div className="flex w-full flex-col gap-4">
               {activeDecks.map((deck) => {
-                const isGrammar = deck.path === "grammar";
+                const hasVocab = deck.vocabCount > 0;
+                const hasGrammar = deck.grammarCount > 0;
+                const badgeLabel =
+                  hasVocab && hasGrammar
+                    ? t("course_home.mixed", "Mixed")
+                    : hasGrammar
+                      ? t("course_home.grammar", "Grammar")
+                      : t("course_home.vocabulary", "Vocabulary");
                 const learntPercent =
                   deck.totalWords > 0
                     ? Math.round((deck.learntWords / deck.totalWords) * 100)
@@ -84,9 +91,11 @@ export function FindDeckModal({
                   : undefined;
                 const badgeClasses = deck.primaryColor
                   ? getContrastTextClass(deck.primaryColor)
-                  : isGrammar
-                    ? "bg-matcha-soft text-matcha-dark"
-                    : "bg-ai-soft text-ai-dark";
+                  : hasVocab && hasGrammar
+                    ? "bg-sakura-soft text-sakura-dark"
+                    : hasGrammar
+                      ? "bg-matcha-soft text-matcha-dark"
+                      : "bg-ai-soft text-ai-dark";
 
                 return (
                   <div
@@ -127,9 +136,7 @@ export function FindDeckModal({
                             className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeClasses}`}
                             style={badgeStyle}
                           >
-                            {isGrammar
-                              ? t("course_home.grammar", "Grammar")
-                              : t("course_home.vocabulary", "Vocabulary")}
+                            {badgeLabel}
                           </span>
 
                           {deck.tags.map((tag) => (

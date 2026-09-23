@@ -22,9 +22,11 @@ import { WORD_TYPES } from "@/lib/definitions";
 // but split across two same-length columns ("Examples (English)"/"Examples
 // (Japanese)") matched by position instead of packed into one cell, since
 // unlike a form they have no other sub-fields to pack alongside — see
-// parseExamplesColumns below. A spreadsheet-imported example is never tied
-// to a specific form (an admin can still set that by hand afterward in the
-// word editor).
+// parseExamplesColumns below. Each column is "|"-separated (not ";" like
+// Forms/Alternative spellings), since a full sentence is far more likely to
+// contain a semicolon than a pipe. A spreadsheet-imported example is never
+// tied to a specific form (an admin can still set that by hand afterward in
+// the word editor).
 //
 // "Word ID" (last column) is separate from "Word #": it's the real database
 // id, filled in only by `buildWordExportWorkbook` (never the blank
@@ -65,6 +67,14 @@ type SheetColumn = { header: string; key: string; width: number };
 
 const WORDS_SHEET_NAME = "Words";
 const QUIZ_SHEET_NAME = "Quiz questions";
+// A deck can hold vocab words, grammar points, or a mix (see the note on
+// `Word.path` in prisma/schema.prisma) — grammar rows get their own sheet
+// pair, identical in shape to Words/Quiz questions, rather than a "Type"
+// column on the same sheet, so each pair's own "Word #" numbering stays
+// unambiguous (a Quiz questions row referencing "Word # 2" would otherwise
+// have no way to say which sheet's word 2 it means).
+const GRAMMAR_SHEET_NAME = "Grammar";
+const GRAMMAR_QUIZ_SHEET_NAME = "Grammar quiz questions";
 
 // Separators for the packed "Forms"/"Examples" cells: "|" between a single
 // entry's own fields, ";" between multiple entries in the same cell — the
@@ -100,12 +110,28 @@ function markExampleRow(sheet: ExcelJS.Worksheet, rowNumber: number, note: strin
   row.getCell(1).note = note;
 }
 
-// Wrapping so a cell packed with several ";"-separated entries reads as
-// stacked lines instead of one long run of text.
+// Wrapping so a cell packed with several separator-delimited entries reads
+// as stacked lines instead of one long run of text.
 function wrapPackedColumns(sheet: ExcelJS.Worksheet): void {
   sheet.getColumn("forms").alignment = { wrapText: true, vertical: "top" };
   sheet.getColumn("examplesEn").alignment = { wrapText: true, vertical: "top" };
   sheet.getColumn("examplesJa").alignment = { wrapText: true, vertical: "top" };
+}
+
+// Shared by the vocab and grammar sheet pairs (Words/Quiz questions and
+// Grammar/Grammar quiz questions) — identical shape either way, only the
+// sheet names differ.
+function addWordsSheet(workbook: ExcelJS.Workbook, sheetName: string): ExcelJS.Worksheet {
+  const sheet = workbook.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+  addHeaderRow(sheet, WORD_COLUMNS);
+  wrapPackedColumns(sheet);
+  return sheet;
+}
+
+function addQuizSheet(workbook: ExcelJS.Workbook, sheetName: string): ExcelJS.Worksheet {
+  const sheet = workbook.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+  addHeaderRow(sheet, QUIZ_COLUMNS);
+  return sheet;
 }
 
 function addWordTypeValidation(sheet: ExcelJS.Worksheet, rowCount: number): void {
@@ -189,7 +215,7 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, cleanCategoryNames: st
     ],
     [
       "Examples (English) / Examples (Japanese)",
-      'Optional. Example sentences using this word — one semicolon-separated ( ; ) list per language, e.g. "Yesterday I ate an apple.; I eat every day." in the English column and "昨日私はりんごを食べた。; 私は毎日食べます。" in the Japanese column. The two lists must have the same number of entries — the Nth entry in each is paired up as one example.',
+      'Optional. Example sentences using this word — one "|"-separated list per language, e.g. "Yesterday I ate an apple.| I eat every day." in the English column and "昨日私はりんごを食べた。| 私は毎日食べます。" in the Japanese column. The two lists must have the same number of entries (checked on upload) — the Nth entry in each is paired up as one example.',
     ],
     [
       "Word ID",
@@ -207,6 +233,12 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, cleanCategoryNames: st
   ]);
   syncWarningRow.font = { bold: true, color: { argb: "FF9C2B1B" } };
   syncWarningRow.alignment = { wrapText: true, vertical: "top" };
+
+  instructions.addRow([]);
+  instructions.addRow([
+    "Grammar sheet",
+    'Grammar points go on their own "Grammar" sheet, not mixed into "Words" — but its columns, and its own "Grammar quiz questions" sheet, are identical in every other way to what\'s described above and below. A row\'s sheet is what makes it a grammar point instead of a vocab word.',
+  ]).font = { bold: true };
 
   instructions.addRow([]);
   instructions.addRow(["Quiz questions sheet", "One row per hand-authored quiz question — mixed in with the auto-generated ones."]).font = {
@@ -236,12 +268,7 @@ export async function buildWordImportTemplate(categoryNames: string[]): Promise<
   workbook.creator = "Donguri";
   workbook.created = new Date();
 
-  const wordsSheet = workbook.addWorksheet(WORDS_SHEET_NAME, {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  addHeaderRow(wordsSheet, WORD_COLUMNS);
-  wrapPackedColumns(wordsSheet);
-
+  const wordsSheet = addWordsSheet(workbook, WORDS_SHEET_NAME);
   wordsSheet.addRow({
     wordNumber: "1",
     term: "食べる",
@@ -258,12 +285,30 @@ export async function buildWordImportTemplate(categoryNames: string[]): Promise<
     examplesJa: "昨日私はりんごを食べた。",
   });
   markExampleRow(wordsSheet, 2, "Example row — replace or delete this before uploading.");
-
   addWordTypeValidation(wordsSheet, VALIDATED_ROW_COUNT);
   const cleanCategoryNames = addCategoryValidation(wordsSheet, categoryNames, VALIDATED_ROW_COUNT);
 
-  const quizSheet = workbook.addWorksheet(QUIZ_SHEET_NAME, { views: [{ state: "frozen", ySplit: 1 }] });
-  addHeaderRow(quizSheet, QUIZ_COLUMNS);
+  const grammarSheet = addWordsSheet(workbook, GRAMMAR_SHEET_NAME);
+  grammarSheet.addRow({
+    wordNumber: "1",
+    term: "〜てしまう",
+    translation: "to end up doing / finish doing (often with regret)",
+    romanization: "~te shimau",
+    exampleSentence: "宿題を忘れてしまった。",
+    explanation: "Attaches to a verb's te-form.",
+    explanationJa: "",
+    category: "",
+    wordType: "",
+    alternateSpellings: "",
+    forms: "",
+    examplesEn: "I ended up forgetting my homework.",
+    examplesJa: "宿題を忘れてしまった。",
+  });
+  markExampleRow(grammarSheet, 2, "Example row — replace or delete this before uploading.");
+  addWordTypeValidation(grammarSheet, VALIDATED_ROW_COUNT);
+  addCategoryValidation(grammarSheet, categoryNames, VALIDATED_ROW_COUNT);
+
+  const quizSheet = addQuizSheet(workbook, QUIZ_SHEET_NAME);
   quizSheet.addRow({
     wordNumber: "1",
     prompt: 'What does "食べる" mean?',
@@ -276,6 +321,20 @@ export async function buildWordImportTemplate(categoryNames: string[]): Promise<
   });
   markExampleRow(quizSheet, 2, "Example row — replace or delete this before uploading. Leave Option 3/4 blank for a 2- or 3-option question.");
   addCorrectOptionValidation(quizSheet, VALIDATED_ROW_COUNT);
+
+  const grammarQuizSheet = addQuizSheet(workbook, GRAMMAR_QUIZ_SHEET_NAME);
+  grammarQuizSheet.addRow({
+    wordNumber: "1",
+    prompt: 'What does "〜てしまう" express?',
+    promptJa: "",
+    option1: "Completion, often with regret",
+    option2: "A polite request",
+    option3: "",
+    option4: "",
+    correctOption: "1",
+  });
+  markExampleRow(grammarQuizSheet, 2, "Example row — replace or delete this before uploading. Leave Option 3/4 blank for a 2- or 3-option question.");
+  addCorrectOptionValidation(grammarQuizSheet, VALIDATED_ROW_COUNT);
 
   addInstructionsSheet(workbook, cleanCategoryNames);
 
@@ -301,6 +360,9 @@ export type WordExportRow = {
   // column so a re-uploaded, edited export updates this word instead of
   // creating a duplicate (see WORD_COLUMNS' comment above).
   id: string;
+  // Which sheet pair this word is written to — Words/Quiz questions for
+  // 'vocab', Grammar/Grammar quiz questions for 'grammar'.
+  path: "vocab" | "grammar";
   term: string;
   translation: string;
   romanization: string | null;
@@ -322,27 +384,24 @@ function serializeFormsCell(forms: WordExportForm[]): string {
 }
 
 function serializeExamplesColumn(sentences: string[]): string {
-  return sentences.join(`${ENTRY_SEPARATOR} `);
+  return sentences.join(`${FIELD_SEPARATOR} `);
 }
 
-// Same sheet shape as buildWordImportTemplate, populated with a deck's
-// current words instead of one example row — so re-uploading it (after
-// edits) round-trips through the same importer. Word #s are assigned
-// sequentially here rather than reused from anywhere, since the import
-// pipeline only ever needs them to be unique within this file.
-export async function buildWordExportWorkbook(words: WordExportRow[], categoryNames: string[]): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Donguri";
-  workbook.created = new Date();
-
-  const rowCount = Math.max(VALIDATED_ROW_COUNT, words.length + 20);
-
-  const wordsSheet = workbook.addWorksheet(WORDS_SHEET_NAME, { views: [{ state: "frozen", ySplit: 1 }] });
-  addHeaderRow(wordsSheet, WORD_COLUMNS);
-  wrapPackedColumns(wordsSheet);
-
-  const quizSheet = workbook.addWorksheet(QUIZ_SHEET_NAME, { views: [{ state: "frozen", ySplit: 1 }] });
-  addHeaderRow(quizSheet, QUIZ_COLUMNS);
+// Writes one sheet pair's worth of words — shared by the vocab and grammar
+// halves of `buildWordExportWorkbook` below, which differ only in which
+// sheet names and word pool they use. Word #s are assigned sequentially
+// within this pool rather than reused from anywhere, since the import
+// pipeline only ever needs them to be unique within their own sheet pair.
+function writeWordsAndQuizSheets(
+  workbook: ExcelJS.Workbook,
+  words: WordExportRow[],
+  categoryNames: string[],
+  rowCount: number,
+  wordsSheetName: string,
+  quizSheetName: string,
+): string[] {
+  const wordsSheet = addWordsSheet(workbook, wordsSheetName);
+  const quizSheet = addQuizSheet(workbook, quizSheetName);
 
   words.forEach((word, wordIndex) => {
     const wordNumber = String(wordIndex + 1);
@@ -381,6 +440,38 @@ export async function buildWordExportWorkbook(words: WordExportRow[], categoryNa
   addWordTypeValidation(wordsSheet, rowCount);
   const cleanCategoryNames = addCategoryValidation(wordsSheet, categoryNames, rowCount);
   addCorrectOptionValidation(quizSheet, rowCount);
+  return cleanCategoryNames;
+}
+
+// Same sheet shape as buildWordImportTemplate, populated with a deck's
+// current words instead of one example row — so re-uploading it (after
+// edits) round-trips through the same importer. Vocab and grammar words
+// each get their own sheet pair (see GRAMMAR_SHEET_NAME's comment above).
+export async function buildWordExportWorkbook(words: WordExportRow[], categoryNames: string[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Donguri";
+  workbook.created = new Date();
+
+  const vocabWords = words.filter((word) => word.path === "vocab");
+  const grammarWords = words.filter((word) => word.path === "grammar");
+  const rowCount = Math.max(VALIDATED_ROW_COUNT, words.length + 20);
+
+  const cleanCategoryNames = writeWordsAndQuizSheets(
+    workbook,
+    vocabWords,
+    categoryNames,
+    rowCount,
+    WORDS_SHEET_NAME,
+    QUIZ_SHEET_NAME,
+  );
+  writeWordsAndQuizSheets(
+    workbook,
+    grammarWords,
+    categoryNames,
+    rowCount,
+    GRAMMAR_SHEET_NAME,
+    GRAMMAR_QUIZ_SHEET_NAME,
+  );
 
   addInstructionsSheet(workbook, cleanCategoryNames);
 
@@ -402,6 +493,10 @@ export type ParsedWorkbook =
       ok: true;
       rows: ParsedWordImportRow[];
       quizRows: ParsedSheetRow[];
+      // From the Grammar / Grammar quiz questions sheets — empty (not an
+      // error) when either is missing from the uploaded file.
+      grammarRows: ParsedWordImportRow[];
+      grammarQuizRows: ParsedSheetRow[];
     }
   | { ok: false; message: string };
 
@@ -438,24 +533,25 @@ export type ParsedExampleEntry = { en: string; ja: string };
 
 export type ParsedExamplesColumns = { ok: true; examples: ParsedExampleEntry[] } | { ok: false; error: string };
 
-// Each column is a ";"-separated list — the inverse of serializeExamplesColumn
+// Each column is a "|"-separated list — the inverse of serializeExamplesColumn
 // above — and the two lists are paired up by position (1st with 1st, 2nd
-// with 2nd, ...), so they must have the same number of entries. Both empty
-// parses to zero examples, not an error.
+// with 2nd, ...), so they must have the same number of entries: mismatched
+// counts are a hard error, not a silently-dropped/misaligned example. Both
+// empty parses to zero examples, not an error.
 export function parseExamplesColumns(enText: string, jaText: string): ParsedExamplesColumns {
   const enEntries = enText
-    .split(ENTRY_SEPARATOR)
+    .split(FIELD_SEPARATOR)
     .map((entry) => entry.trim())
     .filter((entry) => entry !== "");
   const jaEntries = jaText
-    .split(ENTRY_SEPARATOR)
+    .split(FIELD_SEPARATOR)
     .map((entry) => entry.trim())
     .filter((entry) => entry !== "");
 
   if (enEntries.length !== jaEntries.length) {
     return {
       ok: false,
-      error: `"Examples (English)" has ${enEntries.length} entr${enEntries.length === 1 ? "y" : "ies"} but "Examples (Japanese)" has ${jaEntries.length} — they need the same number, matched by position.`,
+      error: `"Examples (English)" has ${enEntries.length} entr${enEntries.length === 1 ? "y" : "ies"} but "Examples (Japanese)" has ${jaEntries.length} — they need the same number, matched by position (separate multiple examples with "|").`,
     };
   }
 
@@ -524,11 +620,15 @@ export async function parseWordImportWorkbook(buffer: Buffer): Promise<ParsedWor
   }
 
   const quizSheet = workbook.getWorksheet(QUIZ_SHEET_NAME);
+  const grammarSheet = workbook.getWorksheet(GRAMMAR_SHEET_NAME);
+  const grammarQuizSheet = workbook.getWorksheet(GRAMMAR_QUIZ_SHEET_NAME);
 
   return {
     ok: true,
     rows,
     quizRows: quizSheet ? parseSheetRows(quizSheet, QUIZ_COLUMNS) : [],
+    grammarRows: grammarSheet ? parseSheetRows(grammarSheet, WORD_COLUMNS) : [],
+    grammarQuizRows: grammarQuizSheet ? parseSheetRows(grammarQuizSheet, QUIZ_COLUMNS) : [],
   };
 }
 

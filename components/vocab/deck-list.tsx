@@ -69,9 +69,21 @@ export function DeckList({ slug, decks, activeDeckIds }: DeckListProps) {
         const knownPercent =
           deck.totalWords > 0 ? Math.round((deck.knownWords / deck.totalWords) * 100) : 0;
 
-        const isGrammar = deck.path === "grammar";
-        const vocabCount = isGrammar ? 0 : deck.totalWords;
-        const grammarCount = isGrammar ? deck.totalWords : 0;
+        const { vocabCount, grammarCount } = deck;
+        const hasVocab = vocabCount > 0;
+        const hasGrammar = grammarCount > 0;
+        const badgeLabel =
+          hasVocab && hasGrammar
+            ? t("course_home.mixed", "Mixed")
+            : hasGrammar
+              ? t("course_home.grammar", "Grammar")
+              : t("course_home.vocabulary", "Vocabulary");
+        const badgeClass =
+          hasVocab && hasGrammar
+            ? "bg-sakura-soft text-sakura-dark"
+            : hasGrammar
+              ? "bg-matcha-soft text-matcha-dark"
+              : "bg-ai-soft text-ai-dark";
 
         return (
           <div
@@ -94,14 +106,8 @@ export function DeckList({ slug, decks, activeDeckIds }: DeckListProps) {
                   >
                     {deck.title}
                   </Link>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      isGrammar ? "bg-matcha-soft text-matcha-dark" : "bg-ai-soft text-ai-dark"
-                    }`}
-                  >
-                    {isGrammar
-                      ? t("course_home.grammar", "Grammar")
-                      : t("course_home.vocabulary", "Vocabulary")}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                    {badgeLabel}
                   </span>
                   {deck.tags.map((tag) => (
                     <span

@@ -64,6 +64,14 @@ export function CreateCategoryForm({ courseId }: CreateCategoryFormProps) {
         onChange={handleCoverImageChange}
         errors={state?.errors?.coverImage}
       />
+      {previewUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- local blob preview, not a hosted asset.
+        <img
+          src={previewUrl}
+          alt={t("common.preview", "Preview")}
+          className="h-32 w-full rounded-lg object-cover"
+        />
+      )}
       <ColorField
         label={t("admin_create_category.bg_color_label", "Background color")}
         name="bgColor"
@@ -76,19 +84,7 @@ export function CreateCategoryForm({ courseId }: CreateCategoryFormProps) {
         clearLabel={t("common.clear", "Clear")}
         errors={state?.errors?.primaryColor}
       />
-      {previewUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- local blob preview, not a hosted asset.
-        <img
-          src={previewUrl}
-          alt={t("common.preview", "Preview")}
-          className="h-32 w-full rounded-lg object-cover"
-        />
-      )}
-      {state?.message && (
-        <p className={`text-sm ${state.success ? "text-matcha-dark" : "text-shu"}`}>
-          {state.message}
-        </p>
-      )}
+      {state?.message && <p className="text-sm text-shu">{state.message}</p>}
       <SubmitButton pending={pending} pendingText={t("admin_create_category.creating", "Creating…")}>
         {t("admin_create_category.submit", "Create deck")}
       </SubmitButton>

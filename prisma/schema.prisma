@@ -92,7 +92,6 @@ model CourseEnrollment {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model LanguageDeck {
   id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  path          String
   title         String
   subheading    String?
   description   String?
@@ -110,19 +109,20 @@ model LanguageDeck {
   activations   UserDeckActivation[]
   words         Word[]
 
-  @@unique([courseId, path, position])
+  @@unique([courseId, position])
   @@map("language_decks")
 }
 
 // A user's personal "active decks" list within a course — which decks
 // currently feed the Learn/Test pool (see getActiveDeckIds/
-// getLearnQueueForCourse in lib/dal.ts). Only ever keyed by a `path: 'vocab'`
-// LanguageDeck (a "deck"); its grammar sibling, if any, activates implicitly
-// along with it. `active` is a real column (not row presence/absence) so
-// "explicitly deactivated" stays distinguishable from "never touched" even
-// after every deck is turned off — getActiveDeckIds needs that distinction
-// to only lazily auto-activate the first deck once, on a brand-new
-// enrollment, never re-activating something the user deliberately turned off.
+// getLearnQueueForCourse in lib/dal.ts). A deck can hold vocab words,
+// grammar points, or a mixture (see `Word.path`) — activation is purely
+// per-deck, not per content type. `active` is a real column (not row
+// presence/absence) so "explicitly deactivated" stays distinguishable from
+// "never touched" even after every deck is turned off — getActiveDeckIds
+// needs that distinction to only lazily auto-activate the first deck once,
+// on a brand-new enrollment, never re-activating something the user
+// deliberately turned off.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model UserDeckActivation {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -141,6 +141,13 @@ model UserDeckActivation {
 model Word {
   id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   languageDeckId   String                @map("language_deck_id") @db.Uuid
+  // 'vocab' or 'grammar' — a deck's own content mix, not its identity: one
+  // deck can hold both. Used to be `LanguageDeck.path` (one type per deck,
+  // a "grammar sibling" deck paired by shared position); moved here so a
+  // single deck can mix vocab words and grammar points. Defaults to
+  // 'vocab' since that's the only content that existed before this column
+  // did. See the check constraint in supabase/schema.sql.
+  path             String                @default("vocab")
   term             String
   translation      String
   exampleSentence  String?               @map("example_sentence")

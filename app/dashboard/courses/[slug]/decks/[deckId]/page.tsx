@@ -22,9 +22,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // and testing are no longer deck-specific (see the course home page's
 // "active decks" selection and lib/dal.ts's getLearnQueueForCourse):
 // activate this deck there to have its words included, rather than clicking
-// a Learn button here. Vocab and grammar decks are independently pickable
-// (see getCourseDecks in lib/dal.ts), so this page only ever shows one
-// deck's own content — never a sibling's.
+// a Learn button here. A deck can hold vocab words, grammar points, or a mix
+// (see the note on `Word.path` in prisma/schema.prisma) — this page shows a
+// row per content type actually present.
 export default async function DeckPage({ params }: PageProps) {
   const { slug, deckId } = await params;
 
@@ -32,8 +32,6 @@ export default async function DeckPage({ params }: PageProps) {
     getDeckDetail(slug, deckId),
     getTranslator(),
   ]);
-
-  const isGrammar = deck.path === "grammar";
 
   return (
     <div className="flex flex-col gap-8">
@@ -71,17 +69,23 @@ export default async function DeckPage({ params }: PageProps) {
       </div>
 
       <section className="rounded-2xl border border-card-border bg-washi-soft p-6">
-        <div className="flex items-center gap-3">
-          <span
-            className={`flex h-10 w-10 items-center justify-center rounded-full text-lg font-semibold ${
-              isGrammar ? "bg-matcha-soft text-matcha-dark" : "bg-ai-soft text-ai-dark"
-            }`}
-          >
-            {isGrammar ? "文" : "語"}
-          </span>
-          <h2 className="font-semibold text-sumi">
-            {isGrammar ? t("course_home.grammar", "Grammar") : t("course_home.vocabulary", "Vocabulary")}
-          </h2>
+        <div className="flex flex-col gap-2">
+          {deck.vocabCount > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ai-soft text-lg font-semibold text-ai-dark">
+                語
+              </span>
+              <h2 className="font-semibold text-sumi">{t("course_home.vocabulary", "Vocabulary")}</h2>
+            </div>
+          )}
+          {deck.grammarCount > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-matcha-soft text-lg font-semibold text-matcha-dark">
+                文
+              </span>
+              <h2 className="font-semibold text-sumi">{t("course_home.grammar", "Grammar")}</h2>
+            </div>
+          )}
         </div>
 
         <DeckProgress deck={deck} t={t} />

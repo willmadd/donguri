@@ -50,7 +50,7 @@ export default async function EditWordPage({ params }: PageProps) {
         </PageSubtitle>
       </div>
 
-      <div className="max-w-sm rounded-2xl border border-card-border bg-washi-soft p-8">
+      <div className="max-w-3xl rounded-2xl border border-card-border bg-washi-soft p-8">
         <EditWordForm word={word} currentImageSrc={wordImagePath(word)} categories={categories} />
       </div>
     </div>

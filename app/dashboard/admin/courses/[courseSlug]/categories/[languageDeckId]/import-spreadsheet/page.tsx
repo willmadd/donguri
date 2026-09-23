@@ -61,7 +61,7 @@ export default async function ImportSpreadsheetPage({ params }: PageProps) {
           <p className="text-sm text-sumi">
             {t(
               "admin_import_spreadsheet.template_intro",
-              "Download the template, fill it in (Google Sheets works too — download it as Excel when you're done), then upload it below.",
+              "Download the template, fill it in (Google Sheets works too — download it as Excel when you're done), then upload it below. It has a \"Words\" sheet for vocab and a separate \"Grammar\" sheet for grammar points — fill in either or both.",
             )}
           </p>
           {/* Plain anchors, not the Link-based Button — these point at
@@ -86,7 +86,7 @@ export default async function ImportSpreadsheetPage({ params }: PageProps) {
           <p className="text-sm text-shu">
             {t(
               "admin_import_spreadsheet.sync_warning",
-              "Re-uploading a \"current words\" file deactivates any word in this deck that isn't in it (its data is kept, and it can be switched back on from the word list) — delete a row to remove that word, and don't upload a cut-down file unless that's what you want. The blank template never deactivates anything.",
+              "Tick \"deactivate words not in this file\" below only if this file represents the deck's complete word list — a word matched by neither Word ID nor Term is then deactivated (its data is kept, and it can be switched back on from the word list). Leave it unchecked to just add or update words without affecting anything else.",
             )}
           </p>
         </div>
