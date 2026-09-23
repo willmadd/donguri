@@ -726,6 +726,44 @@ export const getDeckDetail = cache(
   },
 );
 
+// Public, logged-out view of a deck (app/courses/[slug]/decks/[deckId]) —
+// no session required and no per-user progress, so every word reads as
+// unlearnt. Returns null (→ notFound) rather than redirecting, since there's
+// no dashboard to bounce a visitor back to.
+export const getPublicDeckDetail = cache(
+  async (courseSlug: string, deckId: string) => {
+    const languageDeck = await prisma.languageDeck.findFirst({
+      where: { id: deckId, active: true, course: { slug: courseSlug, active: true } },
+      include: {
+        course: true,
+        words: {
+          where: { active: true },
+          orderBy: { position: "asc" },
+          select: {
+            id: true,
+            term: true,
+            translation: true,
+            romanization: true,
+            path: true,
+          },
+        },
+      },
+    });
+
+    if (!languageDeck) {
+      return null;
+    }
+
+    return {
+      course: toCourseSummary(languageDeck.course),
+      deck: toLanguageDeckSummary({
+        ...languageDeck,
+        words: languageDeck.words.map((word) => ({ ...word, progress: [] })),
+      }),
+    };
+  },
+);
+
 // One entry per day in the current streak's date range (zero-filled for a
 // day with no activity — a review-only day is still a valid streak day),
 // always at least the trailing 7 days so a short or empty streak still

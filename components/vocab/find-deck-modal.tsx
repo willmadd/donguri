@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { DeckList } from "@/components/vocab/deck-list";
 import { WordImage } from "@/components/ui/word-image";
+import { CompletedStamp } from "@/components/vocab/completed-stamp";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import type { LanguageDeckSummary } from "@/lib/definitions";
 import { getContrastTextClass } from "@/lib/utils";
@@ -72,6 +73,8 @@ export function FindDeckModal({
                   deck.totalWords > 0
                     ? Math.round((deck.learntWords / deck.totalWords) * 100)
                     : 0;
+                const complete =
+                  deck.totalWords > 0 && deck.learntWords === deck.totalWords;
 
                 const hasBg = Boolean(deck.bgColor);
                 const textClass = hasBg
@@ -111,6 +114,11 @@ export function FindDeckModal({
                         : undefined
                     }
                   >
+                    {complete && (
+                      <CompletedStamp
+                        label={t("deck_list.completed", "Completed")}
+                      />
+                    )}
                     <div className="flex items-start gap-3.5">
                       <div className="shrink-0">
                         <div className="h-20 w-20 overflow-hidden rounded-xl border border-white/20 bg-neutral-soft shadow-sm">

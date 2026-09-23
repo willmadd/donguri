@@ -521,5 +521,12 @@
   "header_stats.streak_title": "{{count}} day streak",
   "header_stats.day_streak": "day streak",
   "header_stats.level": "Lv {{level}}",
-  "header_stats.progress_label": "Progress to next level"
+  "header_stats.progress_label": "Progress to next level",
+  "deck_list.completed": "Completed",
+  "deck_list.copy_link": "Copy link",
+  "deck_list.open_page": "Open deck page",
+  "deck_list.remove_short": "Remove from my word list",
+  "public_deck.open_in_dashboard": "Open in dashboard",
+  "public_deck.signup_pitch": "Sign up for free to add this deck to your word list and start learning.",
+  "public_deck.start_learning": "Start learning"
 }

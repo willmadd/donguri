@@ -182,3 +182,44 @@ body {
     font-family: var(--font-nunito);
   }
 }
+
+/* Hanko-style "Completed" stamp on finished deck cards (see
+   components/vocab/completed-stamp.tsx). The speckled mask knocks small
+   gaps out of the ink so it reads as pressed-on rather than printed, and
+   it thumps down onto the card once when it first renders. */
+.completed-stamp {
+  transform: rotate(-14deg);
+  opacity: 0.82;
+  background: color-mix(in srgb, var(--washi) 55%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--shu) 35%, transparent);
+  -webkit-mask-image:
+    radial-gradient(circle at 18% 32%, transparent 0 1.5px, #000 2px),
+    radial-gradient(circle at 63% 71%, transparent 0 1px, #000 1.5px),
+    radial-gradient(circle at 82% 24%, transparent 0 1.2px, #000 1.8px);
+  -webkit-mask-size: 13px 11px, 17px 19px, 23px 15px;
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(circle at 18% 32%, transparent 0 1.5px, #000 2px),
+    radial-gradient(circle at 63% 71%, transparent 0 1px, #000 1.5px),
+    radial-gradient(circle at 82% 24%, transparent 0 1.2px, #000 1.8px);
+  mask-size: 13px 11px, 17px 19px, 23px 15px;
+  mask-composite: intersect;
+  animation: stamp-in 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes stamp-in {
+  from {
+    transform: rotate(-14deg) scale(1.8);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-14deg) scale(1);
+    opacity: 0.82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .completed-stamp {
+    animation: none;
+  }
+}

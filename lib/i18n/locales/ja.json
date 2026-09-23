@@ -551,5 +551,12 @@
   "header_stats.streak_title": "",
   "header_stats.day_streak": "",
   "header_stats.level": "",
-  "header_stats.progress_label": ""
+  "header_stats.progress_label": "",
+  "deck_list.completed": "完了",
+  "deck_list.copy_link": "リンクをコピー",
+  "deck_list.open_page": "デッキページを開く",
+  "deck_list.remove_short": "単語リストから外す",
+  "public_deck.open_in_dashboard": "ダッシュボードで開く",
+  "public_deck.signup_pitch": "無料登録して、このデッキを単語リストに追加し、学習を始めましょう。",
+  "public_deck.start_learning": "学習を始める"
 }
