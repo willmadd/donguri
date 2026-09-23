@@ -25,6 +25,14 @@ import { WORD_TYPES } from "@/lib/definitions";
 // parseExamplesColumns below. A spreadsheet-imported example is never tied
 // to a specific form (an admin can still set that by hand afterward in the
 // word editor).
+//
+// "Word ID" (last column) is separate from "Word #": it's the real database
+// id, filled in only by `buildWordExportWorkbook` (never the blank
+// template), and it's how the import action recognizes "this row is an
+// existing word" and updates it — replacing its forms/examples/alternate
+// spellings/quiz questions with whatever the row now says — instead of
+// creating a duplicate. A row with no Word ID (every row in the template,
+// or one an admin adds to an exported file) is always imported as new.
 const WORD_COLUMNS = [
   { header: "Word #", key: "wordNumber", width: 8 },
   { header: "Term", key: "term", width: 22 },
@@ -39,6 +47,7 @@ const WORD_COLUMNS = [
   { header: "Forms", key: "forms", width: 40 },
   { header: "Examples (English)", key: "examplesEn", width: 40 },
   { header: "Examples (Japanese)", key: "examplesJa", width: 40 },
+  { header: "Word ID", key: "wordId", width: 38 },
 ] as const;
 
 const QUIZ_COLUMNS = [
@@ -182,10 +191,22 @@ function addInstructionsSheet(workbook: ExcelJS.Workbook, cleanCategoryNames: st
       "Examples (English) / Examples (Japanese)",
       'Optional. Example sentences using this word — one semicolon-separated ( ; ) list per language, e.g. "Yesterday I ate an apple.; I eat every day." in the English column and "昨日私はりんごを食べた。; 私は毎日食べます。" in the Japanese column. The two lists must have the same number of entries — the Nth entry in each is paired up as one example.',
     ],
+    [
+      "Word ID",
+      'Don\'t fill this in by hand. Filled in automatically by "Download current words" — it\'s how re-uploading that file updates the existing word (replacing its Forms/Examples/Alternative spellings/quiz questions with what\'s now in the row) instead of creating a duplicate. Leave it blank on a genuinely new word. A row with no Word ID whose Term matches an existing word in the deck (e.g. re-uploading the blank template with a word already here) still updates that word rather than duplicating it — the Word ID only matters for telling two same-named words apart, or when a word\'s Term has changed since it was exported.',
+    ],
   ];
   for (const row of rows) {
     instructions.addRow(row).alignment = { wrapText: true, vertical: "top" };
   }
+
+  instructions.addRow([]);
+  const syncWarningRow = instructions.addRow([
+    "Deactivating words not in this file",
+    'The upload page has a "deactivate words not in this file" checkbox — tick it only if this file represents the deck\'s complete word list. With it ticked, every word in this deck matched by neither Word ID nor Term to a row here is deactivated (same as switching it off with the show/hide toggle — its data isn\'t deleted, and it can be switched back on). Leave it unticked (the default) to just add or update the words in this file without touching anything else — e.g. uploading a short file of just a few words.',
+  ]);
+  syncWarningRow.font = { bold: true, color: { argb: "FF9C2B1B" } };
+  syncWarningRow.alignment = { wrapText: true, vertical: "top" };
 
   instructions.addRow([]);
   instructions.addRow(["Quiz questions sheet", "One row per hand-authored quiz question — mixed in with the auto-generated ones."]).font = {
@@ -276,6 +297,10 @@ export type WordExportQuizQuestion = {
   correctIndex: number;
 };
 export type WordExportRow = {
+  // The word's real database id — round-tripped through the "Word ID"
+  // column so a re-uploaded, edited export updates this word instead of
+  // creating a duplicate (see WORD_COLUMNS' comment above).
+  id: string;
   term: string;
   translation: string;
   romanization: string | null;
@@ -336,6 +361,7 @@ export async function buildWordExportWorkbook(words: WordExportRow[], categoryNa
       forms: serializeFormsCell(word.forms),
       examplesEn: serializeExamplesColumn(word.examples.map((example) => example.en)),
       examplesJa: serializeExamplesColumn(word.examples.map((example) => example.ja)),
+      wordId: word.id,
     });
 
     word.quizQuestions.forEach((quiz) => {

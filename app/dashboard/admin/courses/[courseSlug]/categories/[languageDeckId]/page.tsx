@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireAdminProfile, getAdminCategoryWords } from "@/lib/dal";
 import { setWordActive } from "@/lib/actions/admin-content";
+import { DeleteWordButton } from "@/components/admin/delete-word-button";
 import { WordImage } from "@/components/ui/word-image";
 import { VisibilityToggle } from "@/components/ui/visibility-toggle";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
@@ -212,6 +213,7 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
                 toggleAction={setWordActive.bind(null, word.id)}
                 label={`${word.term} — ${word.translation}`}
               />
+              <DeleteWordButton wordId={word.id} label={`${word.term} — ${word.translation}`} />
             </div>
           </div>
         ))}

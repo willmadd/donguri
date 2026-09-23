@@ -38,6 +38,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       where: { languageDeckId },
       orderBy: { position: "asc" },
       select: {
+        id: true,
         term: true,
         translation: true,
         romanization: true,
@@ -62,6 +63,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   ]);
 
   const exportRows: WordExportRow[] = words.map((word) => ({
+    id: word.id,
     term: word.term,
     translation: word.translation,
     romanization: word.romanization,

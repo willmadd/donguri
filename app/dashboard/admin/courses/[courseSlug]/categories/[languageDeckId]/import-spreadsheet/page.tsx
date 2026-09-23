@@ -83,6 +83,12 @@ export default async function ImportSpreadsheetPage({ params }: PageProps) {
               {t("admin_import_spreadsheet.download_current", "Download current words (.xlsx)")}
             </a>
           </div>
+          <p className="text-sm text-shu">
+            {t(
+              "admin_import_spreadsheet.sync_warning",
+              "Re-uploading a \"current words\" file deactivates any word in this deck that isn't in it (its data is kept, and it can be switched back on from the word list) — delete a row to remove that word, and don't upload a cut-down file unless that's what you want. The blank template never deactivates anything.",
+            )}
+          </p>
         </div>
 
         <ImportSpreadsheetForm languageDeckId={languageDeckId} />

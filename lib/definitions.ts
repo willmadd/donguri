@@ -773,7 +773,11 @@ export type ImportWordsFromSpreadsheetFormState =
 // `examplesEn`/`examplesJa` are each a semicolon-separated list, paired up
 // by position (parsed by `parseExamplesColumns`) rather than packed
 // together into one cell, since an example (unlike a form) has no other
-// sub-fields to pack alongside its two sentences.
+// sub-fields to pack alongside its two sentences. `wordId` — unlike every
+// other field here — is a real database id rather than spreadsheet-only
+// data: present (filled in by an export) it means "update this word",
+// absent it means "create a new one". See the import action for what it
+// does with it.
 export const WordImportRowSchema = z.object({
   wordNumber: z.string().trim().max(50).optional(),
   term: z.string().trim().min(1, { error: "Term is required." }).max(200, { error: "Keep it under 200 characters." }),
@@ -795,6 +799,7 @@ export const WordImportRowSchema = z.object({
   forms: z.string().trim().max(2000).optional(),
   examplesEn: z.string().trim().max(3000).optional(),
   examplesJa: z.string().trim().max(3000).optional(),
+  wordId: z.string().trim().max(100).optional(),
 });
 
 // One row of the Quiz questions sheet — same shape as

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { buildDeckCoverImageKey, buildWordImageKey, uploadImage } from "@/lib/bunny";
 import { parseExamplesColumns, parseFormsCell, parseWordImportWorkbook } from "@/lib/word-import";
 import {
@@ -679,6 +680,29 @@ export async function setWordActive(wordId: string, active: boolean): Promise<vo
   revalidatePath(`/dashboard/courses/${word.languageDeck.course.slug}/decks/${word.languageDeckId}`);
 }
 
+// Unlike setWordActive (reversible — hide the word, keep everything), this
+// is permanent: WordForm/WordExample/WordAlternateAnswer/WordQuizQuestion
+// and — critically — every learner's UserWordProgress on this word all
+// cascade-delete with it (see the Word relation's `onDelete: Cascade` on
+// each of those models in prisma/schema.prisma). The caller is expected to
+// have already confirmed with the admin; this action itself has no
+// confirmation step of its own.
+export async function deleteWord(wordId: string): Promise<void> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return;
+  }
+
+  const word = await prisma.word.delete({
+    where: { id: wordId },
+    select: { languageDeckId: true, languageDeck: { select: { course: { select: { slug: true } } } } },
+  });
+
+  revalidatePath(`/dashboard/admin/courses/${word.languageDeck.course.slug}/categories/${word.languageDeckId}`);
+  revalidatePath(`/dashboard/courses/${word.languageDeck.course.slug}/decks/${word.languageDeckId}`);
+}
+
 export async function setCategoryActive(languageDeckId: string, active: boolean): Promise<void> {
   const profile = await requireProfile();
 
@@ -849,6 +873,10 @@ export async function importWordsFromSpreadsheet(
 
   const rawFile = formData.get("file");
   const file = rawFile instanceof File && rawFile.size > 0 ? rawFile : undefined;
+  // A plain checkbox flag, not spreadsheet data — read straight off the
+  // FormData rather than through the zod schema below, which validates what
+  // came from the uploaded file itself.
+  const deactivateMissing = formData.get("deactivateMissing") === "on";
 
   const validatedFields = ImportWordsFromSpreadsheetFormSchema.safeParse({
     languageDeckId: formData.get("languageDeckId"),
@@ -893,10 +921,27 @@ export async function importWordsFromSpreadsheet(
   const categoryIdByName = new Map(categories.map((category) => [category.name.toLowerCase(), category.id]));
   const wordTypes: readonly string[] = WORD_TYPES;
 
+  // Scoped to this deck, so a "Word ID" cell (or a Term match — see below)
+  // can never make a row update a word that lives in a different deck.
+  const existingWords = await prisma.word.findMany({ where: { languageDeckId }, select: { id: true, term: true } });
+  const existingWordIds = new Set(existingWords.map((word) => word.id));
+  // Fallback match for a row with no (or no *matching*) Word ID — e.g. every
+  // row from the blank template — so re-uploading a file of words that
+  // already exist in this deck updates them instead of piling up duplicates
+  // each time. First existing word wins if this deck already has more than
+  // one with the same term.
+  const existingIdByTerm = new Map<string, string>();
+  for (const word of existingWords) {
+    const key = word.term.trim().toLowerCase();
+    if (!existingIdByTerm.has(key)) existingIdByTerm.set(key, word.id);
+  }
+  const seenWordIds = new Set<string>();
+
   const rowErrors: string[] = [];
   const warnings: string[] = [];
   const validRows: {
     id: string;
+    isUpdate: boolean;
     wordNumber: string | null;
     term: string;
     translation: string;
@@ -957,10 +1002,44 @@ export async function importWordsFromSpreadsheet(
       }
     }
 
-    const id = randomUUID();
+    const providedWordId = data.wordId || null;
+
+    let id: string;
+    let isUpdate = false;
+
+    if (providedWordId && existingWordIds.has(providedWordId)) {
+      if (seenWordIds.has(providedWordId)) {
+        rowErrors.push(`Words row ${row.rowNumber}: Word ID "${providedWordId}" is used more than once — remove the duplicate row.`);
+        continue;
+      }
+      seenWordIds.add(providedWordId);
+      id = providedWordId;
+      isUpdate = true;
+    } else {
+      const termMatchId = existingIdByTerm.get(data.term.trim().toLowerCase());
+
+      if (termMatchId && !seenWordIds.has(termMatchId)) {
+        seenWordIds.add(termMatchId);
+        id = termMatchId;
+        isUpdate = true;
+        if (providedWordId) {
+          warnings.push(
+            `Words row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — matched to the existing word "${data.term}" by Term instead.`,
+          );
+        }
+      } else {
+        if (providedWordId) {
+          warnings.push(
+            `Words row ${row.rowNumber}: Word ID "${providedWordId}" doesn't match an existing word in this deck — imported as a new word instead.`,
+          );
+        }
+        id = randomUUID();
+      }
+    }
 
     validRows.push({
       id,
+      isUpdate,
       wordNumber: data.wordNumber || null,
       term: data.term,
       translation: data.translation,
@@ -1071,6 +1150,10 @@ export async function importWordsFromSpreadsheet(
 
   const basePosition = _max.position ?? 0;
 
+  const newRows = validRows.filter((row) => !row.isUpdate);
+  const updatedRows = validRows.filter((row) => row.isUpdate);
+  const updatedWordIds = updatedRows.map((row) => row.id);
+
   const formsData = [...formsByWordId.values()].flatMap((forms) =>
     forms.map((form, index) => ({ ...form, position: index + 1 })),
   );
@@ -1084,36 +1167,127 @@ export async function importWordsFromSpreadsheet(
     values.map((value, index) => ({ id: randomUUID(), wordId, value, position: index + 1 })),
   );
 
-  await prisma.$transaction([
-    prisma.word.createMany({
-      data: validRows.map((row, index) => ({
-        id: row.id,
-        languageDeckId,
-        term: row.term,
-        translation: row.translation,
-        romanization: row.romanization,
-        exampleSentence: row.exampleSentence,
-        explanation: row.explanation,
-        explanationJa: row.explanationJa,
-        categoryId: row.categoryId,
-        wordType: row.wordType,
-        position: basePosition + 1 + index,
-      })),
-    }),
-    ...(formsData.length > 0 ? [prisma.wordForm.createMany({ data: formsData })] : []),
-    ...(examplesData.length > 0 ? [prisma.wordExample.createMany({ data: examplesData })] : []),
-    ...(quizData.length > 0 ? [prisma.wordQuizQuestion.createMany({ data: quizData })] : []),
-    ...(alternateAnswersData.length > 0
-      ? [prisma.wordAlternateAnswer.createMany({ data: alternateAnswersData })]
-      : []),
-  ]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- heterogeneous Prisma operations, batched together below
+  const ops: any[] = [];
+
+  if (newRows.length > 0) {
+    ops.push(
+      prisma.word.createMany({
+        data: newRows.map((row, index) => ({
+          id: row.id,
+          languageDeckId,
+          term: row.term,
+          translation: row.translation,
+          romanization: row.romanization,
+          exampleSentence: row.exampleSentence,
+          explanation: row.explanation,
+          explanationJa: row.explanationJa,
+          categoryId: row.categoryId,
+          wordType: row.wordType,
+          position: basePosition + 1 + index,
+        })),
+      }),
+    );
+  }
+
+  // One bulk UPDATE...FROM VALUES rather than N `word.update()` calls, each
+  // of which is its own DB round trip — with this DB's ~250-300ms RTT (see
+  // lib/prisma.ts), a few dozen row-by-row updates alone blew past the
+  // transaction's 5s timeout. Every value is explicitly cast since Postgres
+  // can't otherwise infer a VALUES column's type from a row where it's
+  // NULL. Position is deliberately left untouched (the spreadsheet doesn't
+  // represent word order).
+  if (updatedRows.length > 0) {
+    const updateValueRows = updatedRows.map(
+      (row) =>
+        Prisma.sql`(${row.id}::uuid, ${row.term}::text, ${row.translation}::text, ${row.romanization}::text, ${row.exampleSentence}::text, ${row.explanation}::text, ${row.explanationJa}::text, ${row.categoryId}::uuid, ${row.wordType}::text)`,
+    );
+
+    ops.push(
+      prisma.$executeRaw`
+        UPDATE words AS w
+        SET
+          term = v.term,
+          translation = v.translation,
+          romanization = v.romanization,
+          example_sentence = v.example_sentence,
+          explanation = v.explanation,
+          explanation_ja = v.explanation_ja,
+          category_id = v.category_id,
+          word_type = v.word_type
+        FROM (VALUES ${Prisma.join(updateValueRows)})
+          AS v(id, term, translation, romanization, example_sentence, explanation, explanation_ja, category_id, word_type)
+        WHERE w.id = v.id
+      `,
+    );
+  }
+
+  if (updatedWordIds.length > 0) {
+    // An updated word's forms/examples/alternate spellings/quiz questions
+    // are fully replaced by what the row now says (cleared if the row now
+    // leaves that cell/sheet-section blank), not merged — the spreadsheet is
+    // treated as the current full state of the word, same as every other
+    // field on it. Must run before the createMany calls below, which
+    // reinsert this same set of updated word ids alongside any brand-new
+    // ones.
+    ops.push(
+      prisma.wordForm.deleteMany({ where: { wordId: { in: updatedWordIds } } }),
+      prisma.wordExample.deleteMany({ where: { wordId: { in: updatedWordIds } } }),
+      prisma.wordAlternateAnswer.deleteMany({ where: { wordId: { in: updatedWordIds } } }),
+      prisma.wordQuizQuestion.deleteMany({ where: { wordId: { in: updatedWordIds } } }),
+    );
+  }
+
+  if (formsData.length > 0) ops.push(prisma.wordForm.createMany({ data: formsData }));
+  if (examplesData.length > 0) ops.push(prisma.wordExample.createMany({ data: examplesData }));
+  if (quizData.length > 0) ops.push(prisma.wordQuizQuestion.createMany({ data: quizData }));
+  if (alternateAnswersData.length > 0) {
+    ops.push(prisma.wordAlternateAnswer.createMany({ data: alternateAnswersData }));
+  }
+
+  // Only when the admin explicitly ticked the "deactivate missing" checkbox
+  // — treating the spreadsheet as this deck's full word list, not just a
+  // batch of additions — is a word matched to no row in the file (by Word ID
+  // or Term) deactivated, the same as manually flipping the admin word
+  // list's show/hide toggle (`setWordActive`). Never a hard delete: that
+  // would cascade to every learner's progress on the word (`deleteWord`, a
+  // separate, explicit, one-word-at-a-time action, exists for that). This is
+  // opt-in per upload rather than inferred from the file's shape, since a
+  // small file (the blank template, or a hand-made one with no "Word ID"
+  // column at all) uploaded without meaning to sync the whole deck must
+  // never silently deactivate everything it left out.
+  let deactivateResultIndex = -1;
+  if (deactivateMissing && updatedWordIds.length > 0) {
+    deactivateResultIndex = ops.length;
+    ops.push(
+      prisma.word.updateMany({
+        where: { languageDeckId, active: true, id: { notIn: updatedWordIds } },
+        data: { active: false },
+      }),
+    );
+  }
+
+  // The bulk-update fix above keeps this transaction's op count fixed
+  // (roughly a dozen statements) regardless of how many rows are in the
+  // file, but a generous timeout is cheap insurance against this DB's
+  // occasionally-slow round trips (see lib/prisma.ts) — the default 5s cut
+  // it close even for a handful of rows before that fix.
+  const results = await prisma.$transaction(ops, { timeout: 20_000 });
+  const deactivatedCount =
+    deactivateResultIndex >= 0 ? (results[deactivateResultIndex] as { count: number }).count : 0;
 
   revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}`);
   revalidatePath(`/dashboard/courses/${languageDeck.course.slug}/decks/${languageDeckId}`);
 
+  let summary = `Imported ${validRows.length} word${validRows.length === 1 ? "" : "s"}`;
+  summary += updatedRows.length > 0 ? ` (${newRows.length} new, ${updatedRows.length} updated).` : ".";
+  if (deactivatedCount > 0) {
+    summary += ` Deactivated ${deactivatedCount} word${deactivatedCount === 1 ? "" : "s"} no longer on the sheet.`;
+  }
+
   return {
     success: true,
-    message: `Imported ${validRows.length} word${validRows.length === 1 ? "" : "s"}.`,
+    message: summary,
     warnings: warnings.length > 0 ? warnings : undefined,
   };
 }
