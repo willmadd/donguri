@@ -6,28 +6,41 @@ import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { buildDeckCoverImageKey, buildWordImageKey, uploadImage } from "@/lib/bunny";
+import { parseExamplesColumns, parseFormsCell, parseWordImportWorkbook } from "@/lib/word-import";
 import {
   BulkQuizQuestionsSchema,
   CreateCategoryFormSchema,
   CreateWordCategoryFormSchema,
   CreateWordFormSchema,
   ImportWordsFormSchema,
+  ImportWordsFromSpreadsheetFormSchema,
   UpdateCategoryFormSchema,
   UpdateWordCategoryFormSchema,
   UpdateWordFormSchema,
+  WordAlternateAnswerInputSchema,
   WordExampleInputSchema,
   WordFormInputSchema,
+  WordImportQuizRowSchema,
+  WordImportRowSchema,
   WordQuizQuestionInputSchema,
+  WORD_TYPES,
   type BulkImportQuizQuestionsFormState,
   type CreateCategoryFormState,
   type CreateWordCategoryFormState,
   type CreateWordFormState,
   type ImportWordsFormState,
+  type ImportWordsFromSpreadsheetFormState,
   type SaveQuizQuestionsFormState,
   type UpdateCategoryFormState,
   type UpdateWordCategoryFormState,
   type UpdateWordFormState,
 } from "@/lib/definitions";
+
+// A spreadsheet-scale loop of individual inserts would race on `position`
+// (each read-then-write needs the previous row's write to have landed) — the
+// cap keeps a single import to a size where reading every row into memory
+// and inserting in one `createMany` is still the right tool.
+const MAX_IMPORT_ROWS = 1000;
 
 // Reconstructs repeatable "forms" / "examples" rows from indexed FormData
 // keys (`forms.0.labelEn`, `examples.0.formClientId`, ...) — the admin word
@@ -104,6 +117,32 @@ async function replaceWordFormsAndExamples(wordId: string, formData: FormData): 
     prisma.wordForm.deleteMany({ where: { wordId } }),
     ...(formsData.length > 0 ? [prisma.wordForm.createMany({ data: formsData })] : []),
     ...(examplesData.length > 0 ? [prisma.wordExample.createMany({ data: examplesData })] : []),
+  ]);
+}
+
+// Validates the submitted alternate-answer rows and replaces every existing
+// one for this word with them — same replace-all-in-one-transaction shape as
+// `replaceWordFormsAndExamples` above, for the same reason (admin-only,
+// low-frequency, no per-row identity worth preserving across a save).
+async function replaceWordAlternateAnswers(wordId: string, formData: FormData): Promise<void> {
+  const rows = collectIndexedRows(formData, "alternateAnswers")
+    .filter((row) => !isBlankRow(row, []))
+    .map((row) => WordAlternateAnswerInputSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+
+  const alternateAnswersData = rows.map((row, index) => ({
+    id: randomUUID(),
+    wordId,
+    value: row.value,
+    position: index + 1,
+  }));
+
+  await prisma.$transaction([
+    prisma.wordAlternateAnswer.deleteMany({ where: { wordId } }),
+    ...(alternateAnswersData.length > 0
+      ? [prisma.wordAlternateAnswer.createMany({ data: alternateAnswersData })]
+      : []),
   ]);
 }
 
@@ -522,6 +561,7 @@ export async function createWord(
   });
 
   await replaceWordFormsAndExamples(word.id, formData);
+  await replaceWordAlternateAnswers(word.id, formData);
 
   revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}/words/new`);
   revalidatePath(`/dashboard/courses/${languageDeck.course.slug}/decks/${languageDeckId}`);
@@ -613,6 +653,7 @@ export async function updateWord(
   });
 
   await replaceWordFormsAndExamples(wordId, formData);
+  await replaceWordAlternateAnswers(wordId, formData);
 
   const courseSlug = existing.languageDeck.course.slug;
   revalidatePath(`/dashboard/admin/courses/${courseSlug}/categories/${existing.languageDeckId}`);
@@ -784,6 +825,297 @@ export async function importWords(
 
   revalidatePath(`/dashboard/courses/${targetLanguageDeck.course.slug}/decks/${targetLanguageDeckId}`);
   redirect(`/dashboard/admin/courses/${targetLanguageDeck.course.slug}/categories/${targetLanguageDeckId}`);
+}
+
+// Bulk-creates words (plus their forms, example sentences, and hand-authored
+// quiz questions) in one deck from an uploaded .xlsx (see lib/word-import.ts
+// for the template/parser, built around this template's exact column
+// headers/sheet names). All-or-nothing on structural problems — a row
+// missing its required fields, or a Forms/Examples/Quiz questions row whose
+// "Word #" doesn't match any word row, blocks the whole batch, same as
+// `bulkImportQuizQuestions`'s all-or-nothing JSON validation — but an
+// unrecognized Category or Word type is just a warning: that one field is
+// left blank and the row still imports, since a name that doesn't match
+// isn't evidence of a typo needing a re-upload the way a missing Term is.
+export async function importWordsFromSpreadsheet(
+  _state: ImportWordsFromSpreadsheetFormState,
+  formData: FormData,
+): Promise<ImportWordsFromSpreadsheetFormState> {
+  const profile = await requireProfile();
+
+  if (profile.role !== "admin") {
+    return { message: "You don't have permission to do that." };
+  }
+
+  const rawFile = formData.get("file");
+  const file = rawFile instanceof File && rawFile.size > 0 ? rawFile : undefined;
+
+  const validatedFields = ImportWordsFromSpreadsheetFormSchema.safeParse({
+    languageDeckId: formData.get("languageDeckId"),
+    file,
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors };
+  }
+
+  const { languageDeckId, file: validFile } = validatedFields.data;
+
+  const languageDeck = await prisma.languageDeck.findUnique({
+    where: { id: languageDeckId },
+    select: { id: true, course: { select: { slug: true } } },
+  });
+
+  if (!languageDeck) {
+    return { message: "That category no longer exists." };
+  }
+
+  const buffer = Buffer.from(await validFile.arrayBuffer());
+  const parsed = await parseWordImportWorkbook(buffer);
+
+  if (!parsed.ok) {
+    return { message: parsed.message };
+  }
+
+  if (parsed.rows.length === 0) {
+    return { message: "That spreadsheet has no words in it." };
+  }
+
+  if (parsed.rows.length > MAX_IMPORT_ROWS) {
+    return { message: `That's ${parsed.rows.length} rows — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
+  }
+
+  if (parsed.quizRows.length > MAX_IMPORT_ROWS) {
+    return { message: `That's ${parsed.quizRows.length} rows on the Quiz questions sheet — split it into batches of ${MAX_IMPORT_ROWS} or fewer.` };
+  }
+
+  const categories = await prisma.wordCategory.findMany({ select: { id: true, name: true } });
+  const categoryIdByName = new Map(categories.map((category) => [category.name.toLowerCase(), category.id]));
+  const wordTypes: readonly string[] = WORD_TYPES;
+
+  const rowErrors: string[] = [];
+  const warnings: string[] = [];
+  const validRows: {
+    id: string;
+    wordNumber: string | null;
+    term: string;
+    translation: string;
+    romanization: string | null;
+    exampleSentence: string | null;
+    explanation: string | null;
+    explanationJa: string | null;
+    categoryId: string | null;
+    wordType: string | null;
+  }[] = [];
+  // Semicolon-separated within the "Alternative spellings" cell — split out
+  // here per word id, same shape as formsByWordId/examplesByWordId below.
+  const alternateAnswersByWordId = new Map<string, string[]>();
+  type FormRowData = { id: string; wordId: string; labelEn: string; labelJa: string; value: string };
+  const formsByWordId = new Map<string, FormRowData[]>();
+  type ExampleRowData = { wordId: string; formId: string | null; en: string; ja: string };
+  const examplesByWordId = new Map<string, ExampleRowData[]>();
+
+  for (const row of parsed.rows) {
+    const result = WordImportRowSchema.safeParse(row.values);
+
+    if (!result.success) {
+      rowErrors.push(`Words row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
+      continue;
+    }
+
+    const data = result.data;
+
+    const formsResult = parseFormsCell(data.forms ?? "");
+    if (!formsResult.ok) {
+      rowErrors.push(`Words row ${row.rowNumber}: Forms — ${formsResult.error}`);
+      continue;
+    }
+
+    const examplesResult = parseExamplesColumns(data.examplesEn ?? "", data.examplesJa ?? "");
+    if (!examplesResult.ok) {
+      rowErrors.push(`Words row ${row.rowNumber}: ${examplesResult.error}`);
+      continue;
+    }
+
+    let categoryId: string | null = null;
+    if (data.category) {
+      const match = categoryIdByName.get(data.category.toLowerCase());
+      if (match) {
+        categoryId = match;
+      } else {
+        warnings.push(`Words row ${row.rowNumber}: category "${data.category}" doesn't exist — imported without one.`);
+      }
+    }
+
+    let wordType: string | null = null;
+    if (data.wordType) {
+      const normalized = data.wordType.toLowerCase();
+      if (wordTypes.includes(normalized)) {
+        wordType = normalized;
+      } else {
+        warnings.push(`Words row ${row.rowNumber}: word type "${data.wordType}" isn't recognized — imported without one.`);
+      }
+    }
+
+    const id = randomUUID();
+
+    validRows.push({
+      id,
+      wordNumber: data.wordNumber || null,
+      term: data.term,
+      translation: data.translation,
+      romanization: data.romanization || null,
+      exampleSentence: data.exampleSentence || null,
+      explanation: data.explanation || null,
+      explanationJa: data.explanationJa || null,
+      categoryId,
+      wordType,
+    });
+
+    if (data.alternateSpellings) {
+      const values = data.alternateSpellings
+        .split(";")
+        .map((value) => value.trim())
+        .filter((value) => value !== "");
+      if (values.length > 0) alternateAnswersByWordId.set(id, values);
+    }
+
+    if (formsResult.forms.length > 0) {
+      formsByWordId.set(
+        id,
+        formsResult.forms.map((form) => ({
+          id: randomUUID(),
+          wordId: id,
+          labelEn: form.labelEn,
+          labelJa: form.labelJa,
+          value: form.value,
+        })),
+      );
+    }
+
+    if (examplesResult.examples.length > 0) {
+      examplesByWordId.set(
+        id,
+        examplesResult.examples.map((example) => ({
+          wordId: id,
+          // Spreadsheet-imported examples are never tied to a specific
+          // form — an admin can still set that by hand afterward in the
+          // word editor, which does support it.
+          formId: null,
+          en: example.en,
+          ja: example.ja,
+        })),
+      );
+    }
+  }
+
+  // Maps each spreadsheet-assigned "Word #" to the word it labels — how the
+  // Quiz questions sheet says which word a row belongs to, since those rows
+  // are validated (and need a real wordId to insert against) before any word
+  // has an id a spreadsheet cell could reference.
+  const wordIdByNumber = new Map<string, string>();
+  for (const row of validRows) {
+    if (!row.wordNumber) continue;
+    if (wordIdByNumber.has(row.wordNumber)) {
+      rowErrors.push(`Words row: "Word #" ${row.wordNumber} is used more than once — each must be unique.`);
+      continue;
+    }
+    wordIdByNumber.set(row.wordNumber, row.id);
+  }
+
+  type QuizRowData = { wordId: string; prompt: string; promptJa: string | null; options: string[]; correctIndex: number };
+  const quizByWordId = new Map<string, QuizRowData[]>();
+
+  for (const row of parsed.quizRows) {
+    const result = WordImportQuizRowSchema.safeParse(row.values);
+
+    if (!result.success) {
+      rowErrors.push(`Quiz questions row ${row.rowNumber}: ${result.error.issues[0]?.message ?? "invalid data"}`);
+      continue;
+    }
+
+    const data = result.data;
+    const wordId = wordIdByNumber.get(data.wordNumber);
+
+    if (!wordId) {
+      rowErrors.push(`Quiz questions row ${row.rowNumber}: Word # "${data.wordNumber}" doesn't match any row on the Words sheet.`);
+      continue;
+    }
+
+    const options = [data.option1, data.option2, data.option3, data.option4].filter(
+      (option): option is string => Boolean(option && option.trim() !== ""),
+    );
+
+    const quizQuestions = quizByWordId.get(wordId) ?? [];
+    quizQuestions.push({
+      wordId,
+      prompt: data.prompt,
+      promptJa: data.promptJa || null,
+      options,
+      correctIndex: Number(data.correctOption) - 1,
+    });
+    quizByWordId.set(wordId, quizQuestions);
+  }
+
+  if (rowErrors.length > 0) {
+    return {
+      message: `${rowErrors.length} row${rowErrors.length === 1 ? "" : "s"} couldn't be imported — fix these and re-upload the whole file:`,
+      rowErrors,
+    };
+  }
+
+  const { _max } = await prisma.word.aggregate({
+    where: { languageDeckId },
+    _max: { position: true },
+  });
+
+  const basePosition = _max.position ?? 0;
+
+  const formsData = [...formsByWordId.values()].flatMap((forms) =>
+    forms.map((form, index) => ({ ...form, position: index + 1 })),
+  );
+  const examplesData = [...examplesByWordId.values()].flatMap((examples) =>
+    examples.map((example, index) => ({ id: randomUUID(), ...example, position: index + 1 })),
+  );
+  const quizData = [...quizByWordId.values()].flatMap((questions) =>
+    questions.map((question, index) => ({ ...question, position: index + 1 })),
+  );
+  const alternateAnswersData = [...alternateAnswersByWordId.entries()].flatMap(([wordId, values]) =>
+    values.map((value, index) => ({ id: randomUUID(), wordId, value, position: index + 1 })),
+  );
+
+  await prisma.$transaction([
+    prisma.word.createMany({
+      data: validRows.map((row, index) => ({
+        id: row.id,
+        languageDeckId,
+        term: row.term,
+        translation: row.translation,
+        romanization: row.romanization,
+        exampleSentence: row.exampleSentence,
+        explanation: row.explanation,
+        explanationJa: row.explanationJa,
+        categoryId: row.categoryId,
+        wordType: row.wordType,
+        position: basePosition + 1 + index,
+      })),
+    }),
+    ...(formsData.length > 0 ? [prisma.wordForm.createMany({ data: formsData })] : []),
+    ...(examplesData.length > 0 ? [prisma.wordExample.createMany({ data: examplesData })] : []),
+    ...(quizData.length > 0 ? [prisma.wordQuizQuestion.createMany({ data: quizData })] : []),
+    ...(alternateAnswersData.length > 0
+      ? [prisma.wordAlternateAnswer.createMany({ data: alternateAnswersData })]
+      : []),
+  ]);
+
+  revalidatePath(`/dashboard/admin/courses/${languageDeck.course.slug}/categories/${languageDeckId}`);
+  revalidatePath(`/dashboard/courses/${languageDeck.course.slug}/decks/${languageDeckId}`);
+
+  return {
+    success: true,
+    message: `Imported ${validRows.length} word${validRows.length === 1 ? "" : "s"}.`,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
 }
 
 // Word categories (see the `WordCategory` model note in prisma/schema.prisma

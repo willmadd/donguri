@@ -8,6 +8,7 @@ import { FileField } from "@/components/ui/file-field";
 import { SelectField } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordFormsFields } from "@/components/admin/word-forms-fields";
+import { WordAlternateAnswersFields } from "@/components/admin/word-alternate-answers-fields";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import { WORD_TYPES, type WordCategoryOption } from "@/lib/definitions";
 
@@ -107,6 +108,7 @@ export function CreateWordForm({ languageDeckId, categories }: CreateWordFormPro
         errors={state?.errors?.wordType}
       />
       <WordFormsFields key={resetCount} />
+      <WordAlternateAnswersFields key={resetCount} />
       <FileField
         label={t("admin_word_form.picture", "Picture")}
         name="image"

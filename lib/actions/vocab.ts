@@ -132,10 +132,14 @@ export async function submitAnswer(
 // term/translation fact, checked with `matchesTypedAnswer`'s trimmed,
 // case-insensitive, comma-list-tolerant comparison instead of an exact
 // option match (some translations carry more than one accepted reading,
-// e.g. "こんにちは, もしもし"). The correct-answer shown back to the learner
-// is just the first reading, not the full stored list. Shared by the quiz's
-// typed half (`advancesStage: false`) and the review queue's fallback typed
-// question for words with no cloze content (`advancesStage: true`).
+// e.g. "こんにちは, もしもし"). The word's own alternate answers (see
+// WordAlternateAnswer — extra accepted spellings like "3" or "三" for
+// "Three") are unioned into the same comma-list check, regardless of which
+// side (term or translation) is being typed. The correct-answer shown back
+// to the learner is just the first reading, not the full stored list or any
+// alternates. Shared by the quiz's typed half (`advancesStage: false`) and
+// the review queue's fallback typed question for words with no cloze
+// content (`advancesStage: true`).
 export async function submitTypedAnswer(
   wordId: string,
   direction: QuizDirection,
@@ -151,6 +155,7 @@ export async function submitTypedAnswer(
       translation: true,
       romanization: true,
       languageDeck: { select: { path: true } },
+      alternateAnswers: { select: { value: true } },
     },
   });
 
@@ -169,7 +174,8 @@ export async function submitTypedAnswer(
       : useRomanizedAnswer
         ? word.romanization!
         : word.term;
-  const correct = matchesTypedAnswer(typedAnswer, storedAnswer);
+  const acceptedAnswers = [storedAnswer, ...word.alternateAnswers.map((alt) => alt.value)].join(",");
+  const correct = matchesTypedAnswer(typedAnswer, acceptedAnswers);
   const correctAnswer = storedAnswer.split(",")[0].trim();
 
   const { xp } = await recordAnswer(user.id, wordId, correct, advancesStage);

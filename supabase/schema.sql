@@ -1339,3 +1339,26 @@ create policy "Users can create own daily challenge attempts"
 -- own admin-managed color.
 
 alter table public.language_decks add column if not exists tags text[] not null default '{}';
+
+-- 32. Alternative accepted spellings per word ---------------------------------
+-- Extra typed-answer variants a learner's answer is also checked against
+-- (see matchesTypedAnswer in lib/actions/vocab.ts) — e.g. "3" or "三"
+-- alongside "Three" — in addition to the word's own term/translation/
+-- romanization, regardless of which side (term or translation) is being
+-- typed for that question.
+
+create table if not exists public.word_alternate_answers (
+  id uuid primary key default gen_random_uuid(),
+  word_id uuid not null references public.words (id) on delete cascade,
+  value text not null,
+  position integer not null,
+  created_at timestamptz not null default now(),
+  unique (word_id, position)
+);
+
+alter table public.word_alternate_answers enable row level security;
+
+drop policy if exists "Authenticated users can view word alternate answers" on public.word_alternate_answers;
+create policy "Authenticated users can view word alternate answers"
+  on public.word_alternate_answers for select
+  using (auth.role() = 'authenticated');

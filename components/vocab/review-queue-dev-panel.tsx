@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import type { ReviewQueueDebugEntry } from "@/lib/definitions";
 import { useTranslations } from "@/components/i18n/locale-provider";
+import { useDevMode } from "@/components/dashboard/dev-mode-context";
 
 type ReviewQueueDevPanelProps = {
   entries: ReviewQueueDebugEntry[];
@@ -38,73 +38,59 @@ function formatDueIn(date: Date): string {
 
 export function ReviewQueueDevPanel({ entries }: ReviewQueueDevPanelProps) {
   const t = useTranslations();
-  const [open, setOpen] = useState(false);
+  const { enabled } = useDevMode();
+
+  if (!enabled) return null;
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition ${
-          open
-            ? "border-kin bg-kin/15 text-sumi"
-            : "border-ghost-border text-ghost-text hover:bg-ghost-hover"
-        }`}
-      >
-        {t("review_queue_dev.toggle", "🛠 Dev mode")}
-      </button>
-
-      {open && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-card-border bg-washi-soft">
-          <div className="border-b border-sumi/10 px-4 py-3">
-            <p className="text-sm font-semibold text-sumi">
-              {t("review_queue_dev.title", "Review queue (admin only)")}
-            </p>
-            <p className="text-xs text-sumi-soft">
-              {t(
-                "review_queue_dev.subtitle",
-                "Every word tracked for this deck — vocabulary and grammar together — and when each one is next due.",
-              )}
-            </p>
-          </div>
-
-          {entries.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-sumi-soft">
-              {t("review_queue_dev.empty", "Nothing learned in this deck yet.")}
-            </p>
-          ) : (
-            <div className="max-h-96 overflow-y-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="sticky top-0 bg-washi-soft text-xs uppercase tracking-wide text-sumi-soft">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.term", "Term")}</th>
-                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.stage", "Stage")}</th>
-                    <th className="px-4 py-2 font-medium">{t("review_queue_dev.due", "Due")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.wordId} className="border-t border-sumi/5">
-                      <td className="px-4 py-2">
-                        <span className="text-sumi">{entry.term}</span>
-                        <span className="ml-1.5 text-sumi-soft">— {entry.translation}</span>
-                      </td>
-                      <td className="px-4 py-2 text-sumi-soft">
-                        {entry.stage}. {entry.stageName}
-                      </td>
-                      <td className="px-4 py-2 text-sumi-soft">
-                        {entry.lastSeenAt === null
-                          ? t("review_queue_dev.not_quizzed", "not quizzed yet")
-                          : entry.nextReviewAt === null
-                            ? t("review_queue_dev.mastered", "mastered")
-                            : formatDueIn(entry.nextReviewAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+    <div className="overflow-hidden rounded-2xl border border-card-border bg-washi-soft">
+      <div className="border-b border-sumi/10 px-4 py-3">
+        <p className="text-sm font-semibold text-sumi">
+          {t("review_queue_dev.title", "Review queue (admin only)")}
+        </p>
+        <p className="text-xs text-sumi-soft">
+          {t(
+            "review_queue_dev.subtitle",
+            "Every word tracked for this deck — vocabulary and grammar together — and when each one is next due.",
           )}
+        </p>
+      </div>
+
+      {entries.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-sumi-soft">
+          {t("review_queue_dev.empty", "Nothing learned in this deck yet.")}
+        </p>
+      ) : (
+        <div className="max-h-96 overflow-y-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="sticky top-0 bg-washi-soft text-xs uppercase tracking-wide text-sumi-soft">
+              <tr>
+                <th className="px-4 py-2 font-medium">{t("review_queue_dev.term", "Term")}</th>
+                <th className="px-4 py-2 font-medium">{t("review_queue_dev.stage", "Stage")}</th>
+                <th className="px-4 py-2 font-medium">{t("review_queue_dev.due", "Due")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.wordId} className="border-t border-sumi/5">
+                  <td className="px-4 py-2">
+                    <span className="text-sumi">{entry.term}</span>
+                    <span className="ml-1.5 text-sumi-soft">— {entry.translation}</span>
+                  </td>
+                  <td className="px-4 py-2 text-sumi-soft">
+                    {entry.stage}. {entry.stageName}
+                  </td>
+                  <td className="px-4 py-2 text-sumi-soft">
+                    {entry.lastSeenAt === null
+                      ? t("review_queue_dev.not_quizzed", "not quizzed yet")
+                      : entry.nextReviewAt === null
+                        ? t("review_queue_dev.mastered", "mastered")
+                        : formatDueIn(entry.nextReviewAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

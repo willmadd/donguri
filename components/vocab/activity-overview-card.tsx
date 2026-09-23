@@ -16,6 +16,7 @@ export async function ActivityOverviewCard({
   dailyActivity,
   currentStreak,
   longestStreak,
+  activeToday,
   xp,
   equippedAccessory,
 }: {
@@ -23,6 +24,7 @@ export async function ActivityOverviewCard({
   dailyActivity: DailyActivityCount[];
   currentStreak: number;
   longestStreak: number;
+  activeToday: boolean;
   xp: number;
   equippedAccessory: AccessoryId | null;
 }) {
@@ -53,7 +55,12 @@ export async function ActivityOverviewCard({
           <ShareProgressButton shareText={shareText} />
         </div>
 
-        <StreakChart data={dailyActivity} currentStreak={currentStreak} longestStreak={longestStreak} />
+        <StreakChart
+          data={dailyActivity}
+          currentStreak={currentStreak}
+          longestStreak={longestStreak}
+          activeToday={activeToday}
+        />
       </div>
     </div>
   );

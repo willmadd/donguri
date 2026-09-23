@@ -124,10 +124,12 @@ export function StreakChart({
   data,
   currentStreak,
   longestStreak,
+  activeToday,
 }: {
   data: DailyActivityCount[];
   currentStreak: number;
   longestStreak?: number;
+  activeToday?: boolean;
 }) {
   const t = useTranslations();
   const [hovered, setHovered] = useState<number | null>(null);
@@ -188,6 +190,17 @@ export function StreakChart({
           </div>
         )}
       </div>
+
+      {currentStreak > 0 && activeToday === false && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-kin">
+          <Flame className="h-3.5 w-3.5 shrink-0" />
+          {t(
+            "streak_chart.at_risk",
+            "Learn today so you don't lose your {{count}}-day streak!",
+            { count: currentStreak },
+          )}
+        </p>
+      )}
 
       {/* Legend — the dependable identity channel for 3 series; never rely
           on color-matching the bars alone. */}

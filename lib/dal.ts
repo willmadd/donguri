@@ -273,6 +273,7 @@ export const getAdminCategoryWords = cache(async (languageDeckId: string) => {
         include: {
           forms: { orderBy: { position: "asc" } },
           examples: { orderBy: { position: "asc" } },
+          alternateAnswers: { orderBy: { position: "asc" } },
           category: { select: { id: true, name: true, color: true } },
         },
       },
@@ -341,6 +342,7 @@ export const getAdminWord = cache(async (wordId: string) => {
       },
       forms: { orderBy: { position: "asc" } },
       examples: { orderBy: { position: "asc" } },
+      alternateAnswers: { orderBy: { position: "asc" } },
       category: { select: { id: true, name: true, color: true } },
     },
   });
@@ -384,6 +386,7 @@ function toAdminWordSummary(word: {
   category: { id: string; name: string; color: string } | null;
   forms: { id: string; labelEn: string; labelJa: string; value: string }[];
   examples: { id: string; formId: string | null; en: string; ja: string }[];
+  alternateAnswers: { id: string; value: string }[];
 }): AdminWordSummary {
   return {
     id: word.id,
@@ -410,6 +413,7 @@ function toAdminWordSummary(word: {
       en: example.en,
       ja: example.ja,
     })),
+    alternateAnswers: word.alternateAnswers.map((alt) => ({ id: alt.id, value: alt.value })),
   };
 }
 

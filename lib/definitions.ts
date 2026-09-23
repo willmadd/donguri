@@ -123,6 +123,10 @@ export type CourseStreak = {
 export type GlobalStreak = {
   currentStreak: number;
   longestStreak: number;
+  // Whether today (UTC) already has recorded activity — false means the
+  // current streak is riding on its one-day grace period and lapses if
+  // nothing is learned before the day rolls over.
+  activeToday: boolean;
 };
 
 // Which side of a word pair the quiz prompts with: the term is the word in
@@ -167,6 +171,14 @@ export type WordExampleSummary = {
   formId: string | null;
   en: string;
   ja: string;
+};
+
+// An extra accepted spelling/answer for a word's typed-answer questions —
+// see the WordAlternateAnswer prisma model and matchesTypedAnswer in
+// lib/actions/vocab.ts.
+export type WordAlternateAnswerSummary = {
+  id: string;
+  value: string;
 };
 
 export type RevealWord = {
@@ -603,6 +615,17 @@ export const WordExampleInputSchema = z.object({
 export type WordFormInput = z.infer<typeof WordFormInputSchema>;
 export type WordExampleInput = z.infer<typeof WordExampleInputSchema>;
 
+// One row of a word's alternate accepted answers, submitted the same
+// indexed-field way as forms/examples above (`alternateAnswers.0.value`,
+// ...) — see WordAlternateAnswerSummary and matchesTypedAnswer in
+// lib/actions/vocab.ts. No clientId: unlike forms, nothing else references
+// a specific alternate-answer row.
+export const WordAlternateAnswerInputSchema = z.object({
+  value: z.string().trim().min(1, { error: "Value is required." }).max(200),
+});
+
+export type WordAlternateAnswerInput = z.infer<typeof WordAlternateAnswerInputSchema>;
+
 // One row of a word's hand-authored quiz questions, submitted the same
 // indexed-field way as forms/examples above (`questions.0.prompt`, ...).
 // Fixed option0-3 slots (rather than a nested array) so it fits the same
@@ -710,6 +733,104 @@ export type ImportWordsFormState =
     }
   | undefined;
 
+const SPREADSHEET_MAX_BYTES = 2 * 1024 * 1024;
+
+const SPREADSHEET_FIELD_SCHEMA = z
+  .file({ error: "Choose a spreadsheet file." })
+  .max(SPREADSHEET_MAX_BYTES, { error: "Keep the file under 2MB." })
+  .mime(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], {
+    error: "Upload an .xlsx file (Excel, or a Google Sheet downloaded as Excel).",
+  });
+
+export const ImportWordsFromSpreadsheetFormSchema = z.object({
+  languageDeckId: z.uuid({ error: "Missing category." }),
+  file: SPREADSHEET_FIELD_SCHEMA,
+});
+
+export type ImportWordsFromSpreadsheetFormState =
+  | {
+      errors?: { languageDeckId?: string[]; file?: string[] };
+      // Blocking — nothing was imported; fix these rows and re-upload.
+      rowErrors?: string[];
+      // Non-blocking — the import went through, but these rows had a value
+      // (category/word type) that couldn't be matched, so that one field was
+      // left blank rather than failing the whole row.
+      warnings?: string[];
+      message?: string;
+      success?: boolean;
+    }
+  | undefined;
+
+// One parsed spreadsheet row, before category-name resolution — that needs
+// a DB lookup, so it happens in the import action rather than here. Mirrors
+// `WordFieldsSchema` above minus `categoryId`/`image`, which aren't things a
+// spreadsheet cell holds directly. `wordNumber` is a plain admin-assigned
+// label (not a database id) that the Quiz questions sheet references to say
+// which word a row belongs to — see lib/word-import.ts. `forms` is packed
+// into a single cell (parsed by `parseFormsCell` in lib/word-import.ts)
+// rather than its own sheet, since it's scoped to this word alone — unlike
+// quiz questions, nothing else needs to reference a form by number.
+// `examplesEn`/`examplesJa` are each a semicolon-separated list, paired up
+// by position (parsed by `parseExamplesColumns`) rather than packed
+// together into one cell, since an example (unlike a form) has no other
+// sub-fields to pack alongside its two sentences.
+export const WordImportRowSchema = z.object({
+  wordNumber: z.string().trim().max(50).optional(),
+  term: z.string().trim().min(1, { error: "Term is required." }).max(200, { error: "Keep it under 200 characters." }),
+  translation: z
+    .string()
+    .trim()
+    .min(1, { error: "Translation is required." })
+    .max(200, { error: "Keep it under 200 characters." }),
+  romanization: z.string().trim().max(200, { error: "Keep it under 200 characters." }).optional(),
+  exampleSentence: z.string().trim().max(500, { error: "Keep it under 500 characters." }).optional(),
+  explanation: z.string().trim().max(500, { error: "Keep it under 500 characters." }).optional(),
+  explanationJa: z.string().trim().max(500, { error: "Keep it under 500 characters." }).optional(),
+  category: z.string().trim().max(200).optional(),
+  wordType: z.string().trim().max(50).optional(),
+  // Semicolon-separated — a single cell rather than its own sheet, since
+  // unlike forms/examples/quiz questions an alternate answer has no
+  // sub-fields of its own to justify a repeatable row.
+  alternateSpellings: z.string().trim().max(500).optional(),
+  forms: z.string().trim().max(2000).optional(),
+  examplesEn: z.string().trim().max(3000).optional(),
+  examplesJa: z.string().trim().max(3000).optional(),
+});
+
+// One row of the Quiz questions sheet — same shape as
+// `WordQuizQuestionInputSchema`, with named option columns instead of a
+// fixed option0-3 slot naming, and a 1-based `correctOption` (matching how
+// the sheet's "Correct option (1-4)" column reads) instead of a 0-based
+// index.
+export const WordImportQuizRowSchema = z
+  .object({
+    wordNumber: z.string().trim().min(1, { error: "Word # is required." }).max(50),
+    prompt: z.string().trim().min(1, { error: "Prompt is required." }).max(300),
+    promptJa: z.string().trim().max(300).optional(),
+    option1: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
+    option2: z.string().trim().min(1, { error: "At least two options are required." }).max(150),
+    option3: z.string().trim().max(150).optional(),
+    option4: z.string().trim().max(150).optional(),
+    correctOption: z
+      .string()
+      .trim()
+      .min(1, { error: "Correct option (1-4) is required." })
+      .refine((value) => ["1", "2", "3", "4"].includes(value), {
+        error: "Correct option must be 1, 2, 3, or 4.",
+      }),
+  })
+  .refine(
+    (row) => {
+      const optionCount = [row.option1, row.option2, row.option3, row.option4].filter(
+        (option) => Boolean(option && option.trim() !== ""),
+      ).length;
+      return Number(row.correctOption) <= optionCount;
+    },
+    { error: "Correct option (1-4) points past the last filled-in option." },
+  );
+
+export type WordImportQuizRow = z.infer<typeof WordImportQuizRowSchema>;
+
 export type AdminCourseOption = {
   id: string;
   slug: string;
@@ -757,6 +878,7 @@ export type AdminWordSummary = {
   wordType: WordType | null;
   forms: WordFormSummary[];
   examples: WordExampleSummary[];
+  alternateAnswers: WordAlternateAnswerSummary[];
 };
 
 // One entry per day, split by the three things that feed the course-home

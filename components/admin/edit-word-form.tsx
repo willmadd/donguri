@@ -9,6 +9,7 @@ import { SelectField } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { WordImage } from "@/components/ui/word-image";
 import { WordFormsFields } from "@/components/admin/word-forms-fields";
+import { WordAlternateAnswersFields } from "@/components/admin/word-alternate-answers-fields";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import { WORD_TYPES, type AdminWordSummary, type WordCategoryOption } from "@/lib/definitions";
 
@@ -93,6 +94,7 @@ export function EditWordForm({ word, currentImageSrc, categories }: EditWordForm
         errors={state?.errors?.wordType}
       />
       <WordFormsFields initialForms={word.forms} initialExamples={word.examples} />
+      <WordAlternateAnswersFields initialAlternateAnswers={word.alternateAnswers} />
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-sumi-soft">

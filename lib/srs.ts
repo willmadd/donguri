@@ -82,7 +82,7 @@ export const DAILY_CHALLENGE_XP = 2;
 export function computeStreakFromActiveDays(
   activeDays: ReadonlySet<string>,
   today: Date = new Date(),
-): { currentStreak: number; longestStreak: number } {
+): { currentStreak: number; longestStreak: number; activeToday: boolean } {
   let longestStreak = 0;
   let run = 0;
   let prevDay: string | null = null;
@@ -96,8 +96,10 @@ export function computeStreakFromActiveDays(
   // The streak survives until the day actually lapses: if today has no
   // activity yet, it's still "alive" through yesterday rather than reading
   // as broken the moment the clock rolls over UTC midnight.
+  const todayStr = toUTCDateString(startOfUTCDay(today));
+  const activeToday = activeDays.has(todayStr);
   let anchor = startOfUTCDay(today);
-  if (!activeDays.has(toUTCDateString(anchor))) {
+  if (!activeToday) {
     anchor = addDays(anchor, -1);
   }
 
@@ -108,7 +110,7 @@ export function computeStreakFromActiveDays(
     cursor = addDays(cursor, -1);
   }
 
-  return { currentStreak, longestStreak: Math.max(longestStreak, currentStreak) };
+  return { currentStreak, longestStreak: Math.max(longestStreak, currentStreak), activeToday };
 }
 
 type StreakFields = {

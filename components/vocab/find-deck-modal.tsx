@@ -102,29 +102,9 @@ export function FindDeckModal({
                         : undefined
                     }
                   >
-                    <div className="flex w-full flex-wrap items-center gap-1.5">
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeClasses}`}
-                        style={badgeStyle}
-                      >
-                        {isGrammar
-                          ? t("course_home.grammar", "Grammar")
-                          : t("course_home.vocabulary", "Vocabulary")}
-                      </span>
-
-                      {deck.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${textClass} ${trackClass}`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-
                     <div className="flex items-start gap-3.5">
                       <div className="shrink-0">
-                        <div className="h-16 w-16 overflow-hidden rounded-xl border border-white/20 bg-neutral-soft shadow-sm">
+                        <div className="h-20 w-20 overflow-hidden rounded-xl border border-white/20 bg-neutral-soft shadow-sm">
                           {deck.coverImage ? (
                             <WordImage
                               src={deck.coverImage}
@@ -142,8 +122,28 @@ export function FindDeckModal({
                         </div>
                       </div>
                       <div className="min-w-0 flex-1">
+                        <div className="flex w-full flex-wrap items-center gap-1.5">
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeClasses}`}
+                            style={badgeStyle}
+                          >
+                            {isGrammar
+                              ? t("course_home.grammar", "Grammar")
+                              : t("course_home.vocabulary", "Vocabulary")}
+                          </span>
+
+                          {deck.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${textClass} ${trackClass}`}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+
                         <h3
-                          className={`font-nunito text-lg font-bold leading-snug ${textClass}`}
+                          className={`mt-1.5 font-nunito text-lg font-bold leading-snug ${textClass}`}
                         >
                           {deck.title}
                         </h3>

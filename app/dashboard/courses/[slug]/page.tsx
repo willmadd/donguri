@@ -41,7 +41,7 @@ export default async function CourseHomePage({ params }: PageProps) {
 
   const [
     { course, decks, activeDeckIds },
-    { currentStreak, longestStreak },
+    { currentStreak, longestStreak, activeToday },
     dailyActivity,
     leaderboards,
     reviewQueue,
@@ -63,8 +63,66 @@ export default async function CourseHomePage({ params }: PageProps) {
 
   const { t } = await getTranslator();
 
+  const hasReviews = reviewQueue.dueCount > 0;
+  const reviewCardContent = (
+    <>
+      {hasReviews && (
+        <div className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-red-100/95 shadow-sm backdrop-blur-sm transition-transform group-hover:translate-x-1">
+          <ArrowRight className="h-5 w-5 text-red-600" />
+        </div>
+      )}
+
+      <div className="relative z-10 max-w-[65%] sm:max-w-[60%]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/95 text-2xl font-bold leading-none text-red-600 shadow-sm backdrop-blur-sm">
+            復
+          </div>
+
+          <span className="text-sm font-bold uppercase tracking-[0.2em] text-washi/90">
+            {t("course_home.review_label", "Review")}
+          </span>
+        </div>
+
+        <h2 className="mt-4 text-3xl font-bold leading-tight text-washi">
+          {!hasReviews
+            ? t("course_home.review_empty_title", "You're all caught up!")
+            : reviewQueue.dueCount === 1
+              ? t(
+                  "course_home.review_title_singular",
+                  "Review {{count}} word",
+                  {
+                    count: reviewQueue.dueCount,
+                  },
+                )
+              : t("course_home.review_title", "Review {{count}} words", {
+                  count: reviewQueue.dueCount,
+                })}
+        </h2>
+
+        <p className="mt-2 text-sm leading-relaxed text-washi/85">
+          {!hasReviews
+            ? t(
+                "course_home.review_empty_subtitle",
+                "Come back soon to review what you've learned, or learn new words to add to your review queue.",
+              )
+            : t(
+                "course_home.review_subtitle",
+                "Keep it fresh. Strengthen your memory with a quick review.",
+              )}
+        </p>
+      </div>
+
+      <img
+        src="/images/rabbit-flash.webp"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-3 right-2 z-0 h-28 select-none object-contain transition-transform duration-300 group-hover:-translate-y-1"
+      />
+    </>
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
       <main className="flex min-w-0 flex-col gap-8">
         <div>
           <Greeting firstName={profile.first_name ?? profile.email} />
@@ -80,57 +138,22 @@ export default async function CourseHomePage({ params }: PageProps) {
         <section className="rounded-3xl border border-card-border bg-washi-soft p-4 sm:p-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* REVIEW */}
-            <Link
-              href={`/dashboard/courses/${slug}/review`}
-              className="group relative flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
-              style={{
-                backgroundImage: "url(/images/red-bg.webp)",
-              }}
-            >
-              <div className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-red-100/95 shadow-sm backdrop-blur-sm transition-transform group-hover:translate-x-1">
-                <ArrowRight className="h-5 w-5 text-red-600" />
+            {hasReviews ? (
+              <Link
+                href={`/dashboard/courses/${slug}/review`}
+                className="group relative flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
+                style={{ backgroundImage: "url(/images/red-bg.webp)" }}
+              >
+                {reviewCardContent}
+              </Link>
+            ) : (
+              <div
+                className="pointer-events-none relative flex min-h-[240px] select-none flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm saturate-75"
+                style={{ backgroundImage: "url(/images/red-bg.webp)" }}
+              >
+                {reviewCardContent}
               </div>
-
-              <div className="relative z-10 max-w-[65%] sm:max-w-[60%]">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/95 text-2xl font-bold leading-none text-red-600 shadow-sm backdrop-blur-sm">
-                    復
-                  </div>
-
-                  <span className="text-sm font-bold uppercase tracking-[0.2em] text-washi/90">
-                    {t("course_home.review_label", "Review")}
-                  </span>
-                </div>
-
-                <h2 className="mt-4 text-3xl font-bold leading-tight text-washi">
-                  {reviewQueue.dueCount === 1
-                    ? t(
-                        "course_home.review_title_singular",
-                        "Review {{count}} word",
-                        {
-                          count: reviewQueue.dueCount,
-                        },
-                      )
-                    : t("course_home.review_title", "Review {{count}} words", {
-                        count: reviewQueue.dueCount,
-                      })}
-                </h2>
-
-                <p className="mt-2 text-sm leading-relaxed text-washi/85">
-                  {t(
-                    "course_home.review_subtitle",
-                    "Keep it fresh. Strengthen your memory with a quick review.",
-                  )}
-                </p>
-              </div>
-
-              <img
-                src="/images/rabbit-flash.webp"
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute bottom-3 right-2 z-0 h-28 select-none object-contain transition-transform duration-300 group-hover:-translate-y-1"
-              />
-            </Link>
+            )}
 
             {/* LEARN */}
             <Link
@@ -161,8 +184,8 @@ export default async function CourseHomePage({ params }: PageProps) {
 
                 <p className="mt-2 text-sm leading-relaxed text-washi/85">
                   {t(
-                    "course_home.learn_subtitle",
-                    "Build your vocabulary and grammar with your active decks.",
+                    "course_home.learn_subtitle_three",
+                    "Each time you click Learn, you'll get 3 new words or grammar patterns from your active decks.",
                   )}
                 </p>
               </div>
@@ -218,6 +241,7 @@ export default async function CourseHomePage({ params }: PageProps) {
           dailyActivity={dailyActivity}
           currentStreak={currentStreak}
           longestStreak={longestStreak}
+          activeToday={activeToday}
           xp={profile.xp}
           equippedAccessory={equippedAccessory}
         />

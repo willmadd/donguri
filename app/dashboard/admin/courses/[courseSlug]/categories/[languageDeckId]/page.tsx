@@ -123,6 +123,13 @@ export default async function AdminCategoryWordsPage({ params }: PageProps) {
               {t("admin_category_words.import", "Import from another course")}
             </Button>
             <Button
+              href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/import-spreadsheet`}
+              variant="outline"
+              size="sm"
+            >
+              {t("admin_category_words.import_spreadsheet", "Import from spreadsheet")}
+            </Button>
+            <Button
               href={`/dashboard/admin/courses/${courseSlug}/categories/${languageDeckId}/words/new`}
               size="sm"
             >
