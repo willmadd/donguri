@@ -510,5 +510,8 @@
   "xp_counter.xp": "XP",
   "xp_tooltip.aria_label": "What is XP for?",
   "xp_tooltip.earning": "Earn XP by answering quiz questions correctly (+1 each, +5 for a perfect quiz), plus a growing bonus for every consecutive day you keep your streak going.",
-  "xp_tooltip.leveling": "Level up to upgrade your Donguri character — unlocking new outfits, and more content to come."
+  "xp_tooltip.leveling": "Level up to upgrade your Donguri character — unlocking new outfits, and more content to come.",
+  "learn_session.ready_for_quiz": "Now let's see how well they stuck.",
+  "learn_session.all_skipped": "You skipped them all — nothing to quiz this time.",
+  "learn_session.start_quiz": "Start quiz"
 }

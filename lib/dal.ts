@@ -40,7 +40,11 @@ import {
   toUTCDateString,
 } from "@/lib/srs";
 import { deckCoverImagePath, wordImagePath } from "@/lib/images";
-import { findClozeMatchesByForm, pickRandomClozeMatch } from "@/lib/cloze";
+import {
+  findClozeMatchesByForm,
+  findTermClozeMatches,
+  pickRandomClozeMatch,
+} from "@/lib/cloze";
 import { isLatinTypeable } from "@/lib/language";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
@@ -1034,19 +1038,44 @@ export const getLearnQueueForCourse = cache(
 // whenever it happens to get quizzed. A word drops out of this pool the
 // moment its first question is answered and from then on is governed
 // entirely by its stage/`nextReviewAt` — i.e. by `getReviewQueue` below.
+// The quiz only ever covers *one* learn batch — otherwise any earlier batch
+// that was learnt but never quizzed would pile into this one. `wordIds`
+// (passed from the Learn session's "Start quiz" button) names the batch
+// explicitly; without it, it falls back to the most recently learnt batch
+// (a batch's rows share one `introducedAt`, since `getLearnQueueForCourse`
+// creates them in a single `createMany`). Skipped words are always
+// excluded: they go straight to Mastered and are never quizzed.
 export const getTestQueueForCourse = cache(
-  async (courseSlug: string): Promise<QuizQuestion[]> => {
+  async (courseSlug: string, wordIds?: string[]): Promise<QuizQuestion[]> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
 
-    const freshProgress = await prisma.userWordProgress.findMany({
-      where: {
-        userId: user.id,
-        lastSeenAt: null,
-        word: {
-          languageDeck: { courseId: course.id, active: true },
-          active: true,
-        },
+    const freshWhere = {
+      userId: user.id,
+      lastSeenAt: null,
+      skipped: false,
+      word: {
+        languageDeck: { courseId: course.id, active: true },
+        active: true,
       },
+    } as const;
+
+    let batchFilter: { wordId: { in: string[] } } | { introducedAt: Date };
+    if (wordIds && wordIds.length > 0) {
+      batchFilter = { wordId: { in: wordIds } };
+    } else {
+      const latest = await prisma.userWordProgress.findFirst({
+        where: freshWhere,
+        orderBy: { introducedAt: "desc" },
+        select: { introducedAt: true },
+      });
+      if (!latest) {
+        return [];
+      }
+      batchFilter = { introducedAt: latest.introducedAt };
+    }
+
+    const freshProgress = await prisma.userWordProgress.findMany({
+      where: { ...freshWhere, ...batchFilter },
       include: {
         word: {
           include: {
@@ -1357,7 +1386,7 @@ function buildMultipleChoiceQuestion(
 // The typed counterpart to `buildMultipleChoiceQuestion` — prefers a
 // fill-in-the-blank cloze question built from the word's own forms/examples
 // when one exists (reusing the admin-authored example-sentence content),
-// falling back to a generic "type the term/translation" question for words
+// then one blanking the term itself out of an example, falling back to a generic "type the term/translation" question for words
 // with no form data. Used both for the typed half of the post-learn quiz
 // and, exclusively, for every review-queue question.
 function buildTypedQuestion(
@@ -1369,9 +1398,13 @@ function buildTypedQuestion(
     word.examples ?? [],
   );
 
-  if (clozeByForm.size > 0) {
-    const match = pickRandomClozeMatch(clozeByForm)!;
+  // No form appears in any example — try blanking the term itself instead
+  // (e.g. "I have ___ pencils" for "four").
+  const match =
+    pickRandomClozeMatch(clozeByForm) ??
+    shuffle(findTermClozeMatches(word.term, word.examples ?? []))[0];
 
+  if (match) {
     return {
       kind: "type-form",
       wordId: word.id,

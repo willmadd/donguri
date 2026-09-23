@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { skipWord } from "@/lib/actions/vocab";
 import type { RevealWord } from "@/lib/definitions";
@@ -33,6 +32,7 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
   const [index, setIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
+  const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [refreshing, startRefresh] = useTransition();
 
   const advance = () => {
@@ -48,6 +48,7 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
 
     try {
       await skipWord(wordId);
+      setSkippedIds((current) => [...current, wordId]);
       advance();
     } finally {
       setPending(false);
@@ -68,6 +69,12 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
   };
 
   if (done) {
+    // The quiz covers exactly this batch — minus anything skipped, which
+    // goes straight to Mastered — not every learnt-but-unquizzed word (see
+    // `wordIds` on `getTestQueueForCourse` in lib/dal.ts).
+    const learntIds = words.map((w) => w.id).filter((id) => !skippedIds.includes(id));
+    const quizHref = `/dashboard/courses/${courseSlug}/test?words=${learntIds.join(",")}`;
+
     return (
       <section className="mx-auto flex w-full max-w-lg flex-col items-center rounded-3xl border border-card-border bg-washi-soft px-6 py-14 text-center shadow-sm sm:px-10">
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-matcha-soft text-3xl text-matcha-dark">
@@ -77,30 +84,34 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
         <PageTitle className="mt-5">{t("learn_session.nicely_done", "Nicely done!")}</PageTitle>
 
         <PageSubtitle className="mt-2 max-w-sm">
-          {t("learn_session.ready", "These are ready for you in Test yourself.")}
+          {learntIds.length > 0
+            ? t("learn_session.ready_for_quiz", "Now let's see how well they stuck.")
+            : t("learn_session.all_skipped", "You skipped them all — nothing to quiz this time.")}
         </PageSubtitle>
 
         <div className="mt-7 flex w-full flex-col gap-3">
-          <Button
-            disabled={refreshing}
-            onClick={handleLearnMore}
-            size="lg"
-            fullWidth
-            className="shadow-sm hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0"
-          >
-            {refreshing
-              ? t("common.loading", "Loading…")
-              : t("learn_session.learn_more", "Learn more")}
-          </Button>
-          <Button href={`/dashboard/courses/${courseSlug}/test`} variant="outline" fullWidth>
-            {t("learn_session.test_yourself", "Test yourself")}
-          </Button>
-          <Link
-            href={`/dashboard/courses/${courseSlug}`}
-            className="inline-flex h-11 w-full items-center justify-center px-6 text-sm font-medium text-sumi-soft transition hover:text-sumi"
-          >
-            {t("learn_session.back_to_course", "Back to course")}
-          </Link>
+          {learntIds.length > 0 ? (
+            <Button
+              href={quizHref}
+              size="lg"
+              fullWidth
+              className="shadow-sm hover:-translate-y-0.5 hover:shadow-md"
+            >
+              {t("learn_session.start_quiz", "Start quiz")}
+            </Button>
+          ) : (
+            <Button
+              disabled={refreshing}
+              onClick={handleLearnMore}
+              size="lg"
+              fullWidth
+              className="shadow-sm hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0"
+            >
+              {refreshing
+                ? t("common.loading", "Loading…")
+                : t("learn_session.learn_more", "Learn more")}
+            </Button>
+          )}
         </div>
       </section>
     );

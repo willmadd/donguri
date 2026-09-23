@@ -8,6 +8,7 @@ import { getTranslator } from "@/lib/i18n/server";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ words?: string | string[] }>;
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -16,12 +17,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: `Test — ${course.title}` };
 }
 
-export default async function TestPage({ params }: PageProps) {
-  const { slug } = await params;
+export default async function TestPage({ params, searchParams }: PageProps) {
+  const [{ slug }, { words }] = await Promise.all([params, searchParams]);
+  // The just-learnt batch, passed by the Learn session's "Start quiz" button
+  // — scopes the quiz to those words only (see `getTestQueueForCourse`).
+  const wordIds = (Array.isArray(words) ? words.join(",") : (words ?? ""))
+    .split(",")
+    .filter(Boolean);
 
   const [{ course }, quiz, profile, { t }] = await Promise.all([
     getCourseHome(slug),
-    getTestQueueForCourse(slug),
+    getTestQueueForCourse(slug, wordIds),
     requireProfile(),
     getTranslator(),
   ]);

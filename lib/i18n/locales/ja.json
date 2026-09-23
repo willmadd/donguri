@@ -540,5 +540,8 @@
   "test_session.quick_review": "",
   "admin_course_decks.word_count_one": "",
   "admin_course_decks.word_count_other": "",
-  "deck_page.grammar_coming_soon": ""
+  "deck_page.grammar_coming_soon": "",
+  "learn_session.ready_for_quiz": "",
+  "learn_session.all_skipped": "",
+  "learn_session.start_quiz": ""
 }

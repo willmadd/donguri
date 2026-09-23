@@ -6,7 +6,7 @@
 // text, there's no risk of asking the learner to fill in a form the
 // sentence doesn't really demonstrate.
 
-export type ClozeMatch = { formId: string; en: string; ja: string };
+export type ClozeMatch = { formId: string | null; en: string; ja: string };
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -46,6 +46,19 @@ export function findClozeMatchesByForm(
   }
 
   return byForm;
+}
+
+// Fallback for words with no form matches: blanks the word's own term out
+// of whichever examples contain it (e.g. "I have ___ pencils" for "four").
+// `formId: null` marks the answer as the term itself (see submitFormAnswer).
+export function findTermClozeMatches(
+  term: string,
+  examples: { en: string; ja: string }[],
+): ClozeMatch[] {
+  const pattern = wholeWordPattern(term);
+  return examples
+    .filter((example) => pattern.test(example.en))
+    .map((example) => ({ formId: null, en: example.en.replace(pattern, "___"), ja: example.ja }));
 }
 
 // Two-stage pick — a random form, then a random example for it — so every

@@ -234,10 +234,13 @@ export type MultipleChoiceQuestion = {
 // ___ to the shops." for "went") — only generated for a (form, example)
 // pair where the form's value actually appears in that example's English
 // text. `clozeSentenceJa` is that same example's Japanese sentence, shown
-// underneath as context/translation.
+// underneath as context/translation. `formId` is null when the blank is
+// the word's own term rather than one of its forms — the fallback for
+// words with no forms (e.g. the numbers deck), where the answer is the term
+// or any of its alternate answers ("four" or "4").
 type FormClozeQuestion = {
   wordId: string;
-  formId: string;
+  formId: string | null;
   clozeSentence: string;
   clozeSentenceJa: string;
   targetLanguage: string;

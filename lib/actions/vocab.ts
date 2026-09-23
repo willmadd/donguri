@@ -184,16 +184,29 @@ export async function submitTypedAnswer(
 }
 
 // Checks a typed answer against a word form's value — trimmed and
-// case-insensitive, so "Went"/"went "/"WENT" all count. Shared by the
+// case-insensitive, so "Went"/"went "/"WENT" all count. A null `formId`
+// means the blank was the word's own term (see findTermClozeMatches in
+// lib/cloze.ts), checked against the term plus its alternate answers. Shared by the
 // quiz's cloze-preferred typed half (`advancesStage: false`) and the review
 // queue's cloze question (`advancesStage: true`) — see `submitTypedAnswer`.
 export async function submitFormAnswer(
   wordId: string,
-  formId: string,
+  formId: string | null,
   typedAnswer: string,
   advancesStage: boolean,
 ): Promise<{ correct: boolean; correctAnswer: string; xp: number }> {
   const user = await requireUser();
+
+  if (formId === null) {
+    const word = await prisma.word.findUniqueOrThrow({
+      where: { id: wordId },
+      select: { term: true, alternateAnswers: { select: { value: true } } },
+    });
+    const acceptedAnswers = [word.term, ...word.alternateAnswers.map((alt) => alt.value)].join(",");
+    const correct = matchesTypedAnswer(typedAnswer, acceptedAnswers);
+    const { xp } = await recordAnswer(user.id, wordId, correct, advancesStage);
+    return { correct, correctAnswer: word.term, xp };
+  }
 
   const form = await prisma.wordForm.findUniqueOrThrow({
     where: { id: formId },
