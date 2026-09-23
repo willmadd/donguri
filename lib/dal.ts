@@ -15,6 +15,7 @@ import type {
   DailyChallengeStatus,
   EnrolledCourseSummary,
   GlobalStreak,
+  WeeklyStats,
   LeaderboardEntry,
   LanguageDeckSummary,
   Profile,
@@ -800,6 +801,42 @@ export const getDailyActivityCounts = cache(
     }
 
     return days;
+  },
+);
+
+// Words learnt (introduced and not skipped — vocab and grammar together) and
+// answer accuracy over the trailing 7 days, for this course. There's no
+// per-answer log, only running `correctCount`/`incorrectCount` per word, so
+// accuracy is taken over every word answered this week (`lastSeenAt` in
+// range) using those words' running totals.
+export const getWeeklyStats = cache(
+  async (courseSlug: string): Promise<WeeklyStats> => {
+    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const weekStart = addDays(startOfUTCDay(new Date()), -6);
+    const inCourse = { languageDeck: { courseId: course.id } };
+
+    const [wordsLearnt, answered] = await Promise.all([
+      prisma.userWordProgress.count({
+        where: {
+          userId: user.id,
+          skipped: false,
+          introducedAt: { gte: weekStart },
+          word: inCourse,
+        },
+      }),
+      prisma.userWordProgress.aggregate({
+        where: { userId: user.id, lastSeenAt: { gte: weekStart }, word: inCourse },
+        _sum: { correctCount: true, incorrectCount: true },
+      }),
+    ]);
+
+    const correct = answered._sum.correctCount ?? 0;
+    const total = correct + (answered._sum.incorrectCount ?? 0);
+
+    return {
+      wordsLearnt,
+      accuracy: total > 0 ? Math.round((correct / total) * 100) : null,
+    };
   },
 );
 

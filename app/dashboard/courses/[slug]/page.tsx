@@ -6,13 +6,13 @@ import {
   getCourseDecks,
   getDailyActivityCounts,
   getGlobalStreak,
+  getWeeklyStats,
   getLeaderboards,
   getReviewQueueDebug,
   getReviewQueueSummary,
   requireProfile,
 } from "@/lib/dal";
 import { getTranslator } from "@/lib/i18n/server";
-import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 import { ActivityOverviewCard } from "@/components/vocab/activity-overview-card";
 import { Greeting } from "@/components/dashboard/greeting";
@@ -46,6 +46,7 @@ export default async function CourseHomePage({ params }: PageProps) {
     leaderboards,
     reviewQueue,
     profile,
+    weeklyStats,
   ] = await Promise.all([
     getCourseDecks(slug),
     getGlobalStreak(),
@@ -53,10 +54,8 @@ export default async function CourseHomePage({ params }: PageProps) {
     getLeaderboards(),
     getReviewQueueSummary(slug),
     requireProfile(),
+    getWeeklyStats(slug),
   ]);
-
-  const equippedAccessory = (parseDonguriConfig(profile.donguriConfig)
-    .equippedAccessory ?? null) as AccessoryId | null;
 
   const isAdmin = profile.role === "admin";
   const reviewQueueDebug = isAdmin ? await getReviewQueueDebug(slug) : null;
@@ -237,13 +236,11 @@ export default async function CourseHomePage({ params }: PageProps) {
         </section>
 
         <ActivityOverviewCard
-          courseTitle={course.title}
           dailyActivity={dailyActivity}
           currentStreak={currentStreak}
           longestStreak={longestStreak}
           activeToday={activeToday}
-          xp={profile.xp}
-          equippedAccessory={equippedAccessory}
+          weeklyStats={weeklyStats}
         />
 
         <div className="flex flex-col gap-4 rounded-2xl border border-card-border bg-washi-soft p-6 sm:flex-row sm:items-center sm:justify-between">

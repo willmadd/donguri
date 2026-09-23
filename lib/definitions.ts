@@ -115,6 +115,14 @@ export type CourseStreak = {
   longestStreak: number;
 };
 
+// The "Your progress this week" tiles beside a course's activity chart —
+// the same trailing 7 days (today included) the chart always shows.
+// `accuracy` is a 0-100 percentage, null when nothing was answered.
+export type WeeklyStats = {
+  wordsLearnt: number;
+  accuracy: number | null;
+};
+
 // Account-wide streak — not scoped to any one course. See the note on
 // `computeStreakFromActiveDays` in lib/srs.ts for how it's derived. XP and
 // level are never duplicated here: they're shown straight from

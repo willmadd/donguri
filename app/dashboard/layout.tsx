@@ -1,7 +1,7 @@
 import { Logo } from "@/components/logo";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { DevModeProvider } from "@/components/dashboard/dev-mode-context";
-import { requireProfile } from "@/lib/dal";
+import { getGlobalStreak, requireProfile } from "@/lib/dal";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 export default async function DashboardLayout({
@@ -9,7 +9,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await requireProfile();
+  const [profile, { currentStreak }] = await Promise.all([requireProfile(), getGlobalStreak()]);
   const equippedAccessory = (parseDonguriConfig(profile.donguriConfig)
     .equippedAccessory ?? null) as AccessoryId | null;
 
@@ -26,6 +26,8 @@ export default async function DashboardLayout({
                 role: profile.role,
               }}
               equippedAccessory={equippedAccessory}
+              currentStreak={currentStreak}
+              xp={profile.xp}
             />
           </div>
         </header>

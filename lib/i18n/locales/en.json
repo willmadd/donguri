@@ -513,5 +513,13 @@
   "xp_tooltip.leveling": "Level up to upgrade your Donguri character — unlocking new outfits, and more content to come.",
   "learn_session.ready_for_quiz": "Now let's see how well they stuck.",
   "learn_session.all_skipped": "You skipped them all — nothing to quiz this time.",
-  "learn_session.start_quiz": "Start quiz"
+  "learn_session.start_quiz": "Start quiz",
+  "weekly_stats.title": "Your progress this week",
+  "weekly_stats.words_learnt": "words learnt",
+  "weekly_stats.accuracy": "accuracy",
+  "weekly_stats.day_streak": "day streak",
+  "header_stats.streak_title": "{{count}} day streak",
+  "header_stats.day_streak": "day streak",
+  "header_stats.level": "Lv {{level}}",
+  "header_stats.progress_label": "Progress to next level"
 }

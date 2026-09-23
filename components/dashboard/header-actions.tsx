@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bug, ChevronDown, GraduationCap, LogOut, Menu, Settings, User, Users, X } from "lucide-react";
+import { Bug, ChevronDown, Flame, GraduationCap, LogOut, Menu, Settings, User, Users, X } from "lucide-react";
 import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import { useDevMode } from "@/components/dashboard/dev-mode-context";
 import { logout } from "@/lib/actions/auth";
-import type { AccessoryId } from "@/lib/levels";
+import { levelForXp, xpRangeForLevel, type AccessoryId } from "@/lib/levels";
 import type { UserRole } from "@/lib/definitions";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,66 @@ type HeaderActionsProps = {
     role: UserRole;
   };
   equippedAccessory: AccessoryId | null;
+  // Account-wide (see `getGlobalStreak` in lib/dal.ts), not per course.
+  currentStreak: number;
+  xp: number;
 };
+
+// Streak, then level + XP with a progress bar toward the next level — the
+// header's at-a-glance progress summary. Refreshed with the rest of the
+// layout after a quiz (see `refreshDashboardHeader` in lib/actions/vocab.ts).
+// Below `sm` the "day streak" label and progress bar drop out so it still
+// fits beside the menu button.
+function HeaderStats({ currentStreak, xp }: { currentStreak: number; xp: number }) {
+  const t = useTranslations();
+  const level = levelForXp(xp);
+  const { min, max } = xpRangeForLevel(level);
+  const progress = max === null ? 1 : (xp - min) / (max - min);
+  const displayXp = Number.isInteger(xp) ? xp : xp.toFixed(1);
+
+  return (
+    <div className="flex shrink-0 items-center gap-3">
+      <span
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-sumi"
+        title={t("header_stats.streak_title", "{{count}} day streak", { count: currentStreak })}
+      >
+        <Flame
+          className={cn("h-5 w-5", currentStreak > 0 ? "fill-kin text-kin" : "text-sumi-soft")}
+          aria-hidden="true"
+        />
+        <span className="tabular-nums">{currentStreak}</span>
+        <span className="hidden lg:inline">{t("header_stats.day_streak", "day streak")}</span>
+      </span>
+
+      <span className="hidden h-6 w-px bg-sumi/15 sm:block" aria-hidden="true" />
+
+      <div className="inline-flex items-center gap-2 rounded-full border border-card-border bg-washi-soft py-1 pl-1 pr-3">
+        <span className="rounded-full bg-sumi px-2 py-0.5 text-xs font-bold whitespace-nowrap text-washi">
+          {t("xp_counter.level", "Lv {{level}}", { level })}
+        </span>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium whitespace-nowrap text-sumi-soft">
+            <span className="text-sm font-bold text-sumi tabular-nums">{displayXp}</span>
+            {max !== null && ` / ${max}`} {t("xp_counter.xp", "XP")}
+          </span>
+          <span
+            className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-sumi/10 sm:block"
+            role="progressbar"
+            aria-valuemin={min}
+            aria-valuemax={max ?? xp}
+            aria-valuenow={xp}
+            aria-label={t("header_stats.progress_label", "Progress to next level")}
+          >
+            <span
+              className="block h-full rounded-full bg-ai transition-[width] duration-500"
+              style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+            />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Closes a dropdown on an outside click or Escape — shared by the account
 // and admin menus so their open/close behavior can't drift apart.
@@ -179,7 +238,7 @@ function AccountLinks({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-export function HeaderActions({ profile, equippedAccessory }: HeaderActionsProps) {
+export function HeaderActions({ profile, equippedAccessory, currentStreak, xp }: HeaderActionsProps) {
   const t = useTranslations();
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -207,6 +266,7 @@ export function HeaderActions({ profile, equippedAccessory }: HeaderActionsProps
     <>
       {/* Desktop */}
       <div className="hidden items-center gap-3 md:flex">
+        <HeaderStats currentStreak={currentStreak} xp={xp} />
         <ThemeToggle />
         <AdminMenu role={profile.role} />
 
@@ -253,6 +313,7 @@ export function HeaderActions({ profile, equippedAccessory }: HeaderActionsProps
 
       {/* Mobile */}
       <div className="relative z-50 flex items-center gap-2 md:hidden">
+        <HeaderStats currentStreak={currentStreak} xp={xp} />
         <ThemeToggle />
         <AdminMenu role={profile.role} />
         <button
