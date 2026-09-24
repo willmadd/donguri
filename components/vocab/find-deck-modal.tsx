@@ -1,9 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { DeckList } from "@/components/vocab/deck-list";
+import { DeckList, isComplete } from "@/components/vocab/deck-list";
 import { WordImage } from "@/components/ui/word-image";
-import { CompletedStamp } from "@/components/vocab/completed-stamp";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import type { LanguageDeckSummary } from "@/lib/definitions";
 import { getContrastTextClass } from "@/lib/utils";
@@ -23,7 +22,10 @@ export function FindDeckModal({
   const t = useTranslations();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const activeSet = new Set(activeDeckIds);
-  const activeDecks = decks.filter((deck) => activeSet.has(deck.id));
+  // Finished decks live in the modal's "Completed" tab instead.
+  const activeDecks = decks.filter(
+    (deck) => activeSet.has(deck.id) && !isComplete(deck),
+  );
 
   const closeOnBackdropClick = (event: React.MouseEvent<HTMLDialogElement>) => {
     const rect = dialogRef.current?.getBoundingClientRect();
@@ -60,149 +62,9 @@ export function FindDeckModal({
         <div className="flex w-full flex-1 flex-col gap-4">
           {activeDecks.length > 0 ? (
             <div className="flex w-full flex-col gap-4">
-              {activeDecks.map((deck) => {
-                const hasVocab = deck.vocabCount > 0;
-                const hasGrammar = deck.grammarCount > 0;
-                const badgeLabel =
-                  hasVocab && hasGrammar
-                    ? t("course_home.mixed", "Mixed")
-                    : hasGrammar
-                      ? t("course_home.grammar", "Grammar")
-                      : t("course_home.vocabulary", "Vocabulary");
-                const learntPercent =
-                  deck.totalWords > 0
-                    ? Math.round((deck.learntWords / deck.totalWords) * 100)
-                    : 0;
-                const complete =
-                  deck.totalWords > 0 && deck.learntWords === deck.totalWords;
-
-                const hasBg = Boolean(deck.bgColor);
-                const textClass = hasBg
-                  ? getContrastTextClass(deck.bgColor)
-                  : "text-sumi";
-                const isLightText = textClass === "text-ink-on-dark";
-                const trackClass = hasBg
-                  ? isLightText
-                    ? "border-white/20 bg-white/20"
-                    : "border-sumi/15 bg-sumi/10"
-                  : "border-sumi/15 bg-washi";
-                const mutedTextClass = hasBg
-                  ? `${textClass} opacity-80`
-                  : "text-sumi-soft";
-                const badgeStyle = deck.primaryColor
-                  ? { backgroundColor: deck.primaryColor }
-                  : undefined;
-                const badgeClasses = deck.primaryColor
-                  ? getContrastTextClass(deck.primaryColor)
-                  : hasVocab && hasGrammar
-                    ? "bg-sakura-soft text-sakura-dark"
-                    : hasGrammar
-                      ? "bg-matcha-soft text-matcha-dark"
-                      : "bg-ai-soft text-ai-dark";
-
-                return (
-                  <div
-                    key={deck.id}
-                    className={`group/card relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl border p-5 text-left shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${
-                      hasBg
-                        ? "border-transparent"
-                        : "border-card-border bg-washi"
-                    }`}
-                    style={
-                      deck.bgColor
-                        ? { backgroundColor: deck.bgColor }
-                        : undefined
-                    }
-                  >
-                    {complete && (
-                      <CompletedStamp
-                        label={t("deck_list.completed", "Completed")}
-                      />
-                    )}
-                    <div className="flex items-start gap-3.5">
-                      <div className="shrink-0">
-                        <div className="h-20 w-20 overflow-hidden rounded-xl border border-white/20 bg-neutral-soft shadow-sm">
-                          {deck.coverImage ? (
-                            <WordImage
-                              src={deck.coverImage}
-                              alt=""
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-105"
-                            />
-                          ) : (
-                            <span
-                              className={`flex h-full w-full items-center justify-center font-nunito text-2xl font-bold ${badgeClasses}`}
-                              style={badgeStyle}
-                            >
-                              {deck.title.charAt(0)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex w-full flex-wrap items-center gap-1.5">
-                          <span
-                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeClasses}`}
-                            style={badgeStyle}
-                          >
-                            {badgeLabel}
-                          </span>
-
-                          {deck.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${textClass} ${trackClass}`}
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-
-                        <h3
-                          className={`mt-1.5 font-nunito text-lg font-bold leading-snug ${textClass}`}
-                        >
-                          {deck.title}
-                        </h3>
-
-                        {deck.description && (
-                          <p
-                            className={`mt-1 line-clamp-2 text-sm leading-snug ${mutedTextClass}`}
-                          >
-                            {deck.description}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between gap-3">
-                        <p
-                          className={`text-xs font-semibold ${mutedTextClass}`}
-                        >
-                          {t(
-                            "deck_list.words_learnt",
-                            "{{learnt}} / {{total}} words learnt",
-                            {
-                              learnt: deck.learntWords,
-                              total: deck.totalWords,
-                            },
-                          )}
-                        </p>
-                        <span className={`text-xs font-bold ${textClass}`}>
-                          {learntPercent}%
-                        </span>
-                      </div>
-                      <div
-                        className={`mt-2 h-2 w-full overflow-hidden rounded-full border ${trackClass}`}
-                      >
-                        <div
-                          className="h-full rounded-full bg-ai transition-[width]"
-                          style={{ width: `${learntPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {activeDecks.map((deck) => (
+                <DeckCard key={deck.id} deck={deck} />
+              ))}
             </div>
           ) : (
             <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-card-border bg-washi px-6 text-center shadow-sm">
@@ -220,9 +82,11 @@ export function FindDeckModal({
       <dialog
         ref={dialogRef}
         onClick={closeOnBackdropClick}
-        className="m-auto max-h-[85vh] w-[calc(100%_-_2rem)] max-w-2xl rounded-3xl border border-card-border bg-washi p-0 shadow-2xl backdrop:bg-sumi/40 backdrop:backdrop-blur-[2px]"
+        className="m-auto h-[85vh] w-[calc(100%_-_2rem)] max-w-2xl rounded-3xl border border-card-border bg-washi p-0 shadow-2xl backdrop:bg-sumi/40 backdrop:backdrop-blur-[2px]"
       >
-        <div className="flex max-h-[85vh] flex-col">
+        {/* Fixed height, not max-height, so switching between the Browse and
+            Completed tabs doesn't resize the dialog around a shorter list. */}
+        <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-card-border bg-washi-soft px-6 py-5">
             <h2 className="text-lg font-bold text-sumi">
               {t("find_deck.title", "Find a deck")}
@@ -236,11 +100,133 @@ export function FindDeckModal({
               ✕
             </button>
           </div>
-          <div className="overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
             <DeckList slug={slug} decks={decks} activeDeckIds={activeDeckIds} />
           </div>
         </div>
       </dialog>
     </>
+  );
+}
+
+function DeckCard({ deck }: { deck: LanguageDeckSummary }) {
+  const t = useTranslations();
+  const hasVocab = deck.vocabCount > 0;
+  const hasGrammar = deck.grammarCount > 0;
+  const badgeLabel =
+    hasVocab && hasGrammar
+      ? t("course_home.mixed", "Mixed")
+      : hasGrammar
+        ? t("course_home.grammar", "Grammar")
+        : t("course_home.vocabulary", "Vocabulary");
+  const learntPercent =
+    deck.totalWords > 0
+      ? Math.round((deck.learntWords / deck.totalWords) * 100)
+      : 0;
+
+  const hasBg = Boolean(deck.bgColor);
+  const textClass = hasBg ? getContrastTextClass(deck.bgColor) : "text-sumi";
+  const isLightText = textClass === "text-ink-on-dark";
+  const trackClass = hasBg
+    ? isLightText
+      ? "border-white/20 bg-white/20"
+      : "border-sumi/15 bg-sumi/10"
+    : "border-sumi/15 bg-washi";
+  const mutedTextClass = hasBg ? `${textClass} opacity-80` : "text-sumi-soft";
+  const badgeStyle = deck.primaryColor
+    ? { backgroundColor: deck.primaryColor }
+    : undefined;
+  const badgeClasses = deck.primaryColor
+    ? getContrastTextClass(deck.primaryColor)
+    : hasVocab && hasGrammar
+      ? "bg-sakura-soft text-sakura-dark"
+      : hasGrammar
+        ? "bg-matcha-soft text-matcha-dark"
+        : "bg-ai-soft text-ai-dark";
+
+  return (
+    <div
+      className={`group/card relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl border p-5 text-left shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md ${
+        hasBg ? "border-transparent" : "border-card-border bg-washi"
+      }`}
+      style={deck.bgColor ? { backgroundColor: deck.bgColor } : undefined}
+    >
+      <div className="flex items-start gap-3.5">
+        <div className="shrink-0">
+          <div className="h-20 w-20 overflow-hidden rounded-xl border border-white/20 bg-neutral-soft shadow-sm">
+            {deck.coverImage ? (
+              <WordImage
+                src={deck.coverImage}
+                alt=""
+                className="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-105"
+              />
+            ) : (
+              <span
+                className={`flex h-full w-full items-center justify-center font-nunito text-2xl font-bold ${badgeClasses}`}
+                style={badgeStyle}
+              >
+                {deck.title.charAt(0)}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex w-full flex-wrap items-center gap-1.5">
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${badgeClasses}`}
+              style={badgeStyle}
+            >
+              {badgeLabel}
+            </span>
+
+            {deck.tags.map((tag) => (
+              <span
+                key={tag}
+                className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${textClass} ${trackClass}`}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          <h3
+            className={`mt-1.5 font-nunito text-lg font-bold leading-snug ${textClass}`}
+          >
+            {deck.title}
+          </h3>
+
+          {deck.description && (
+            <p
+              className={`mt-1 line-clamp-2 text-sm leading-snug ${mutedTextClass}`}
+            >
+              {deck.description}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <p className={`text-xs font-semibold ${mutedTextClass}`}>
+            {t("deck_list.words_learnt", "{{learnt}} / {{total}} words learnt", {
+              learnt: deck.learntWords,
+              total: deck.totalWords,
+            })}
+          </p>
+          <span className={`text-xs font-bold ${textClass}`}>
+            {learntPercent}%
+          </span>
+        </div>
+        <div
+          className={`mt-2 h-2 w-full overflow-hidden rounded-full border ${trackClass}`}
+        >
+          <div
+            className="h-full rounded-full bg-ai transition-[width]"
+            style={{ width: `${learntPercent}%` }}
+          />
+        </div>
+      </div>
+
+    </div>
   );
 }

@@ -480,6 +480,27 @@ export async function toggleDeckActivation(
   revalidatePath(`/dashboard/courses/${courseSlug}`);
 }
 
+// Clears this user's progress on one deck's words so it can be learnt from
+// scratch, and re-activates it so those words feed Learn again. Unlike
+// `resetCourseProgress`, XP, streaks and review history are kept — that work
+// still happened.
+export async function restartDeck(courseSlug: string, deckId: string): Promise<void> {
+  const user = await requireUser();
+
+  await prisma.$transaction([
+    prisma.userWordProgress.deleteMany({
+      where: { userId: user.id, word: { languageDeckId: deckId } },
+    }),
+    prisma.userDeckActivation.upsert({
+      where: { userId_languageDeckId: { userId: user.id, languageDeckId: deckId } },
+      create: { userId: user.id, languageDeckId: deckId, active: true },
+      update: { active: true },
+    }),
+  ]);
+
+  revalidatePath(`/dashboard/courses/${courseSlug}`);
+}
+
 export async function resetCourseProgress(courseId: string): Promise<void> {
   const user = await requireUser();
 

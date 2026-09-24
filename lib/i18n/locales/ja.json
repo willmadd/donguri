@@ -217,7 +217,9 @@
   "common.save": "",
   "common.saving": "",
   "course_home.challenge_label": "",
+  "course_home.challenge_done_title": "",
   "course_home.challenge_title": "",
+  "course_home.challenge_title_singular": "",
   "course_home.grammar": "",
   "course_home.learn": "",
   "course_home.learn_label": "",
@@ -568,5 +570,16 @@
   "admin_course_decks.word_count_one": "",
   "admin_course_decks.word_count_other": "",
   "deck_page.grammar_coming_soon": "",
-  "header_stats.level": ""
+  "header_stats.level": "",
+  "deck_list.no_completed": "",
+  "deck_list.restart": "",
+  "deck_list.restart_aria": "",
+  "deck_list.restart_confirm": "",
+  "deck_list.restarting": "",
+  "deck_list.tab_browse": "",
+  "deck_list.tab_completed": "",
+  "deck_complete.title": "",
+  "deck_complete.subtitle": "",
+  "deck_complete.vocab_count": "",
+  "deck_complete.grammar_count": ""
 }

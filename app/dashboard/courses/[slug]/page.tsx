@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import {
   getCourseDecks,
   getDailyActivityCounts,
+  getDailyChallengeStatus,
   getGlobalStreak,
   getWeeklyStats,
   getLeaderboards,
@@ -17,6 +18,7 @@ import { getTranslator } from "@/lib/i18n/server";
 import { ActivityOverviewCard } from "@/components/vocab/activity-overview-card";
 import { Greeting } from "@/components/dashboard/greeting";
 import { LeaderboardTabs } from "@/components/leaderboard/leaderboard-tabs";
+import { DeckCompleteCelebration } from "@/components/vocab/deck-complete-celebration";
 import { FindDeckModal } from "@/components/vocab/find-deck-modal";
 import { ResetProgressButton } from "@/components/vocab/reset-progress-button";
 import { ReviewQueueDevPanel } from "@/components/vocab/review-queue-dev-panel";
@@ -47,6 +49,7 @@ export default async function CourseHomePage({ params }: PageProps) {
     reviewQueue,
     profile,
     weeklyStats,
+    challengeStatus,
   ] = await Promise.all([
     getCourseDecks(slug),
     getGlobalStreak(),
@@ -55,6 +58,7 @@ export default async function CourseHomePage({ params }: PageProps) {
     getReviewQueueSummary(slug),
     requireProfile(),
     getWeeklyStats(slug),
+    getDailyChallengeStatus(slug),
   ]);
 
   const isAdmin = profile.role === "admin";
@@ -63,6 +67,10 @@ export default async function CourseHomePage({ params }: PageProps) {
   const { t } = await getTranslator();
 
   const hasReviews = reviewQueue.dueCount > 0;
+  const challengesLeft = Math.max(
+    challengeStatus.maxAttemptsPerDay - challengeStatus.attemptsToday,
+    0,
+  );
   const reviewCardContent = (
     <>
       {hasReviews && (
@@ -71,34 +79,35 @@ export default async function CourseHomePage({ params }: PageProps) {
         </div>
       )}
 
-      <div className="relative z-10 max-w-[65%] sm:max-w-[60%]">
+      <div className="relative z-10">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/95 text-2xl font-bold leading-none text-red-600 shadow-sm backdrop-blur-sm">
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/95 text-2xl font-bold leading-none text-red-600 shadow-sm backdrop-blur-sm">
             復
+            <CountBadge count={reviewQueue.dueCount} />
           </div>
 
-          <span className="text-sm font-bold uppercase tracking-[0.2em] text-washi/90">
+          <span className="text-sm font-bold uppercase tracking-[0.2em] text-ink-on-dark/90">
             {t("course_home.review_label", "Review")}
           </span>
         </div>
 
-        <h2 className="mt-4 text-3xl font-bold leading-tight text-washi">
+        <h2 className="mt-4 text-3xl font-extrabold leading-tight text-ink-on-dark">
           {!hasReviews
             ? t("course_home.review_empty_title", "You're all caught up!")
             : reviewQueue.dueCount === 1
               ? t(
                   "course_home.review_title_singular",
-                  "Review {{count}} word",
+                  "{{count}} word due",
                   {
                     count: reviewQueue.dueCount,
                   },
                 )
-              : t("course_home.review_title", "Review {{count}} words", {
+              : t("course_home.review_title", "{{count}} words due", {
                   count: reviewQueue.dueCount,
                 })}
         </h2>
 
-        <p className="mt-2 text-sm leading-relaxed text-washi/85">
+        <p className="mt-2 max-w-[65%] text-sm leading-relaxed sm:max-w-[60%] text-ink-on-dark/85">
           {!hasReviews
             ? t(
                 "course_home.review_empty_subtitle",
@@ -122,6 +131,8 @@ export default async function CourseHomePage({ params }: PageProps) {
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <DeckCompleteCelebration slug={slug} decks={decks} />
+
       <main className="flex min-w-0 flex-col gap-8">
         <div>
           <Greeting firstName={profile.first_name ?? profile.email} />
@@ -166,22 +177,22 @@ export default async function CourseHomePage({ params }: PageProps) {
                 <ArrowRight className="h-5 w-5 text-blue-700" />
               </div>
 
-              <div className="relative z-10 max-w-[65%] sm:max-w-[60%]">
+              <div className="relative z-10">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100/95 text-2xl font-bold leading-none text-blue-700 shadow-sm backdrop-blur-sm">
                     学
                   </div>
 
-                  <span className="text-sm font-bold uppercase tracking-[0.2em] text-washi/90">
+                  <span className="text-sm font-bold uppercase tracking-[0.2em] text-ink-on-dark/90">
                     {t("course_home.learn_label", "Learn")}
                   </span>
                 </div>
 
-                <h2 className="mt-4 text-3xl font-bold leading-tight text-washi">
+                <h2 className="mt-4 text-3xl font-extrabold leading-tight text-ink-on-dark">
                   {t("course_home.learn_title", "Learn new words")}
                 </h2>
 
-                <p className="mt-2 text-sm leading-relaxed text-washi/85">
+                <p className="mt-2 max-w-[65%] text-sm leading-relaxed sm:max-w-[60%] text-ink-on-dark/85">
                   {t(
                     "course_home.learn_subtitle_three",
                     "Each time you click Learn, you'll get 3 new words or grammar patterns from your active decks.",
@@ -206,17 +217,30 @@ export default async function CourseHomePage({ params }: PageProps) {
               }}
             >
               <div className="relative z-10 flex max-w-[65%] items-center gap-3 sm:max-w-none">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100/95 text-2xl font-bold leading-none text-green-700 shadow-sm backdrop-blur-sm">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100/95 text-2xl font-bold leading-none text-green-700 shadow-sm backdrop-blur-sm">
                   挑
+                  <CountBadge count={challengesLeft} />
                 </div>
 
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-washi/90">
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-ink-on-dark/90">
                     {t("course_home.challenge_label", "Daily Challenge")}
                   </span>
 
-                  <h2 className="mt-0.5 text-lg font-bold leading-tight text-washi">
-                    {t("course_home.challenge_title", "Take today's challenge")}
+                  <h2 className="mt-0.5 text-lg font-bold leading-tight text-ink-on-dark">
+                    {challengesLeft === 0
+                      ? t("course_home.challenge_done_title", "All done for today")
+                      : challengesLeft === 1
+                        ? t(
+                            "course_home.challenge_title_singular",
+                            "{{count}} challenge left",
+                            { count: challengesLeft },
+                          )
+                        : t(
+                            "course_home.challenge_title",
+                            "{{count}} challenges left",
+                            { count: challengesLeft },
+                          )}
                   </h2>
                 </div>
               </div>
@@ -274,5 +298,16 @@ export default async function CourseHomePage({ params }: PageProps) {
         />
       </aside>
     </div>
+  );
+}
+
+// Notification-style count bubble pinned to the corner of a card's icon chip.
+function CountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+
+  return (
+    <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold leading-none text-white shadow-sm ring-2 ring-white">
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }

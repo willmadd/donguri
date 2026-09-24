@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { completeDailyChallenge } from "@/lib/actions/daily-challenge";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/components/i18n/locale-provider";
@@ -17,20 +18,20 @@ export function DailyChallengeButton({
   maxAttemptsPerDay,
 }: Props) {
   const t = useTranslations();
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [attemptsToday, setAttemptsToday] = useState(initialAttemptsToday);
-  const [justCompleted, setJustCompleted] = useState(false);
 
   const remaining = Math.max(0, maxAttemptsPerDay - attemptsToday);
   const exhausted = remaining === 0;
 
   function handleClick() {
-    setJustCompleted(false);
     startTransition(async () => {
       const result = await completeDailyChallenge(courseSlug);
       if (result.ok) {
-        setAttemptsToday(result.attemptsToday);
-        setJustCompleted(true);
+        // Back to the course home, where the card's badge reflects the
+        // attempt just used (the action revalidates that path).
+        router.push(`/dashboard/courses/${courseSlug}`);
       } else if (result.reason === "limit_reached") {
         setAttemptsToday(maxAttemptsPerDay);
       }
@@ -76,12 +77,6 @@ export function DailyChallengeButton({
               { count: remaining, max: maxAttemptsPerDay },
             )}
       </p>
-
-      {justCompleted && (
-        <p className="text-sm font-medium text-matcha-dark" role="status">
-          {t("daily_challenge.success", "Nice! Challenge complete.")}
-        </p>
-      )}
     </div>
   );
 }
