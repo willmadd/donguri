@@ -34,11 +34,15 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Do not run any logic between createServerClient and getUser() —
-  // it refreshes the auth token and must run on every request.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Do not run any logic between createServerClient and getClaims() —
+  // it refreshes the auth token and must run on every request. getClaims()
+  // verifies the JWT's signature locally against the project's (cached)
+  // asymmetric signing keys, where getUser() made a round trip to the
+  // Supabase auth server on every navigation (~350-480ms measured). The
+  // trade-off: a session revoked server-side stays usable until its access
+  // token expires (default 1 hour), rather than failing immediately.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   if (isProtectedRoute && !user) {
     const url = request.nextUrl.clone();

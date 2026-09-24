@@ -1,6 +1,10 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
+  // Load `include`d relations with one LATERAL-join query instead of one
+  // query per relation level. The DB is a remote pooler (~285ms RTT), so
+  // e.g. getReviewQueue went from 4 sequential round trips to 1.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type {
@@ -54,8 +55,8 @@ import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 export const MAX_DAILY_CHALLENGE_ATTEMPTS = 3;
 
 // A plain cookie read (no network round-trip to Supabase's auth server) —
-// safe here specifically because proxy.ts already calls the network-
-// validating `getUser()` for every request this route tree is reached
+// safe here specifically because proxy.ts already verifies the JWT's
+// signature with `getClaims()` for every request this route tree is reached
 // through, before any Server Component runs, and propagates any refreshed
 // cookies onto the same request. Re-validating again here would just add a
 // second sequential auth round-trip to every single navigation (this was
@@ -1119,7 +1120,7 @@ export const getLeaderboards = cache(
 // a separate step a caller could forget.
 export const getLearnQueueForCourse = cache(
   async (courseSlug: string): Promise<RevealWord[]> => {
-    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
     const languageDeckIds = await getActiveDeckIds(course.id, user.id);
 
     if (languageDeckIds.length === 0) {
@@ -1156,7 +1157,7 @@ export const getLearnQueueForCourse = cache(
         skipDuplicates: true,
       });
 
-      await bumpStreak(user.id, course.id, new Date());
+      bumpStreakAfterResponse(enrollment, new Date());
     }
 
     return newWords.map((word) => ({
@@ -1216,7 +1217,7 @@ export const getLearnQueueForCourse = cache(
 // excluded: they go straight to Mastered and are never quizzed.
 export const getTestQueueForCourse = cache(
   async (courseSlug: string, wordIds?: string[]): Promise<QuizQuestion[]> => {
-    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
 
     const freshWhere = {
       userId: user.id,
@@ -1259,7 +1260,7 @@ export const getTestQueueForCourse = cache(
       return [];
     }
 
-    await bumpStreak(user.id, course.id, new Date());
+    bumpStreakAfterResponse(enrollment, new Date());
 
     const grammarWords = freshProgress
       .filter((progress) => progress.word.path === "grammar")
@@ -1391,7 +1392,7 @@ export const getReviewQueueDebug = cache(
 // above).
 export const getReviewQueue = cache(
   async (courseSlug: string): Promise<QuizQuestion[]> => {
-    const { user, course } = await requireEnrolledCourse(courseSlug);
+    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
 
     const dueProgress = await prisma.userWordProgress.findMany({
       where: {
@@ -1418,7 +1419,7 @@ export const getReviewQueue = cache(
       return [];
     }
 
-    await bumpStreak(user.id, course.id, new Date());
+    bumpStreakAfterResponse(enrollment, new Date());
 
     return shuffle(
       dueProgress.map((progress) =>
@@ -1458,6 +1459,45 @@ export async function bumpStreak(userId: string, courseId: string, now: Date) {
       lastActivityDate: updated.lastActivityDate,
     },
   });
+}
+
+// Render-path counterpart to `bumpStreak`, for the learn/test/review queue
+// loaders: reuses the enrollment row `requireEnrolledCourse` already loaded
+// for this request (instead of re-reading it) and defers the write until
+// after the response is sent — nothing on those pages reads the course
+// streak, so there's no reason to hold the render for two extra round trips
+// to the remote DB.
+function bumpStreakAfterResponse(
+  enrollment: {
+    userId: string;
+    courseId: string;
+    currentStreak: number;
+    longestStreak: number;
+    lastActivityDate: Date | null;
+  },
+  now: Date,
+) {
+  const updated = applyDailyActivity(enrollment, now);
+
+  if (updated === enrollment) {
+    return;
+  }
+
+  after(() =>
+    prisma.courseEnrollment.update({
+      where: {
+        userId_courseId: {
+          userId: enrollment.userId,
+          courseId: enrollment.courseId,
+        },
+      },
+      data: {
+        currentStreak: updated.currentStreak,
+        longestStreak: updated.longestStreak,
+        lastActivityDate: updated.lastActivityDate,
+      },
+    }),
+  );
 }
 
 type QuestionWord = {
