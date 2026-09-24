@@ -49,8 +49,9 @@ import {
 } from "@/lib/cloze";
 import { isLatinTypeable } from "@/lib/language";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
+import { pickChallengeTarget, type ChallengeTarget } from "@/lib/daily-challenge";
 
-// Shared with completeDailyChallenge in lib/actions/daily-challenge.ts,
+// Shared with sendDailyChallengeMessage in lib/actions/daily-challenge.ts,
 // which enforces the same cap on write.
 export const MAX_DAILY_CHALLENGE_ATTEMPTS = 3;
 
@@ -993,7 +994,7 @@ export const getGlobalStreak = cache(async (): Promise<GlobalStreak> => {
 });
 
 // How many of today's (UTC) 3 daily-challenge attempts this user has used up
-// for this course — see completeDailyChallenge in
+// for this course — see sendDailyChallengeMessage in
 // lib/actions/daily-challenge.ts, which enforces the same cap on write.
 export const getDailyChallengeStatus = cache(
   async (courseSlug: string): Promise<DailyChallengeStatus> => {
@@ -1008,6 +1009,33 @@ export const getDailyChallengeStatus = cache(
     });
 
     return { attemptsToday, maxAttemptsPerDay: MAX_DAILY_CHALLENGE_ATTEMPTS };
+  },
+);
+
+// The status plus the word/grammar target for the user's next attempt —
+// null once today's attempts are used up, or when the course has no
+// content. Picked by the same deterministic pickChallengeTarget the chat
+// action uses, so the two always agree.
+export const getDailyChallenge = cache(
+  async (
+    courseSlug: string,
+  ): Promise<DailyChallengeStatus & { target: ChallengeTarget | null }> => {
+    const [{ user, course }, status] = await Promise.all([
+      requireEnrolledCourse(courseSlug),
+      getDailyChallengeStatus(courseSlug),
+    ]);
+
+    const target =
+      status.attemptsToday < status.maxAttemptsPerDay
+        ? await pickChallengeTarget(
+            user.id,
+            course.id,
+            startOfUTCDay(new Date()),
+            status.attemptsToday,
+          )
+        : null;
+
+    return { ...status, target };
   },
 );
 

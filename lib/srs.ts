@@ -65,12 +65,30 @@ export function streakBonusXp(currentStreak: number): number {
   return currentStreak >= 2 ? (currentStreak - 1) * 0.5 : 0;
 }
 
-// Flat XP reward for completing one daily-challenge attempt — shared by the
-// action that awards it (lib/actions/daily-challenge.ts) and the DAL's XP
-// breakdown, which needs the same figure to back out how much of a user's
-// total XP came from challenges (there's no per-award XP ledger to sum
-// instead).
-export const DAILY_CHALLENGE_XP = 2;
+// XP for one daily-challenge chat attempt, from the grammar and naturalness
+// scores (0-10) of the message where the learner used the challenge target
+// (see sendDailyChallengeMessage in lib/actions/daily-challenge.ts). Both
+// scores must be a perfect 10 for the top reward — a 10 and a 9 is only a
+// pass.
+export const DAILY_CHALLENGE_PERFECT_XP = 3;
+export const DAILY_CHALLENGE_PASS_XP = 1;
+export const DAILY_CHALLENGE_PASS_SCORE = 7;
+
+export function dailyChallengeXp(
+  grammarScore: number,
+  naturalnessScore: number,
+): number {
+  if (grammarScore === 10 && naturalnessScore === 10) {
+    return DAILY_CHALLENGE_PERFECT_XP;
+  }
+  if (
+    grammarScore >= DAILY_CHALLENGE_PASS_SCORE &&
+    naturalnessScore >= DAILY_CHALLENGE_PASS_SCORE
+  ) {
+    return DAILY_CHALLENGE_PASS_XP;
+  }
+  return 0;
+}
 
 // Every UTC day with any recorded activity — a word introduced, a word
 // reviewed (correct or not), or a daily-challenge attempt — across every

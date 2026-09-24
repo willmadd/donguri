@@ -179,6 +179,67 @@ export default async function CourseHomePage({ params }: PageProps) {
     </>
   );
 
+  const challengesDone = challengesLeft === 0;
+  const challengeCardContent = (
+    <>
+      <div className="relative z-10 flex max-w-[65%] items-center gap-3 sm:max-w-none">
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100/95 text-2xl font-bold leading-none text-green-700 shadow-sm backdrop-blur-sm">
+          挑
+          <CountBadge count={challengesLeft} />
+        </div>
+
+        <div>
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-ink-on-dark/90">
+            {t("course_home.challenge_label", "Daily Challenge")}
+          </span>
+
+          <h2 className="mt-0.5 text-lg font-bold leading-tight text-ink-on-dark">
+            {challengesDone
+              ? t("course_home.challenge_done_title", "All done for today")
+              : challengesLeft === 1
+                ? t(
+                    "course_home.challenge_title_singular",
+                    "{{count}} challenge left",
+                    { count: challengesLeft },
+                  )
+                : t(
+                    "course_home.challenge_title",
+                    "{{count}} challenges left",
+                    { count: challengesLeft },
+                  )}
+          </h2>
+
+          {challengesDone && (
+            <p className="mt-0.5 text-sm leading-snug text-ink-on-dark/85">
+              {t(
+                "course_home.challenge_done_subtitle",
+                "Come back tomorrow for more challenges.",
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <img
+        src="/images/charles.webp"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-2 right-20 z-0 h-[92%] select-none object-contain transition-transform duration-300 group-hover:-translate-y-1 sm:right-56"
+      />
+
+      {!challengesDone && (
+        <div className="absolute right-5 top-1/2 z-20 -translate-y-1/2">
+          <FakeButton
+            className="bg-green-100/95 text-green-700"
+            labelClassName="hidden sm:inline"
+          >
+            {t("course_home.challenge_cta", "Start challenge")}
+          </FakeButton>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <DeckCompleteCelebration slug={slug} decks={decks} />
@@ -261,63 +322,23 @@ export default async function CourseHomePage({ params }: PageProps) {
             </Link>
 
             {/* DAILY CHALLENGE */}
-            <Link
-              href={`/dashboard/courses/${slug}/daily-challenge`}
-              className="group relative flex min-h-[112px] items-center overflow-hidden rounded-2xl border border-card-border bg-cover bg-center px-5 py-4 shadow-sm transition sm:px-6 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md lg:col-span-2"
-              style={{
-                backgroundImage: "url(/images/green-bg.webp)",
-              }}
-            >
-              <div className="relative z-10 flex max-w-[65%] items-center gap-3 sm:max-w-none">
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100/95 text-2xl font-bold leading-none text-green-700 shadow-sm backdrop-blur-sm">
-                  挑
-                  <CountBadge count={challengesLeft} />
-                </div>
-
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-ink-on-dark/90">
-                    {t("course_home.challenge_label", "Daily Challenge")}
-                  </span>
-
-                  <h2 className="mt-0.5 text-lg font-bold leading-tight text-ink-on-dark">
-                    {challengesLeft === 0
-                      ? t(
-                          "course_home.challenge_done_title",
-                          "All done for today",
-                        )
-                      : challengesLeft === 1
-                        ? t(
-                            "course_home.challenge_title_singular",
-                            "{{count}} challenge left",
-                            { count: challengesLeft },
-                          )
-                        : t(
-                            "course_home.challenge_title",
-                            "{{count}} challenges left",
-                            { count: challengesLeft },
-                          )}
-                  </h2>
-                </div>
+            {challengesDone ? (
+              <div
+                aria-disabled="true"
+                className="pointer-events-none relative flex min-h-[112px] select-none items-center overflow-hidden rounded-2xl border border-card-border bg-cover bg-center px-5 py-4 shadow-sm saturate-75 sm:px-6 lg:col-span-2"
+                style={{ backgroundImage: "url(/images/green-bg.webp)" }}
+              >
+                {challengeCardContent}
               </div>
-
-              <img
-                src="/images/charles.webp"
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute bottom-2 right-20 z-0 h-[92%] select-none object-contain transition-transform duration-300 group-hover:-translate-y-1 sm:right-56"
-              />
-
-              <div className="absolute right-5 top-1/2 z-20 -translate-y-1/2">
-                <FakeButton
-                  className="bg-green-100/95 text-green-700"
-                  labelClassName="hidden sm:inline"
-                >
-                  {challengesLeft === 0
-                    ? t("course_home.challenge_done_cta", "View challenge")
-                    : t("course_home.challenge_cta", "Start challenge")}
-                </FakeButton>
-              </div>
-            </Link>
+            ) : (
+              <Link
+                href={`/dashboard/courses/${slug}/daily-challenge`}
+                className="group relative flex min-h-[112px] items-center overflow-hidden rounded-2xl border border-card-border bg-cover bg-center px-5 py-4 shadow-sm transition sm:px-6 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md lg:col-span-2"
+                style={{ backgroundImage: "url(/images/green-bg.webp)" }}
+              >
+                {challengeCardContent}
+              </Link>
+            )}
           </div>
         </section>
 

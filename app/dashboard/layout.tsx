@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cacheLife } from "next/cache";
 import { Logo } from "@/components/logo";
 import { HeaderActions } from "@/components/dashboard/header-actions";
 import { DevModeProvider } from "@/components/dashboard/dev-mode-context";
@@ -30,21 +31,40 @@ export default function DashboardLayout({
   );
 }
 
-async function DashboardHeaderActions() {
+// Private cache scope, like loadCourseHome on the course page: the session
+// read inside Supabase's getSession() checks token expiry against
+// `Date.now()`, which Cache Components only allows inside a cache scope
+// during a (runtime) prerender. XP-awarding actions revalidate the
+// "/dashboard" layout, which clears this outright.
+async function loadHeader() {
+  "use cache: private";
+  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
+
   const [profile, { currentStreak }] = await Promise.all([requireProfile(), getGlobalStreak()]);
   const equippedAccessory = (parseDonguriConfig(profile.donguriConfig)
     .equippedAccessory ?? null) as AccessoryId | null;
 
+  return {
+    profile: {
+      fullName: profile.full_name,
+      email: profile.email,
+      role: profile.role,
+    },
+    equippedAccessory,
+    currentStreak,
+    xp: profile.xp,
+  };
+}
+
+async function DashboardHeaderActions() {
+  const { profile, equippedAccessory, currentStreak, xp } = await loadHeader();
+
   return (
     <HeaderActions
-      profile={{
-        fullName: profile.full_name,
-        email: profile.email,
-        role: profile.role,
-      }}
+      profile={profile}
       equippedAccessory={equippedAccessory}
       currentStreak={currentStreak}
-      xp={profile.xp}
+      xp={xp}
     />
   );
 }

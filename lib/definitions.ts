@@ -923,7 +923,7 @@ export type DailyActivityCount = {
 };
 
 // Today's daily-challenge attempt count for a course, and the fixed cap —
-// see completeDailyChallenge in lib/actions/daily-challenge.ts.
+// see sendDailyChallengeMessage in lib/actions/daily-challenge.ts.
 export type DailyChallengeStatus = {
   attemptsToday: number;
   maxAttemptsPerDay: number;
