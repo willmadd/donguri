@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCourseHome, getTestQueueForCourse, requireProfile } from "@/lib/dal";
+import { getCourseHome, getCourseTitle, getTestQueueForCourse, requireProfile } from "@/lib/dal";
 import { TestSession } from "@/components/vocab/test-session";
+import { FreshSession } from "@/components/vocab/fresh-session";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { getTranslator } from "@/lib/i18n/server";
@@ -13,8 +14,7 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { course } = await getCourseHome(slug);
-  return { title: `Test — ${course.title}` };
+  return { title: `Test — ${await getCourseTitle(slug)}` };
 }
 
 export default async function TestPage({ params, searchParams }: PageProps) {
@@ -35,7 +35,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
   const breadcrumbItems: BreadcrumbItem[] = [
     { href: "/dashboard", label: t("breadcrumbs.dashboard", "Dashboard") },
     { href: "/dashboard/courses", label: t("breadcrumbs.courses", "Courses") },
-    { href: `/dashboard/courses/${slug}`, label: course.title },
+    { href: `/dashboard/courses/${slug}`, label: course.title, prefetch: true },
     { label: t("test_page.breadcrumb_test", "Test") },
   ];
 
@@ -62,6 +62,7 @@ export default async function TestPage({ params, searchParams }: PageProps) {
           </Button>
           <Link
             href={`/dashboard/courses/${slug}`}
+            prefetch
             className="text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
             {t("learn_session.back_to_course", "Back to course")}
@@ -74,12 +75,14 @@ export default async function TestPage({ params, searchParams }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs items={breadcrumbItems} />
-      <TestSession
-        quiz={quiz}
-        courseSlug={slug}
-        initialXp={profile.xp}
-        initialDonguriConfig={profile.donguriConfig}
-      />
+      <FreshSession>
+        <TestSession
+          quiz={quiz}
+          courseSlug={slug}
+          initialXp={profile.xp}
+          initialDonguriConfig={profile.donguriConfig}
+        />
+      </FreshSession>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { after } from "next/server";
+import { cacheLife } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type {
@@ -547,6 +547,22 @@ function toCourseSummary(course: {
   };
 }
 
+// A course's title for `generateMetadata` on the course pages. Public, not
+// per-user (no enrollment check — the page itself does that), so it's a
+// plain server-side `use cache` shared by every learner: page titles cost
+// no DB round trip and don't hold up navigation.
+export async function getCourseTitle(courseSlug: string): Promise<string> {
+  "use cache";
+  cacheLife("hours");
+
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { title: true },
+  });
+
+  return course?.title ?? "Donguri";
+}
+
 // Course landing page: meta + streak only — no languageDeck join, since languageDecks
 // render on the Vocabulary sub-page instead.
 export const getCourseHome = cache(async (courseSlug: string) => {
@@ -656,11 +672,13 @@ export const getCourseDecks = cache(async (courseSlug: string) => {
 
 // This user's personal "active decks" selection within a course — which
 // decks currently feed the Learn/Test pool (see `getLearnQueueForCourse`).
-// A brand-new enrollment has no activation rows yet, so it lazily activates
-// the first deck (lowest position) the first time this is read, so Learn
-// isn't dead on arrival. From then on it's purely the user's own selection
-// — deactivating a deck later is respected, not re-activated ("any row at
-// all, active or not, means the user has touched this before").
+// A brand-new enrollment has no activation rows yet, so the first deck
+// (lowest position) counts as active by default, so Learn isn't dead on
+// arrival. From then on it's purely the user's own selection — deactivating
+// a deck later is respected, not re-activated ("any row at all, active or
+// not, means the user has touched this before"). Read-only, so it's safe to
+// run while prefetching or rendering: that default is only written down
+// (see `ensureDeckActivations`) once the user changes their selection.
 const getActiveDeckIds = cache(
   async (courseId: string, userId: string): Promise<string[]> => {
     const activations = await prisma.userDeckActivation.findMany({
@@ -674,23 +692,44 @@ const getActiveDeckIds = cache(
         .map((activation) => activation.languageDeckId);
     }
 
-    const firstDeck = await prisma.languageDeck.findFirst({
-      where: { courseId, active: true },
-      orderBy: { position: "asc" },
-      select: { id: true },
-    });
+    const firstDeck = await getDefaultDeck(courseId);
 
-    if (!firstDeck) {
-      return [];
-    }
-
-    await prisma.userDeckActivation.create({
-      data: { userId, languageDeckId: firstDeck.id },
-    });
-
-    return [firstDeck.id];
+    return firstDeck ? [firstDeck.id] : [];
   },
 );
+
+function getDefaultDeck(courseId: string) {
+  return prisma.languageDeck.findFirst({
+    where: { courseId, active: true },
+    orderBy: { position: "asc" },
+    select: { id: true },
+  });
+}
+
+// Writes down `getActiveDeckIds`'s implicit first-deck default before an
+// action changes the selection — otherwise activating a second deck would
+// create the user's first activation row, and the default deck (which never
+// had one) would silently drop out of their active set.
+export async function ensureDeckActivations(courseSlug: string) {
+  const { user, course } = await requireEnrolledCourse(courseSlug);
+
+  const existing = await prisma.userDeckActivation.count({
+    where: { userId: user.id, languageDeck: { courseId: course.id } },
+  });
+
+  if (existing > 0) {
+    return;
+  }
+
+  const firstDeck = await getDefaultDeck(course.id);
+
+  if (firstDeck) {
+    await prisma.userDeckActivation.createMany({
+      data: [{ userId: user.id, languageDeckId: firstDeck.id }],
+      skipDuplicates: true,
+    });
+  }
+}
 
 // Single languageDeck's stats/words for the deck detail and learn/test/review
 // pages — a deck can hold vocab words, grammar points, or a mix (see the
@@ -1109,18 +1148,18 @@ export const getLeaderboards = cache(
   },
 );
 
-// Introduces up to SET_SIZE new words (creating their `UserWordProgress`
-// rows and bumping the streak) pooled from *every currently active deck*,
+// Picks up to SET_SIZE new words pooled from *every currently active deck*,
 // vocab and grammar together (see `getActiveDeckIds`) — "you can have more
 // than one activated deck," and the words are drawn at random from across
 // all of them, not in position order from a single one, so a batch can mix
 // vocab words and grammar points (each `RevealWord` carries its own `path`
-// so the UI can label which is which). Read-heavy but also writes:
-// introducing the set has to happen exactly when the queue is built, not as
-// a separate step a caller could forget.
+// so the UI can label which is which). Read-only, so the page can be
+// prefetched without introducing words the user never opens: LearnSession
+// commits the batch it was handed via the `startLearnSession` action (see
+// `introduceLearnBatch` below) once it actually mounts.
 export const getLearnQueueForCourse = cache(
   async (courseSlug: string): Promise<RevealWord[]> => {
-    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
+    const { user, course } = await requireEnrolledCourse(courseSlug);
     const languageDeckIds = await getActiveDeckIds(course.id, user.id);
 
     if (languageDeckIds.length === 0) {
@@ -1140,25 +1179,6 @@ export const getLearnQueueForCourse = cache(
     });
 
     const newWords = shuffle(candidates).slice(0, SET_SIZE);
-
-    if (newWords.length > 0) {
-      await prisma.userWordProgress.createMany({
-        data: newWords.map((word) => ({
-          userId: user.id,
-          wordId: word.id,
-          stage: 1,
-          // Set immediately, not deferred to the first quiz answer — a
-          // word's stage-1 review is due 4 hours after it's *learned*,
-          // regardless of when (or how well) its post-learn quiz goes; the
-          // quiz never advances stage (see `recordAnswer` in
-          // lib/actions/vocab.ts).
-          nextReviewAt: nextReviewAtForStage(1),
-        })),
-        skipDuplicates: true,
-      });
-
-      bumpStreakAfterResponse(enrollment, new Date());
-    }
 
     return newWords.map((word) => ({
       id: word.id,
@@ -1186,6 +1206,50 @@ export const getLearnQueueForCourse = cache(
     }));
   },
 );
+
+// Commits a batch handed out by `getLearnQueueForCourse`: creates the
+// words' `UserWordProgress` rows (stage 1, first review due 4 hours out) and
+// bumps the streak. The ids come from the client, so they're re-checked
+// against the same pool the queue draws from — active words in this user's
+// active decks that they haven't met yet — and anything else is ignored.
+export async function introduceLearnBatch(courseSlug: string, wordIds: string[]) {
+  const { user, course } = await requireEnrolledCourse(courseSlug);
+  const languageDeckIds = await getActiveDeckIds(course.id, user.id);
+
+  if (wordIds.length === 0 || languageDeckIds.length === 0) {
+    return;
+  }
+
+  const words = await prisma.word.findMany({
+    where: {
+      id: { in: wordIds.slice(0, SET_SIZE) },
+      languageDeckId: { in: languageDeckIds },
+      active: true,
+      progress: { none: { userId: user.id } },
+    },
+    select: { id: true },
+  });
+
+  if (words.length === 0) {
+    return;
+  }
+
+  await prisma.userWordProgress.createMany({
+    data: words.map((word) => ({
+      userId: user.id,
+      wordId: word.id,
+      stage: 1,
+      // Set immediately, not deferred to the first quiz answer — a word's
+      // stage-1 review is due 4 hours after it's *learned*, regardless of
+      // when (or how well) its post-learn quiz goes; the quiz never advances
+      // stage (see `recordAnswer` in lib/actions/vocab.ts).
+      nextReviewAt: nextReviewAtForStage(1),
+    })),
+    skipDuplicates: true,
+  });
+
+  await bumpStreak(user.id, course.id, new Date());
+}
 
 // Quiz-only, never introduces new words — the "Test yourself" half of the
 // learn/quiz pair. Pool is every word *anywhere in the course*, vocab and
@@ -1217,7 +1281,7 @@ export const getLearnQueueForCourse = cache(
 // excluded: they go straight to Mastered and are never quizzed.
 export const getTestQueueForCourse = cache(
   async (courseSlug: string, wordIds?: string[]): Promise<QuizQuestion[]> => {
-    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
+    const { user, course } = await requireEnrolledCourse(courseSlug);
 
     const freshWhere = {
       userId: user.id,
@@ -1259,8 +1323,6 @@ export const getTestQueueForCourse = cache(
     if (freshProgress.length === 0) {
       return [];
     }
-
-    bumpStreakAfterResponse(enrollment, new Date());
 
     const grammarWords = freshProgress
       .filter((progress) => progress.word.path === "grammar")
@@ -1392,7 +1454,7 @@ export const getReviewQueueDebug = cache(
 // above).
 export const getReviewQueue = cache(
   async (courseSlug: string): Promise<QuizQuestion[]> => {
-    const { user, course, enrollment } = await requireEnrolledCourse(courseSlug);
+    const { user, course } = await requireEnrolledCourse(courseSlug);
 
     const dueProgress = await prisma.userWordProgress.findMany({
       where: {
@@ -1418,8 +1480,6 @@ export const getReviewQueue = cache(
     if (dueProgress.length === 0) {
       return [];
     }
-
-    bumpStreakAfterResponse(enrollment, new Date());
 
     return shuffle(
       dueProgress.map((progress) =>
@@ -1459,45 +1519,6 @@ export async function bumpStreak(userId: string, courseId: string, now: Date) {
       lastActivityDate: updated.lastActivityDate,
     },
   });
-}
-
-// Render-path counterpart to `bumpStreak`, for the learn/test/review queue
-// loaders: reuses the enrollment row `requireEnrolledCourse` already loaded
-// for this request (instead of re-reading it) and defers the write until
-// after the response is sent — nothing on those pages reads the course
-// streak, so there's no reason to hold the render for two extra round trips
-// to the remote DB.
-function bumpStreakAfterResponse(
-  enrollment: {
-    userId: string;
-    courseId: string;
-    currentStreak: number;
-    longestStreak: number;
-    lastActivityDate: Date | null;
-  },
-  now: Date,
-) {
-  const updated = applyDailyActivity(enrollment, now);
-
-  if (updated === enrollment) {
-    return;
-  }
-
-  after(() =>
-    prisma.courseEnrollment.update({
-      where: {
-        userId_courseId: {
-          userId: enrollment.userId,
-          courseId: enrollment.courseId,
-        },
-      },
-      data: {
-        currentStreak: updated.currentStreak,
-        longestStreak: updated.longestStreak,
-        lastActivityDate: updated.lastActivityDate,
-      },
-    }),
-  );
 }
 
 type QuestionWord = {

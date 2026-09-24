@@ -57,7 +57,7 @@ export default async function CoursesPage() {
                   })}
                 </p>
               </div>
-              <Button href={`/dashboard/courses/${course.slug}`}>
+              <Button href={`/dashboard/courses/${course.slug}`} prefetch>
                 {t("courses_page.continue", "Continue")}
               </Button>
             </div>

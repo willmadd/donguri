@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cacheLife } from "next/cache";
 import { ArrowRight } from "lucide-react";
 
 import {
   getCourseDecks,
+  getCourseTitle,
   getDailyActivityCounts,
   getDailyChallengeStatus,
   getGlobalStreak,
@@ -31,15 +33,21 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { course } = await getCourseDecks(slug);
-
   return {
-    title: `${course.title} — Donguri`,
+    title: `${await getCourseTitle(slug)} — Donguri`,
   };
 }
 
-export default async function CourseHomePage({ params }: PageProps) {
-  const { slug } = await params;
+// Everything the page shows for this learner, in one private cache scope:
+// the result lives only in this user's browser (never on the server), which
+// is what lets a `<Link prefetch>` to this page carry the real content
+// instead of the loading skeleton. `stale: 30` is the minimum that still
+// counts for per-link prefetching; the session-completion actions in
+// lib/actions/vocab.ts revalidate, which clears the client cache outright,
+// so finishing a learn/test/review session never shows stale numbers here.
+async function loadCourseHome(slug: string) {
+  "use cache: private";
+  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
 
   const [
     { course, decks, activeDeckIds },
@@ -64,7 +72,45 @@ export default async function CourseHomePage({ params }: PageProps) {
   const isAdmin = profile.role === "admin";
   const reviewQueueDebug = isAdmin ? await getReviewQueueDebug(slug) : null;
 
-  const { t } = await getTranslator();
+  return {
+    course,
+    decks,
+    activeDeckIds,
+    currentStreak,
+    longestStreak,
+    activeToday,
+    dailyActivity,
+    leaderboards,
+    reviewQueue,
+    profile,
+    weeklyStats,
+    challengeStatus,
+    isAdmin,
+    reviewQueueDebug,
+  };
+}
+
+export default async function CourseHomePage({ params }: PageProps) {
+  const { slug } = await params;
+  const [
+    {
+      course,
+      decks,
+      activeDeckIds,
+      currentStreak,
+      longestStreak,
+      activeToday,
+      dailyActivity,
+      leaderboards,
+      reviewQueue,
+      profile,
+      weeklyStats,
+      challengeStatus,
+      isAdmin,
+      reviewQueueDebug,
+    },
+    { t },
+  ] = await Promise.all([loadCourseHome(slug), getTranslator()]);
 
   const hasReviews = reviewQueue.dueCount > 0;
   const challengesLeft = Math.max(

@@ -242,6 +242,7 @@ export const TestSession = ({
 
         <Button
           href={`/dashboard/courses/${courseSlug}`}
+          prefetch
           size="lg"
           fullWidth
           className="mt-8 shadow-sm hover:-translate-y-0.5 hover:shadow-md"

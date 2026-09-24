@@ -5,6 +5,10 @@ export type BreadcrumbItem = {
   // instead of a link.
   href?: string;
   label: string;
+  // Per-link prefetch (see <Link prefetch>) — set on crumbs whose page
+  // depends on its URL params, like the course home, so its per-user content
+  // is ready before the click instead of just its loading skeleton.
+  prefetch?: boolean;
 };
 
 export function Breadcrumbs({
@@ -28,7 +32,7 @@ export function Breadcrumbs({
                 </span>
               )}
               {item.href && !isLast ? (
-                <Link href={item.href} className="text-sumi-soft transition hover:text-sumi">
+                <Link href={item.href} prefetch={item.prefetch} className="text-sumi-soft transition hover:text-sumi">
                   {item.label}
                 </Link>
               ) : (

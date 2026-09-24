@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCourseHome, getLearnQueueForCourse } from "@/lib/dal";
+import { getCourseHome, getCourseTitle, getLearnQueueForCourse } from "@/lib/dal";
 import { LearnSession } from "@/components/vocab/learn-session";
+import { FreshSession } from "@/components/vocab/fresh-session";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { getTranslator } from "@/lib/i18n/server";
@@ -12,8 +13,7 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { course } = await getCourseHome(slug);
-  return { title: `Learn — ${course.title}` };
+  return { title: `Learn — ${await getCourseTitle(slug)}` };
 }
 
 export default async function LearnPage({ params }: PageProps) {
@@ -28,7 +28,7 @@ export default async function LearnPage({ params }: PageProps) {
   const breadcrumbItems: BreadcrumbItem[] = [
     { href: "/dashboard", label: t("breadcrumbs.dashboard", "Dashboard") },
     { href: "/dashboard/courses", label: t("breadcrumbs.courses", "Courses") },
-    { href: `/dashboard/courses/${slug}`, label: course.title },
+    { href: `/dashboard/courses/${slug}`, label: course.title, prefetch: true },
     { label: t("learn_page.breadcrumb_learn", "Learn") },
   ];
 
@@ -55,6 +55,7 @@ export default async function LearnPage({ params }: PageProps) {
           </Button>
           <Link
             href={`/dashboard/courses/${slug}`}
+            prefetch
             className="text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
             {t("learn_session.back_to_course", "Back to course")}
@@ -67,11 +68,13 @@ export default async function LearnPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs items={breadcrumbItems} />
-      <LearnSession
-        key={words.map((word) => word.id).join(",")}
-        words={words}
-        courseSlug={slug}
-      />
+      <FreshSession>
+        <LearnSession
+          key={words.map((word) => word.id).join(",")}
+          words={words}
+          courseSlug={slug}
+        />
+      </FreshSession>
     </div>
   );
 }

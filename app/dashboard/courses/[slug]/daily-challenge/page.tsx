@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCourseHome, getDailyChallengeStatus, requireProfile } from "@/lib/dal";
+import { getCourseHome, getCourseTitle, getDailyChallengeStatus, requireProfile } from "@/lib/dal";
 import { DailyChallengeButton } from "@/components/vocab/daily-challenge-button";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 import { getTranslator } from "@/lib/i18n/server";
@@ -10,8 +10,7 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { course } = await getCourseHome(slug);
-  return { title: `Daily challenge — ${course.title}` };
+  return { title: `Daily challenge — ${await getCourseTitle(slug)}` };
 }
 
 export default async function DailyChallengePage({ params }: PageProps) {
@@ -27,7 +26,7 @@ export default async function DailyChallengePage({ params }: PageProps) {
   const breadcrumbItems: BreadcrumbItem[] = [
     { href: "/dashboard", label: t("breadcrumbs.dashboard", "Dashboard") },
     { href: "/dashboard/courses", label: t("breadcrumbs.courses", "Courses") },
-    { href: `/dashboard/courses/${slug}`, label: course.title },
+    { href: `/dashboard/courses/${slug}`, label: course.title, prefetch: true },
     { label: t("course_home.challenge_label", "Daily Challenge") },
   ];
 

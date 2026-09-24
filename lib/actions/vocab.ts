@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { bumpStreak, requireUser } from "@/lib/dal";
+import {
+  bumpStreak,
+  ensureDeckActivations,
+  introduceLearnBatch,
+  requireUser,
+} from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import {
   MAX_STAGE,
@@ -393,6 +398,18 @@ export async function refreshDashboardHeader(): Promise<void> {
   revalidatePath("/dashboard", "layout");
 }
 
+// Called once by LearnSession when it mounts, to commit the batch the
+// (read-only, prefetchable) learn page handed it — see
+// `introduceLearnBatch` in lib/dal.ts. Same reasoning as `submitAnswer`
+// above for no revalidatePath: it would re-render the learn page and swap
+// the batch out from under the user.
+export async function startLearnSession(
+  courseSlug: string,
+  wordIds: string[],
+): Promise<void> {
+  await introduceLearnBatch(courseSlug, wordIds);
+}
+
 export async function skipWord(wordId: string): Promise<void> {
   const user = await requireUser();
 
@@ -471,6 +488,7 @@ export async function toggleDeckActivation(
 ): Promise<void> {
   const user = await requireUser();
 
+  await ensureDeckActivations(courseSlug);
   await prisma.userDeckActivation.upsert({
     where: { userId_languageDeckId: { userId: user.id, languageDeckId: deckId } },
     create: { userId: user.id, languageDeckId: deckId, active },
@@ -486,6 +504,8 @@ export async function toggleDeckActivation(
 // still happened.
 export async function restartDeck(courseSlug: string, deckId: string): Promise<void> {
   const user = await requireUser();
+
+  await ensureDeckActivations(courseSlug);
 
   await prisma.$transaction([
     prisma.userWordProgress.deleteMany({

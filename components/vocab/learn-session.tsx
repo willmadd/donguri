@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { skipWord } from "@/lib/actions/vocab";
+import { skipWord, startLearnSession } from "@/lib/actions/vocab";
 import type { RevealWord } from "@/lib/definitions";
 import { SpeakButton, ProgressDots } from "@/components/vocab/session-ui";
 import { WordImage } from "@/components/ui/word-image";
@@ -34,6 +34,29 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
   const [done, setDone] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [refreshing, startRefresh] = useTransition();
+  const [started, setStarted] = useState(false);
+
+  // The learn page only *picks* this batch (it's read-only so it can be
+  // prefetched) — mounting is what commits it: progress rows, first review
+  // due, streak. The quiz reads those rows, so "Start quiz" waits on this.
+  useEffect(() => {
+    let cancelled = false;
+
+    startLearnSession(
+      courseSlug,
+      words.map((word) => word.id),
+    )
+      .catch((error) => console.error("Failed to start learn session:", error))
+      .finally(() => {
+        if (!cancelled) {
+          setStarted(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseSlug, words]);
 
   const advance = () => {
     if (index + 1 < words.length) {
@@ -91,14 +114,20 @@ export const LearnSession = ({ words, courseSlug }: LearnSessionProps) => {
 
         <div className="mt-7 flex w-full flex-col gap-3">
           {learntIds.length > 0 ? (
-            <Button
-              href={quizHref}
-              size="lg"
-              fullWidth
-              className="shadow-sm hover:-translate-y-0.5 hover:shadow-md"
-            >
-              {t("learn_session.start_quiz", "Start quiz")}
-            </Button>
+            started ? (
+              <Button
+                href={quizHref}
+                size="lg"
+                fullWidth
+                className="shadow-sm hover:-translate-y-0.5 hover:shadow-md"
+              >
+                {t("learn_session.start_quiz", "Start quiz")}
+              </Button>
+            ) : (
+              <Button disabled size="lg" fullWidth>
+                {t("common.loading", "Loading…")}
+              </Button>
+            )
           ) : (
             <Button
               disabled={refreshing}

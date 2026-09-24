@@ -46,6 +46,13 @@ export const metadata: Metadata = {
   },
 };
 
+// Allowed to block: `<html lang>` comes from the locale cookie, so this
+// layout can't be part of a static shell. It only renders on full page
+// loads — client navigations never re-render the root layout — so the
+// dashboard's instant navigations (see app/dashboard/layout.tsx) aren't
+// affected.
+export const instant = false;
+
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const locale = await getLocale();
   const dictionary = getDictionary(locale);

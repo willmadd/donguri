@@ -57,6 +57,7 @@ export default async function DashboardPage() {
               <Link
                 key={course.id}
                 href={`/dashboard/courses/${course.slug}`}
+                prefetch
                 className="rounded-2xl border border-card-border bg-washi-soft p-6 transition hover:border-ai/40"
               >
                 <h3 className="font-semibold text-sumi">{course.title}</h3>

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getCourseHome, getReviewQueue, requireProfile } from "@/lib/dal";
+import { getCourseHome, getCourseTitle, getReviewQueue, requireProfile } from "@/lib/dal";
 import { ReviewSession } from "@/components/vocab/review-session";
+import { FreshSession } from "@/components/vocab/fresh-session";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 import { getTranslator } from "@/lib/i18n/server";
 
@@ -11,8 +12,7 @@ type PageProps = {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { course } = await getCourseHome(slug);
-  return { title: `Review — ${course.title}` };
+  return { title: `Review — ${await getCourseTitle(slug)}` };
 }
 
 export default async function CourseReviewPage({ params }: PageProps) {
@@ -27,7 +27,7 @@ export default async function CourseReviewPage({ params }: PageProps) {
   const breadcrumbItems: BreadcrumbItem[] = [
     { href: "/dashboard", label: t("breadcrumbs.dashboard", "Dashboard") },
     { href: "/dashboard/courses", label: t("breadcrumbs.courses", "Courses") },
-    { href: `/dashboard/courses/${slug}`, label: course.title },
+    { href: `/dashboard/courses/${slug}`, label: course.title, prefetch: true },
     { label: t("review_session.review", "Review") },
   ];
 
@@ -51,6 +51,7 @@ export default async function CourseReviewPage({ params }: PageProps) {
           </p>
           <Link
             href={`/dashboard/courses/${slug}`}
+            prefetch
             className="mt-2 text-sm font-medium text-sumi-soft transition hover:text-sumi"
           >
             {t("learn_session.back_to_course", "Back to course")}
@@ -63,7 +64,14 @@ export default async function CourseReviewPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs items={breadcrumbItems} />
-      <ReviewSession quiz={quiz} courseSlug={slug} initialXp={profile.xp} initialDonguriConfig={profile.donguriConfig} />
+      <FreshSession>
+        <ReviewSession
+          quiz={quiz}
+          courseSlug={slug}
+          initialXp={profile.xp}
+          initialDonguriConfig={profile.donguriConfig}
+        />
+      </FreshSession>
     </div>
   );
 }

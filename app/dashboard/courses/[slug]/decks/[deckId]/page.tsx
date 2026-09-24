@@ -45,7 +45,7 @@ export default async function DeckPage({ params }: PageProps) {
 
       <div className="rounded-2xl border border-card-border bg-washi-soft p-6 text-sm text-sumi-soft">
         {t("deck_page.activate_prefix", "Activate this deck on the")}{" "}
-        <Link href={`/dashboard/courses/${slug}`} className="font-medium text-ai-dark hover:underline">
+        <Link href={`/dashboard/courses/${slug}`} prefetch className="font-medium text-ai-dark hover:underline">
           {t("deck_page.course_page_link", "course page")}
         </Link>{" "}
         {t(
