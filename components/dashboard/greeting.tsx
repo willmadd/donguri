@@ -13,16 +13,11 @@ function pickGreeting() {
   return options[Math.floor(Math.random() * options.length)];
 }
 
-function greetingSize(text: string) {
-  const length = text.length;
-
-  if (length <= 10) return "text-[4rem] sm:text-[5.5rem]";
-  if (length <= 14) return "text-[3.5rem] sm:text-[4.75rem]";
-  if (length <= 18) return "text-[3rem] sm:text-[4rem]";
-  if (length <= 22) return "text-[2.5rem] sm:text-[3.5rem]";
-  if (length <= 26) return "text-[2.125rem] sm:text-[3rem]";
-
-  return "text-[1.875rem] sm:text-[2.625rem]";
+// Scale the greeting to its column rather than the viewport, so it never runs
+// into the illustration beside it. ~0.62em is a safe average glyph width for
+// Nunito ExtraBold; the floor lets very long names (e.g. email fallback) wrap.
+function greetingFontSize(text: string) {
+  return `clamp(1.75rem, ${(100 / (text.length * 0.62)).toFixed(2)}cqi, 5.5rem)`;
 }
 
 const inspirationOptions = [
@@ -44,17 +39,16 @@ export const Greeting = ({ firstName }: { firstName: string }) => {
   const fullGreeting = `${greeting}, ${firstName}`;
 
   return (
-    <div className="mt-6 grid grid-cols-1 items-center gap-8 sm:grid-cols-[5fr_3fr]">
-      <div className="min-w-0">
+    <div className="mt-2 grid grid-cols-1 items-center gap-6 sm:mt-6 sm:gap-8 sm:grid-cols-[5fr_3fr]">
+      <div className="@container min-w-0">
         <p
-          className={`w-fit max-w-full whitespace-nowrap font-nunito font-extrabold leading-[0.95] ${greetingSize(
-            fullGreeting,
-          )}`}
+          className="max-w-full font-nunito font-extrabold leading-[0.95] text-balance wrap-anywhere"
+          style={{ fontSize: greetingFontSize(fullGreeting) }}
         >
           {fullGreeting}
         </p>
 
-        <p className="mt-3 text-lg font-bold text-sumi-soft">
+        <p className="mt-3 text-base font-bold sm:text-lg text-sumi-soft">
           {randomInspiration}
         </p>
       </div>
@@ -63,7 +57,7 @@ export const Greeting = ({ firstName }: { firstName: string }) => {
         <img
           src="/images/london4.webp"
           alt="Donguri peering"
-          className="h-auto w-full max-w-md object-contain"
+          className="h-auto w-full max-w-sm object-contain sm:max-w-md"
         />
       </div>
     </div>

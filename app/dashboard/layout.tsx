@@ -17,8 +17,8 @@ export default async function DashboardLayout({
     <DevModeProvider>
       <div className="min-h-screen bg-washi">
         <header className="relative z-50 border-b border-header-border bg-header">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <Logo />
+          <div className="mx-auto flex max-w-360 items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
+            <Logo wordmarkClassName="sr-only md:not-sr-only" />
             <HeaderActions
               profile={{
                 fullName: profile.full_name,
@@ -31,7 +31,7 @@ export default async function DashboardLayout({
             />
           </div>
         </header>
-        <main className="mx-auto max-w-360 px-6 py-10">{children}</main>
+        <main className="mx-auto max-w-360 px-4 py-6 sm:px-6 sm:py-10">{children}</main>
       </div>
     </DevModeProvider>
   );

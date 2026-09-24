@@ -233,7 +233,7 @@
   "course_home.review_title": "{{count}} words due",
   "course_home.review_title_singular": "{{count}} word due",
   "course_home.start_over": "Start over",
-  "course_home.start_over_subtitle": "Clears all progress and streaks for this course only.",
+  "course_home.start_over_subtitle": "Clears course progress and streaks, plus your account XP and accessory unlocks.",
   "course_home.vocabulary": "Vocabulary",
   "courses_page.continue": "Continue",
   "courses_page.enroll_free": "Enroll — free",
@@ -277,6 +277,7 @@
   "dashboard_layout.open_menu": "Open menu",
   "dashboard_layout.profile": "Profile",
   "dashboard_layout.role_admin": "Admin",
+  "dashboard_layout.theme": "Theme",
   "deck_list.add_deck_to_word_list": "Add {{title}} to my word list",
   "deck_list.add_to_word_list": "Add to my word list",
   "deck_list.added_to_word_list": "Added to my word list",
@@ -541,5 +542,9 @@
   "course_home.challenge_done_cta": "View challenge",
   "course_home.learn_cta": "Learn 3 new words",
   "course_home.review_cta": "Review {{count}} words",
-  "course_home.review_cta_singular": "Review {{count}} word"
+  "course_home.review_cta_singular": "Review {{count}} word",
+  "reset_progress.description": "This will permanently delete your progress, streaks and review history for this course. It will also reset your account XP and remove all unlocked and equipped accessories.",
+  "reset_progress.error": "Couldn't reset your progress. Please try again.",
+  "reset_progress.title": "Reset your progress?",
+  "reset_progress.warning": "This action cannot be undone."
 }

@@ -277,6 +277,7 @@
   "dashboard_layout.open_menu": "",
   "dashboard_layout.profile": "",
   "dashboard_layout.role_admin": "",
+  "dashboard_layout.theme": "",
   "deck_list.add_deck_to_word_list": "",
   "deck_list.add_to_word_list": "",
   "deck_list.added_to_word_list": "",
@@ -586,5 +587,9 @@
   "course_home.challenge_done_cta": "",
   "course_home.learn_cta": "",
   "course_home.review_cta": "",
-  "course_home.review_cta_singular": ""
+  "course_home.review_cta_singular": "",
+  "reset_progress.description": "",
+  "reset_progress.error": "",
+  "reset_progress.title": "",
+  "reset_progress.warning": ""
 }

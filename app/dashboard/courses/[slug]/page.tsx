@@ -85,7 +85,7 @@ export default async function CourseHomePage({ params }: PageProps) {
           </span>
         </div>
 
-        <h2 className="mt-4 text-3xl font-extrabold leading-tight text-ink-on-dark">
+        <h2 className="mt-4 text-2xl font-extrabold leading-tight sm:text-3xl text-ink-on-dark">
           {!hasReviews
             ? t("course_home.review_empty_title", "You're all caught up!")
             : reviewQueue.dueCount === 1
@@ -134,10 +134,10 @@ export default async function CourseHomePage({ params }: PageProps) {
   );
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <DeckCompleteCelebration slug={slug} decks={decks} />
 
-      <main className="flex min-w-0 flex-col gap-8">
+      <main className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div>
           <Greeting firstName={profile.first_name ?? profile.email} />
 
@@ -155,14 +155,14 @@ export default async function CourseHomePage({ params }: PageProps) {
             {hasReviews ? (
               <Link
                 href={`/dashboard/courses/${slug}/review`}
-                className="group relative flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
+                className="group relative flex min-h-[220px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-5 sm:min-h-[240px] sm:p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
                 style={{ backgroundImage: "url(/images/red-bg.webp)" }}
               >
                 {reviewCardContent}
               </Link>
             ) : (
               <div
-                className="pointer-events-none relative flex min-h-[240px] select-none flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm saturate-75"
+                className="pointer-events-none relative flex min-h-[220px] select-none flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-5 sm:min-h-[240px] sm:p-6 shadow-sm saturate-75"
                 style={{ backgroundImage: "url(/images/red-bg.webp)" }}
               >
                 {reviewCardContent}
@@ -172,7 +172,7 @@ export default async function CourseHomePage({ params }: PageProps) {
             {/* LEARN */}
             <Link
               href={`/dashboard/courses/${slug}/learn`}
-              className="group relative flex min-h-[240px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
+              className="group relative flex min-h-[220px] flex-col overflow-hidden rounded-2xl border border-card-border bg-cover bg-center p-5 sm:min-h-[240px] sm:p-6 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md"
               style={{
                 backgroundImage: "url(/images/blue-bg2.webp)",
               }}
@@ -188,7 +188,7 @@ export default async function CourseHomePage({ params }: PageProps) {
                   </span>
                 </div>
 
-                <h2 className="mt-4 text-3xl font-extrabold leading-tight text-ink-on-dark">
+                <h2 className="mt-4 text-2xl font-extrabold leading-tight sm:text-3xl text-ink-on-dark">
                   {t("course_home.learn_title", "Learn new words")}
                 </h2>
 
@@ -217,7 +217,7 @@ export default async function CourseHomePage({ params }: PageProps) {
             {/* DAILY CHALLENGE */}
             <Link
               href={`/dashboard/courses/${slug}/daily-challenge`}
-              className="group relative flex min-h-[112px] items-center overflow-hidden rounded-2xl border border-card-border bg-cover bg-center px-6 py-4 shadow-sm transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md lg:col-span-2"
+              className="group relative flex min-h-[112px] items-center overflow-hidden rounded-2xl border border-card-border bg-cover bg-center px-5 py-4 shadow-sm transition sm:px-6 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.015] hover:brightness-105 hover:shadow-md lg:col-span-2"
               style={{
                 backgroundImage: "url(/images/green-bg.webp)",
               }}
@@ -282,26 +282,9 @@ export default async function CourseHomePage({ params }: PageProps) {
           activeToday={activeToday}
           weeklyStats={weeklyStats}
         />
-
-        <div className="flex flex-col gap-4 rounded-2xl border border-card-border bg-washi-soft p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold text-sumi">
-              {t("course_home.start_over", "Start over")}
-            </h2>
-
-            <p className="mt-1 text-sm text-sumi-soft">
-              {t(
-                "course_home.start_over_subtitle",
-                "Clears all progress and streaks for this course only.",
-              )}
-            </p>
-          </div>
-
-          <ResetProgressButton courseId={course.id} />
-        </div>
       </main>
 
-      <aside className="flex min-w-0 flex-col gap-6">
+      <aside className="flex min-w-0 flex-col gap-6 lg:col-start-2 lg:row-start-1 lg:row-span-2">
         <FindDeckModal
           slug={slug}
           decks={decks}
@@ -313,6 +296,23 @@ export default async function CourseHomePage({ params }: PageProps) {
           initialFriends={leaderboards.friends}
         />
       </aside>
+
+      <div className="flex flex-col gap-4 rounded-2xl border border-card-border bg-washi-soft p-5 sm:p-6 lg:col-start-1 lg:row-start-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-sumi">
+            {t("course_home.start_over", "Start over")}
+          </h2>
+
+          <p className="mt-1 text-sm text-sumi-soft">
+            {t(
+              "course_home.start_over_subtitle",
+              "Clears course progress and streaks, plus your account XP and accessory unlocks.",
+            )}
+          </p>
+        </div>
+
+        <ResetProgressButton courseId={course.id} />
+      </div>
     </div>
   );
 }

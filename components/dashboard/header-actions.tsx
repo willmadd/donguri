@@ -29,14 +29,52 @@ type HeaderActionsProps = {
 // Streak, then level + XP with a progress bar toward the next level — the
 // header's at-a-glance progress summary. Refreshed with the rest of the
 // layout after a quiz (see `refreshDashboardHeader` in lib/actions/vocab.ts).
-// Below `sm` the "day streak" label and progress bar drop out so it still
-// fits beside the menu button.
-function HeaderStats({ currentStreak, xp }: { currentStreak: number; xp: number }) {
+// `compact` (the mobile row) shrinks it to a flame with the count inside and
+// a bare level pill, so it fits beside the menu button.
+function HeaderStats({
+  currentStreak,
+  xp,
+  compact = false,
+}: {
+  currentStreak: number;
+  xp: number;
+  compact?: boolean;
+}) {
   const t = useTranslations();
   const level = levelForXp(xp);
   const { min, max } = xpRangeForLevel(level);
   const progress = max === null ? 1 : (xp - min) / (max - min);
   const displayXp = Number.isInteger(xp) ? xp : xp.toFixed(1);
+
+  if (compact) {
+    const streakTitle = t("header_stats.streak_title", "{{count}} day streak", { count: currentStreak });
+    return (
+      <div className="flex shrink-0 items-center gap-1.5">
+        <span className="relative inline-flex h-9 w-9 items-center justify-center" title={streakTitle}>
+          <Flame
+            className={cn("h-9 w-9", currentStreak > 0 ? "fill-kin text-kin" : "text-sumi-soft")}
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <span
+            className={cn(
+              "absolute inset-x-0 bottom-1.5 text-center text-[11px] font-bold leading-none tabular-nums",
+              currentStreak > 0 ? "text-washi" : "text-sumi-soft",
+            )}
+          >
+            <span className="sr-only">{streakTitle}</span>
+            <span aria-hidden="true">{currentStreak}</span>
+          </span>
+        </span>
+        <span
+          className="rounded-full bg-sumi px-2 py-0.5 text-xs font-bold whitespace-nowrap text-washi"
+          title={`${displayXp}${max !== null ? ` / ${max}` : ""} ${t("xp_counter.xp", "XP")}`}
+        >
+          {t("xp_counter.level", "Lv {{level}}", { level })}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex shrink-0 items-center gap-3">
@@ -191,8 +229,16 @@ function AdminMenu({ role, className }: { role: UserRole; className?: string }) 
 }
 
 // Shared content between the desktop dropdown and the mobile sheet, so the
-// two surfaces can't drift apart when a link or menu item changes.
-function AccountLinks({ onNavigate }: { onNavigate: () => void }) {
+// two surfaces can't drift apart when a link or menu item changes. The
+// mobile sheet passes `showThemeToggle` since there's no room for the toggle
+// in the mobile header row.
+function AccountLinks({
+  onNavigate,
+  showThemeToggle = false,
+}: {
+  onNavigate: () => void;
+  showThemeToggle?: boolean;
+}) {
   const t = useTranslations();
 
   return (
@@ -222,6 +268,15 @@ function AccountLinks({ onNavigate }: { onNavigate: () => void }) {
         </p>
         <LocaleSwitcher />
       </div>
+
+      {showThemeToggle && (
+        <div className="flex items-center justify-between px-3 py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
+            {t("dashboard_layout.theme", "Theme")}
+          </p>
+          <ThemeToggle />
+        </div>
+      )}
 
       <div className="my-1 border-t border-card-border" />
 
@@ -313,8 +368,7 @@ export function HeaderActions({ profile, equippedAccessory, currentStreak, xp }:
 
       {/* Mobile */}
       <div className="relative z-50 flex items-center gap-2 md:hidden">
-        <HeaderStats currentStreak={currentStreak} xp={xp} />
-        <ThemeToggle />
+        <HeaderStats currentStreak={currentStreak} xp={xp} compact />
         <AdminMenu role={profile.role} />
         <button
           type="button"
@@ -368,7 +422,7 @@ export function HeaderActions({ profile, equippedAccessory, currentStreak, xp }:
 
               <div className="my-1 border-t border-card-border" />
 
-              <AccountLinks onNavigate={() => setMobileOpen(false)} />
+              <AccountLinks onNavigate={() => setMobileOpen(false)} showThemeToggle />
             </motion.div>
           </>
         )}

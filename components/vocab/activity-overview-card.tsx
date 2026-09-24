@@ -29,7 +29,7 @@ export async function ActivityOverviewCard({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-sumi-soft">
             {t("weekly_stats.title", "Your progress this week")}
           </h2>
-          <div className="mt-4 grid flex-1 auto-rows-fr grid-cols-2 gap-3">
+          <div className="@container mt-4 grid flex-1 auto-rows-fr grid-cols-2 gap-3">
             <StatTile
               icon={<BookOpen className="h-5 w-5 fill-ai/20 text-ai" />}
               tileClass="bg-ai-soft"
@@ -87,21 +87,25 @@ function StatTile({
   value: string;
   label: string;
 }) {
+  // Three layouts, keyed off the width of the stats grid (the @container):
+  // narrow — icon, value, label stacked; mid (≥16.5rem, ~1150px viewport on
+  // the course page) — icon beside value, label underneath; wide (@md) —
+  // icon on the left with value and label stacked beside it.
   return (
     <div
-      className={`flex flex-col items-start gap-3 rounded-2xl px-4 py-4 sm:flex-row sm:items-center ${tileClass}`}
+      className={`grid grid-cols-1 content-center items-center gap-x-2 gap-y-1 rounded-2xl px-4 py-4 @min-[16.5rem]:grid-cols-[auto_minmax(0,1fr)] @min-[16.5rem]:px-3 @md:gap-x-3 @md:px-4 ${tileClass}`}
     >
       <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${iconClass}`}
+        className={`mb-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full @min-[16.5rem]:mb-0 @md:row-span-2 ${iconClass}`}
       >
         {icon}
       </span>
-      <div className="min-w-0">
-        <p className="text-2xl font-bold leading-none text-sumi tabular-nums">
-          {value}
-        </p>
-        <p className="mt-1 text-xs text-sumi-soft">{label}</p>
-      </div>
+      <p className="min-w-0 self-center text-2xl @md:self-end font-bold leading-none text-sumi tabular-nums">
+        {value}
+      </p>
+      <p className="min-w-0 self-start text-xs text-sumi-soft @min-[16.5rem]:col-span-2 @min-[16.5rem]:mt-1 @md:col-span-1 @md:col-start-2 @md:mt-0">
+        {label}
+      </p>
     </div>
   );
 }

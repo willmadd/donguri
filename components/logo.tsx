@@ -1,6 +1,15 @@
 import Link from "next/link";
 
-export function Logo({ className = "" }: { className?: string }) {
+// `wordmarkClassName` lets a caller hide the "Hello Donguri" text at some
+// breakpoints (e.g. `sr-only md:not-sr-only`) while keeping the link's
+// accessible name.
+export function Logo({
+  className = "",
+  wordmarkClassName = "",
+}: {
+  className?: string;
+  wordmarkClassName?: string;
+}) {
   return (
     <Link
       href="/"
@@ -9,7 +18,7 @@ export function Logo({ className = "" }: { className?: string }) {
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-shu text-lg text-washi">
         <img src="/images/mascot.png" alt="Duck" className="h-8 w-8" />
       </span>
-      <span className="text-xl text-shu">Hello Donguri</span>
+      <span className={`text-xl text-shu ${wordmarkClassName}`}>Hello Donguri</span>
     </Link>
   );
 }

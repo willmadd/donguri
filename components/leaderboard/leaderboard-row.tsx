@@ -110,13 +110,13 @@ export function LeaderboardRow({
 function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
   const t = useTranslations();
   const placements = [
-    { entry: entries[1], left: "34%", bottom: "42%", width: "14%" },
-    { entry: entries[0], left: "50%", bottom: "50%", width: "16%" },
-    { entry: entries[2], left: "66%", bottom: "40%", width: "14%" },
+    { entry: entries[1], left: "34%", bottom: "40%", width: "14%" },
+    { entry: entries[0], left: "50%", bottom: "48%", width: "16%" },
+    { entry: entries[2], left: "66%", bottom: "38%", width: "14%" },
   ];
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-washi-soft pt-12">
+    <div className="relative overflow-hidden rounded-xl bg-washi-soft pt-14">
       {/* Place leaderboard-podium.png in public/images. Its own size
           establishes the height, so the podium cannot collapse. */}
       <img
@@ -138,6 +138,12 @@ function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
               style={{ left, bottom, width }}
               aria-hidden="true"
             >
+              <span
+                title={entry.name}
+                className="absolute bottom-full left-1/2 mb-1.5 block max-w-[115%] -translate-x-1/2 truncate rounded-full border border-card-border bg-washi px-2 py-0.5 text-[10px] font-semibold leading-4 text-sumi shadow-sm"
+              >
+                {entry.name}
+              </span>
               <DonguriAvatar
                 equippedAccessory={entry.equippedAccessory}
                 className="h-auto w-full drop-shadow-sm"
