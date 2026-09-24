@@ -1477,3 +1477,54 @@ alter table public.language_decks
   add constraint language_decks_course_id_position_key unique (course_id, position);
 
 alter table public.language_decks drop column if exists path;
+
+-- 34. XP history ----------------------------------------------------------------
+-- One row per XP award (see awardXp in lib/actions/vocab.ts and
+-- completeDailyChallenge in lib/actions/daily-challenge.ts), alongside the
+-- running total on `profiles.xp` — so "XP earned this week" (the course
+-- home stat tile and the weekly leaderboard) can be summed over a date
+-- range. Awards made before this table existed aren't backfilled, so
+-- weekly totals only count from the moment it was created.
+
+create table if not exists public.xp_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  amount double precision not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists xp_events_created_at_user_idx
+  on public.xp_events (created_at, user_id);
+
+alter table public.xp_events enable row level security;
+
+drop policy if exists "Users can view own xp events" on public.xp_events;
+create policy "Users can view own xp events"
+  on public.xp_events for select
+  using (auth.uid() = user_id);
+
+-- 35. Review history -------------------------------------------------------------
+-- One row per answer given in the scheduled review queue (see recordAnswer
+-- in lib/actions/vocab.ts). `user_word_progress.last_seen_at` only keeps the
+-- latest review, so without this a word reviewed on Monday and again on
+-- Tuesday would lose Monday — this is what the activity chart's "Review"
+-- series, the review-accuracy stat and the streak's "reviewed today" days
+-- are counted from. Not backfilled.
+
+create table if not exists public.review_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  word_id uuid not null references public.words (id) on delete cascade,
+  correct boolean not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists review_events_user_created_at_idx
+  on public.review_events (user_id, created_at);
+
+alter table public.review_events enable row level security;
+
+drop policy if exists "Users can view own review events" on public.review_events;
+create policy "Users can view own review events"
+  on public.review_events for select
+  using (auth.uid() = user_id);

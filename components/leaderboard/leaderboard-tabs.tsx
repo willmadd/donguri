@@ -32,6 +32,9 @@ export function LeaderboardTabs({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The friends list always includes the viewer (see getFriendsLeaderboard).
+  const selfTotalXp = friends.find((entry) => entry.isSelf)?.xp ?? null;
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: "top", label: t("leaderboard.top_10", "Top 10") },
     { key: "friends", label: t("leaderboard.friends", "Friends") },
@@ -108,6 +111,7 @@ export function LeaderboardTabs({
             >
               <LeaderboardList
                 entries={topEntries}
+                selfTotalXp={selfTotalXp}
                 emptyMessage={t("leaderboard.no_xp_yet", "No one has earned XP yet.")}
               />
             </motion.div>
@@ -138,6 +142,7 @@ export function LeaderboardTabs({
 
               <LeaderboardList
                 entries={friends}
+                selfTotalXp={selfTotalXp}
                 emptyMessage={t("leaderboard.no_friends_yet", "Add a friend by email to compare XP.")}
                 onRemove={handleRemove}
               />

@@ -117,10 +117,13 @@ export type CourseStreak = {
 
 // The "Your progress this week" tiles beside a course's activity chart —
 // the same trailing 7 days (today included) the chart always shows.
-// `accuracy` is a 0-100 percentage, null when nothing was answered.
+// `accuracy` is a 0-100 percentage of this week's scheduled-review answers,
+// null when nothing was reviewed.
 export type WeeklyStats = {
   wordsLearnt: number;
   accuracy: number | null;
+  // Account-wide, not just this course — XP is an app-wide stat.
+  xpEarned: number;
 };
 
 // Account-wide streak — not scoped to any one course. See the note on
@@ -907,13 +910,15 @@ export type AdminWordSummary = {
   alternateAnswers: WordAlternateAnswerSummary[];
 };
 
-// One entry per day, split by the three things that feed the course-home
-// activity chart: vocab words learned, grammar points learned, and daily
-// challenge attempts completed that day.
+// One entry per day, split by the four things that feed the course-home
+// activity chart: vocab words learned, grammar points learned, distinct
+// words reviewed (scheduled review queue), and daily challenge attempts
+// completed that day.
 export type DailyActivityCount = {
   date: string;
   vocab: number;
   grammar: number;
+  review: number;
   challenge: number;
 };
 
@@ -963,7 +968,10 @@ export type UpdateProfileFormState =
 export type LeaderboardEntry = {
   id: string;
   name: string;
+  // Total XP, all time.
   xp: number;
+  // XP earned in the trailing 7 days — what the leaderboard ranks by.
+  weeklyXp: number;
   equippedAccessory: AccessoryId | null;
   isSelf: boolean;
 };

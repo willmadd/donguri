@@ -68,6 +68,7 @@
   --chart-vocab: #3d84e0;
   --chart-grammar: #2354a0;
   --chart-challenge: #178a3d;
+  --chart-review: #d4402f; /* red, matching the Review action card */
 
   --background: var(--outer);
   --foreground: var(--sumi);
@@ -112,6 +113,7 @@
   --color-chart-vocab: var(--chart-vocab);
   --color-chart-grammar: var(--chart-grammar);
   --color-chart-challenge: var(--chart-challenge);
+  --color-chart-review: var(--chart-review);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-open-sans);
@@ -158,6 +160,7 @@
   --chart-vocab: #4f8fe0;
   --chart-grammar: #3a6099;
   --chart-challenge: #2fae54;
+  --chart-review: #e5604f;
 
   --background: var(--outer);
   --foreground: var(--sumi);

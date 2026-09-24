@@ -39,8 +39,13 @@ export function LeaderboardRow({
         )}
       </span>
 
-      <span className="shrink-0 text-sm font-semibold text-sumi-soft">
-        {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.xp })}
+      <span className="shrink-0 text-right leading-tight">
+        <span className="block text-sm font-semibold text-sumi">
+          {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.weeklyXp })}
+        </span>
+        <span className="block text-[11px] text-sumi-soft">
+          {t("leaderboard.total_xp", "{{xp}} total", { xp: entry.xp })}
+        </span>
       </span>
 
       {onRemove && !entry.isSelf && (
@@ -84,8 +89,12 @@ function PodiumUser({
           )}
         </p>
 
-        <p className="text-[10px] font-semibold leading-tight text-sumi-soft sm:text-xs">
-          {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.xp })}
+        <p className="text-[10px] font-semibold leading-tight text-sumi sm:text-xs">
+          {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.weeklyXp })}
+        </p>
+
+        <p className="text-[9px] leading-tight text-sumi-soft sm:text-[10px]">
+          {t("leaderboard.total_xp", "{{xp}} total", { xp: entry.xp })}
         </p>
       </div>
 
@@ -102,7 +111,13 @@ function PodiumUser({
   );
 }
 
-function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
+function LeaderboardPodium({
+  entries,
+  selfTotalXp,
+}: {
+  entries: LeaderboardEntry[];
+  selfTotalXp: number | null;
+}) {
   const t = useTranslations();
   const first = entries[0];
   const second = entries[1];
@@ -115,6 +130,20 @@ function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
         alt={t("leaderboard.podium_alt", "Winners' podium in front of a cheering crowd")}
         className="absolute inset-0 h-full w-full object-cover"
       />
+
+      <div className="absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
+        <span className="rounded-full bg-sumi/75 px-3 py-1 text-xs font-bold uppercase tracking-wide text-washi shadow-sm backdrop-blur-sm">
+          {t("leaderboard.xp_this_week", "XP this week")}
+        </span>
+
+        {selfTotalXp !== null && (
+          <span className="rounded-full bg-washi/90 px-3 py-1 text-xs font-semibold text-sumi shadow-sm backdrop-blur-sm">
+            {t("leaderboard.your_total_xp", "Your total: {{xp}} XP", {
+              xp: selfTotalXp,
+            })}
+          </span>
+        )}
+      </div>
 
       {first && (
         <PodiumUser
@@ -145,10 +174,14 @@ function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
 
 export function LeaderboardList({
   entries,
+  selfTotalXp,
   emptyMessage,
   onRemove,
 }: {
   entries: LeaderboardEntry[];
+  // The viewer's all-time XP, shown over the podium — passed in rather than
+  // read from `entries` since the viewer isn't always in the top 10.
+  selfTotalXp: number | null;
   emptyMessage: string;
   onRemove?: (id: string) => void;
 }) {
@@ -163,7 +196,7 @@ export function LeaderboardList({
 
   return (
     <div className="mt-4">
-      <LeaderboardPodium entries={podiumEntries} />
+      <LeaderboardPodium entries={podiumEntries} selfTotalXp={selfTotalXp} />
 
       {remainingEntries.length > 0 && (
         <div className="mt-4 flex flex-col gap-1">

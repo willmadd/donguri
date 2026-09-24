@@ -794,7 +794,7 @@ export const getDailyActivityCounts = cache(
     const rangeEnd = today;
     const rangeEndExclusive = addDays(rangeEnd, 1);
 
-    const [progress, challengeAttempts] = await Promise.all([
+    const [progress, reviews, challengeAttempts] = await Promise.all([
       prisma.userWordProgress.findMany({
         where: {
           userId: user.id,
@@ -802,6 +802,14 @@ export const getDailyActivityCounts = cache(
           introducedAt: { gte: rangeStart, lt: rangeEndExclusive },
         },
         select: { introducedAt: true, word: { select: { path: true } } },
+      }),
+      prisma.reviewEvent.findMany({
+        where: {
+          userId: user.id,
+          word: { languageDeck: { courseId: course.id } },
+          createdAt: { gte: rangeStart, lt: rangeEndExclusive },
+        },
+        select: { createdAt: true, wordId: true },
       }),
       prisma.dailyChallengeAttempt.findMany({
         where: {
@@ -821,6 +829,16 @@ export const getDailyActivityCounts = cache(
       counts.set(day, (counts.get(day) ?? 0) + 1);
     }
 
+    // Distinct words per day — answering the same word twice in one day's
+    // reviews still counts it once.
+    const reviewedWords = new Map<string, Set<string>>();
+    for (const { createdAt, wordId } of reviews) {
+      const day = toUTCDateString(createdAt);
+      const words = reviewedWords.get(day) ?? new Set<string>();
+      words.add(wordId);
+      reviewedWords.set(day, words);
+    }
+
     const challengeCounts = new Map<string, number>();
     for (const { challengeDate } of challengeAttempts) {
       const day = challengeDate.toISOString().slice(0, 10);
@@ -834,6 +852,7 @@ export const getDailyActivityCounts = cache(
         date,
         vocab: vocabCounts.get(date) ?? 0,
         grammar: grammarCounts.get(date) ?? 0,
+        review: reviewedWords.get(date)?.size ?? 0,
         challenge: challengeCounts.get(date) ?? 0,
       });
     }
@@ -847,13 +866,19 @@ export const getDailyActivityCounts = cache(
 // per-answer log, only running `correctCount`/`incorrectCount` per word, so
 // accuracy is taken over every word answered this week (`lastSeenAt` in
 // range) using those words' running totals.
+// The trailing 7 UTC days, today included — the same window the course
+// activity chart shows, shared by the weekly stats and weekly leaderboard.
+function startOfTrailingWeek(): Date {
+  return addDays(startOfUTCDay(new Date()), -6);
+}
+
 export const getWeeklyStats = cache(
   async (courseSlug: string): Promise<WeeklyStats> => {
     const { user, course } = await requireEnrolledCourse(courseSlug);
-    const weekStart = addDays(startOfUTCDay(new Date()), -6);
+    const weekStart = startOfTrailingWeek();
     const inCourse = { languageDeck: { courseId: course.id } };
 
-    const [wordsLearnt, answered] = await Promise.all([
+    const [wordsLearnt, answered, xpEarned] = await Promise.all([
       prisma.userWordProgress.count({
         where: {
           userId: user.id,
@@ -862,18 +887,25 @@ export const getWeeklyStats = cache(
           word: inCourse,
         },
       }),
-      prisma.userWordProgress.aggregate({
-        where: { userId: user.id, lastSeenAt: { gte: weekStart }, word: inCourse },
-        _sum: { correctCount: true, incorrectCount: true },
+      prisma.reviewEvent.groupBy({
+        by: ["correct"],
+        where: { userId: user.id, createdAt: { gte: weekStart }, word: inCourse },
+        _count: true,
+      }),
+      // Account-wide, like XP everywhere else — not scoped to this course.
+      prisma.xpEvent.aggregate({
+        where: { userId: user.id, createdAt: { gte: weekStart } },
+        _sum: { amount: true },
       }),
     ]);
 
-    const correct = answered._sum.correctCount ?? 0;
-    const total = correct + (answered._sum.incorrectCount ?? 0);
+    const correct = answered.find((row) => row.correct)?._count ?? 0;
+    const total = answered.reduce((sum, row) => sum + row._count, 0);
 
     return {
       wordsLearnt,
       accuracy: total > 0 ? Math.round((correct / total) * 100) : null,
+      xpEarned: xpEarned._sum.amount ?? 0,
     };
   },
 );
@@ -888,10 +920,16 @@ export const getWeeklyStats = cache(
 export const getGlobalStreak = cache(async (): Promise<GlobalStreak> => {
   const user = await requireUser();
 
-  const [progress, attempts] = await Promise.all([
+  const [progress, reviews, attempts] = await Promise.all([
     prisma.userWordProgress.findMany({
       where: { userId: user.id },
       select: { introducedAt: true, lastSeenAt: true },
+    }),
+    // `lastSeenAt` only keeps each word's latest review, so earlier review
+    // days come from the review log instead.
+    prisma.reviewEvent.findMany({
+      where: { userId: user.id },
+      select: { createdAt: true },
     }),
     prisma.dailyChallengeAttempt.findMany({
       where: { userId: user.id },
@@ -903,6 +941,9 @@ export const getGlobalStreak = cache(async (): Promise<GlobalStreak> => {
   for (const { introducedAt, lastSeenAt } of progress) {
     activeDays.add(toUTCDateString(introducedAt));
     if (lastSeenAt) activeDays.add(toUTCDateString(lastSeenAt));
+  }
+  for (const { createdAt } of reviews) {
+    activeDays.add(toUTCDateString(createdAt));
   }
   for (const { challengeDate } of attempts) {
     activeDays.add(toUTCDateString(challengeDate));
@@ -948,12 +989,14 @@ const LEADERBOARD_PROFILE_SELECT = {
 
 function toLeaderboardEntry(
   profile: LeaderboardProfile,
+  weeklyXp: number,
   selfId: string,
 ): LeaderboardEntry {
   return {
     id: profile.id,
     name: profile.fullName ?? profile.email.split("@")[0],
     xp: profile.xp,
+    weeklyXp,
     equippedAccessory:
       (parseDonguriConfig(profile.donguriConfig).equippedAccessory as
         | AccessoryId
@@ -962,10 +1005,33 @@ function toLeaderboardEntry(
   };
 }
 
+// Ranked by XP earned this week, total XP breaking ties.
+function byWeeklyXp(a: LeaderboardEntry, b: LeaderboardEntry): number {
+  return b.weeklyXp - a.weeklyXp || b.xp - a.xp;
+}
+
+// Each given user's XP earned in the trailing week (see XpEvent), keyed by
+// user id — users with none this week are simply absent.
+async function getWeeklyXpByUser(
+  userIds?: string[],
+): Promise<Map<string, number>> {
+  const rows = await prisma.xpEvent.groupBy({
+    by: ["userId"],
+    where: {
+      createdAt: { gte: startOfTrailingWeek() },
+      ...(userIds && { userId: { in: userIds } }),
+    },
+    _sum: { amount: true },
+  });
+
+  return new Map(rows.map((row) => [row.userId, row._sum.amount ?? 0]));
+}
+
 // Every friend the user has added, plus themselves (so you can see your own
-// rank among friends) — sorted by XP, highest first. Deliberately not
-// wrapped in `cache()`: this is also called fresh from the add/remove-friend
-// actions right after a mutation, where a memoized read would be stale.
+// rank among friends) — sorted by XP earned this week, highest first.
+// Deliberately not wrapped in `cache()`: this is also called fresh from the
+// add/remove-friend actions right after a mutation, where a memoized read
+// would be stale.
 export async function getFriendsLeaderboard(
   userId: string,
 ): Promise<LeaderboardEntry[]> {
@@ -980,17 +1046,21 @@ export async function getFriendsLeaderboard(
     }),
   ]);
 
-  const entries = [
-    self,
-    ...friendships.map((friendship) => friendship.friend),
-  ].map((profile) => toLeaderboardEntry(profile, userId));
+  const profiles = [self, ...friendships.map((friendship) => friendship.friend)];
+  const weeklyXp = await getWeeklyXpByUser(profiles.map((profile) => profile.id));
 
-  return entries.sort((a, b) => b.xp - a.xp);
+  return profiles
+    .map((profile) =>
+      toLeaderboardEntry(profile, weeklyXp.get(profile.id) ?? 0, userId),
+    )
+    .sort(byWeeklyXp);
 }
 
-// Global top 10 by XP, plus the viewer's own friends leaderboard (which
-// always includes themselves) — XP is an app-wide stat, not per-course, so
-// this isn't scoped to whichever course happens to display it.
+// Global top 10 by XP earned this week, plus the viewer's own friends
+// leaderboard (which always includes themselves) — XP is an app-wide stat,
+// not per-course, so this isn't scoped to whichever course displays it.
+// When fewer than 10 earned XP this week, the rest are filled by total XP
+// (with 0 this week) so the board is never empty.
 export const getLeaderboards = cache(
   async (): Promise<{
     top: LeaderboardEntry[];
@@ -998,17 +1068,41 @@ export const getLeaderboards = cache(
   }> => {
     const user = await requireUser();
 
-    const [topProfiles, friends] = await Promise.all([
+    const [weeklyXp, friends] = await Promise.all([
+      getWeeklyXpByUser(),
+      getFriendsLeaderboard(user.id),
+    ]);
+
+    // Weekly totals are summed per user in the DB, but a user's rank can't
+    // be taken from there directly since ties fall back to total XP — so
+    // fetch every weekly-active profile, plus the top 10 by total XP as
+    // filler for anyone at 0 this week, and rank here.
+    const [activeProfiles, fillerProfiles] = await Promise.all([
+      prisma.profile.findMany({
+        where: { id: { in: [...weeklyXp.keys()] } },
+        select: LEADERBOARD_PROFILE_SELECT,
+      }),
       prisma.profile.findMany({
         orderBy: { xp: "desc" },
         take: 10,
         select: LEADERBOARD_PROFILE_SELECT,
       }),
-      getFriendsLeaderboard(user.id),
     ]);
 
+    const topProfiles = new Map(
+      [...activeProfiles, ...fillerProfiles].map((profile) => [
+        profile.id,
+        profile,
+      ]),
+    );
+
     return {
-      top: topProfiles.map((profile) => toLeaderboardEntry(profile, user.id)),
+      top: [...topProfiles.values()]
+        .map((profile) =>
+          toLeaderboardEntry(profile, weeklyXp.get(profile.id) ?? 0, user.id),
+        )
+        .sort(byWeeklyXp)
+        .slice(0, 10),
       friends,
     };
   },

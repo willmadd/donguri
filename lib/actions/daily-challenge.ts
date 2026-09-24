@@ -48,11 +48,16 @@ export async function completeDailyChallenge(
 
   await bumpStreak(user.id, enrollment.courseId, today);
 
-  const profile = await prisma.profile.update({
-    where: { id: user.id },
-    data: { xp: { increment: DAILY_CHALLENGE_XP } },
-    select: { xp: true },
-  });
+  const [profile] = await prisma.$transaction([
+    prisma.profile.update({
+      where: { id: user.id },
+      data: { xp: { increment: DAILY_CHALLENGE_XP } },
+      select: { xp: true },
+    }),
+    prisma.xpEvent.create({
+      data: { userId: user.id, amount: DAILY_CHALLENGE_XP },
+    }),
+  ]);
 
   revalidatePath(`/dashboard/courses/${courseSlug}`);
   revalidatePath(`/dashboard/courses/${courseSlug}/daily-challenge`);

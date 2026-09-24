@@ -34,8 +34,8 @@ const BAR_RADIUS = 4;
 const MAX_STREAK_DOTS = 14;
 
 // Vocab and grammar deliberately share the blue hue family (both are core
-// lesson content); the daily challenge gets its own green so the one
-// non-lesson activity reads apart from the other two at a glance. Because
+// lesson content); reviews are red, matching the Review action card, and
+// the daily challenge gets its own green. Because
 // two series share a hue, identity leans on the legend + tooltip + sr-only
 // table rather than color-matching alone — see the CVD separation check run
 // against --chart-vocab/--chart-grammar/--chart-challenge before picking
@@ -45,6 +45,13 @@ const MAX_STREAK_DOTS = 14;
 // variant a series needs (fill/bg/stroke) is listed here in full rather than
 // built from a shared color token at render time.
 const SERIES = [
+  {
+    key: "review",
+    labelKey: "streak_chart.series_review",
+    fallback: "Review",
+    bgClass: "bg-chart-review",
+    strokeClass: "stroke-chart-review",
+  },
   {
     key: "grammar",
     labelKey: "streak_chart.series_grammar",
@@ -67,7 +74,7 @@ const SERIES = [
     strokeClass: "stroke-chart-challenge",
   },
 ] as const satisfies readonly {
-  key: keyof Pick<DailyActivityCount, "vocab" | "grammar" | "challenge">;
+  key: keyof Pick<DailyActivityCount, "vocab" | "grammar" | "review" | "challenge">;
   labelKey: string;
   fallback: string;
   bgClass: string;
@@ -134,7 +141,7 @@ export function StreakChart({
   const t = useTranslations();
   const [hovered, setHovered] = useState<number | null>(null);
 
-  const totals = data.map((day) => day.vocab + day.grammar + day.challenge);
+  const totals = data.map((day) => day.vocab + day.grammar + day.review + day.challenge);
   const max = Math.max(1, ...totals);
   const n = data.length;
 
@@ -196,13 +203,13 @@ export function StreakChart({
           <Flame className="h-3.5 w-3.5 shrink-0" />
           {t(
             "streak_chart.at_risk",
-            "Learn today so you don't lose your {{count}}-day streak!",
+            "Learn or review today so you don't lose your {{count}}-day streak!",
             { count: currentStreak },
           )}
         </p>
       )}
 
-      {/* Legend — the dependable identity channel for 3 series; never rely
+      {/* Legend — the dependable identity channel for 4 series; never rely
           on color-matching the bars alone. */}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
         {SERIES.map((series) => (
@@ -219,7 +226,7 @@ export function StreakChart({
           preserveAspectRatio="none"
           className="h-full w-full overflow-visible"
           role="img"
-          aria-label={t("streak_chart.aria_label", "Vocabulary, grammar and daily challenges completed per day")}
+          aria-label={t("streak_chart.aria_label", "Vocabulary, grammar, reviews and daily challenges completed per day")}
         >
           <defs>
             {/* A subtle lighter-at-the-top wash per series — same hue and
@@ -311,8 +318,14 @@ export function StreakChart({
                   role="img"
                   aria-label={t(
                     "streak_chart.day_summary",
-                    "{{date}}: {{vocab}} vocabulary, {{grammar}} grammar, {{challenge}} daily challenge",
-                    { date: formatDayFull(day.date), vocab: day.vocab, grammar: day.grammar, challenge: day.challenge },
+                    "{{date}}: {{vocab}} vocabulary, {{grammar}} grammar, {{review}} reviewed, {{challenge}} daily challenge",
+                    {
+                      date: formatDayFull(day.date),
+                      vocab: day.vocab,
+                      grammar: day.grammar,
+                      review: day.review,
+                      challenge: day.challenge,
+                    },
                   )}
                   onPointerEnter={() => setHovered(i)}
                   onPointerLeave={() => setHovered((current) => (current === i ? null : current))}
@@ -375,7 +388,7 @@ export function StreakChart({
       </div>
 
       <table className="sr-only">
-        <caption>{t("streak_chart.aria_label", "Vocabulary, grammar and daily challenges completed per day")}</caption>
+        <caption>{t("streak_chart.aria_label", "Vocabulary, grammar, reviews and daily challenges completed per day")}</caption>
         <thead>
           <tr>
             <th>{t("streak_chart.table_date", "Date")}</th>

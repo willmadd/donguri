@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/dal";
+import { bumpStreak, requireUser } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import {
   MAX_STAGE,
@@ -40,11 +40,16 @@ async function awardXp(userId: string, amount: number): Promise<number> {
     return profile.xp;
   }
 
-  const profile = await prisma.profile.update({
-    where: { id: userId },
-    data: { xp: { increment: amount } },
-    select: { xp: true },
-  });
+  // Logged alongside the running total so "XP this week" can be summed
+  // (see XpEvent in prisma/schema.prisma).
+  const [profile] = await prisma.$transaction([
+    prisma.profile.update({
+      where: { id: userId },
+      data: { xp: { increment: amount } },
+      select: { xp: true },
+    }),
+    prisma.xpEvent.create({ data: { userId, amount } }),
+  ]);
 
   return profile.xp;
 }
@@ -79,7 +84,12 @@ async function recordAnswer(
 ): Promise<{ xp: number }> {
   const progress = await prisma.userWordProgress.findUniqueOrThrow({
     where: { userId_wordId: { userId, wordId } },
-    select: { stage: true, correctCount: true, incorrectCount: true },
+    select: {
+      stage: true,
+      correctCount: true,
+      incorrectCount: true,
+      word: { select: { languageDeck: { select: { courseId: true } } } },
+    },
   });
 
   const stage = advancesStage ? nextStageAfterAnswer(progress.stage, correct) : progress.stage;
@@ -100,6 +110,16 @@ async function recordAnswer(
       lastSeenAt: new Date(),
     },
   });
+
+  // A scheduled review is logged (for the activity chart, review accuracy
+  // and the streak — see ReviewEvent) and counts as the day's activity, so
+  // reviewing alone keeps the streak going.
+  if (advancesStage) {
+    await Promise.all([
+      prisma.reviewEvent.create({ data: { userId, wordId, correct } }),
+      bumpStreak(userId, progress.word.languageDeck.courseId, new Date()),
+    ]);
+  }
 
   const xp = await awardXp(userId, correct ? 1 : 0);
 
@@ -482,6 +502,15 @@ export async function resetCourseProgress(courseId: string): Promise<void> {
     select: { donguriConfig: true },
   });
   const config = parseDonguriConfig(profile.donguriConfig);
+
+  // XP history goes too, so "XP this week" can't exceed the reset total,
+  // and this course's review history with its progress.
+  await Promise.all([
+    prisma.xpEvent.deleteMany({ where: { userId: user.id } }),
+    prisma.reviewEvent.deleteMany({
+      where: { userId: user.id, word: { languageDeck: { courseId } } },
+    }),
+  ]);
 
   await prisma.profile.update({
     where: { id: user.id },
