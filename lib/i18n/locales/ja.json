@@ -581,5 +581,10 @@
   "deck_complete.title": "",
   "deck_complete.subtitle": "",
   "deck_complete.vocab_count": "",
-  "deck_complete.grammar_count": ""
+  "deck_complete.grammar_count": "",
+  "course_home.challenge_cta": "",
+  "course_home.challenge_done_cta": "",
+  "course_home.learn_cta": "",
+  "course_home.review_cta": "",
+  "course_home.review_cta_singular": ""
 }

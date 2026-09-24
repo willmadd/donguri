@@ -73,12 +73,6 @@ export default async function CourseHomePage({ params }: PageProps) {
   );
   const reviewCardContent = (
     <>
-      {hasReviews && (
-        <div className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-red-100/95 shadow-sm backdrop-blur-sm transition-transform group-hover:translate-x-1">
-          <ArrowRight className="h-5 w-5 text-red-600" />
-        </div>
-      )}
-
       <div className="relative z-10">
         <div className="flex items-center gap-3">
           <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100/95 text-2xl font-bold leading-none text-red-600 shadow-sm backdrop-blur-sm">
@@ -95,13 +89,9 @@ export default async function CourseHomePage({ params }: PageProps) {
           {!hasReviews
             ? t("course_home.review_empty_title", "You're all caught up!")
             : reviewQueue.dueCount === 1
-              ? t(
-                  "course_home.review_title_singular",
-                  "{{count}} word due",
-                  {
-                    count: reviewQueue.dueCount,
-                  },
-                )
+              ? t("course_home.review_title_singular", "{{count}} word due", {
+                  count: reviewQueue.dueCount,
+                })
               : t("course_home.review_title", "{{count}} words due", {
                   count: reviewQueue.dueCount,
                 })}
@@ -119,6 +109,20 @@ export default async function CourseHomePage({ params }: PageProps) {
               )}
         </p>
       </div>
+
+      {hasReviews && (
+        <div className="relative z-10 mt-auto pt-5">
+          <FakeButton className="bg-red-100/95 text-red-700">
+            {reviewQueue.dueCount === 1
+              ? t("course_home.review_cta_singular", "Review {{count}} word", {
+                  count: reviewQueue.dueCount,
+                })
+              : t("course_home.review_cta", "Review {{count}} words", {
+                  count: reviewQueue.dueCount,
+                })}
+          </FakeButton>
+        </div>
+      )}
 
       <img
         src="/images/rabbit-flash.webp"
@@ -173,10 +177,6 @@ export default async function CourseHomePage({ params }: PageProps) {
                 backgroundImage: "url(/images/blue-bg2.webp)",
               }}
             >
-              <div className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-blue-100/95 shadow-sm backdrop-blur-sm transition-transform group-hover:translate-x-1">
-                <ArrowRight className="h-5 w-5 text-blue-700" />
-              </div>
-
               <div className="relative z-10">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100/95 text-2xl font-bold leading-none text-blue-700 shadow-sm backdrop-blur-sm">
@@ -195,9 +195,15 @@ export default async function CourseHomePage({ params }: PageProps) {
                 <p className="mt-2 max-w-[65%] text-sm leading-relaxed sm:max-w-[60%] text-ink-on-dark/85">
                   {t(
                     "course_home.learn_subtitle_three",
-                    "Each time you click Learn, you'll get 3 new words or grammar patterns from your active decks.",
+                    "Learn 3 new words or grammar patterns from your active decks.",
                   )}
                 </p>
+              </div>
+
+              <div className="relative z-10 mt-auto pt-5">
+                <FakeButton className="bg-blue-100/95 text-blue-700">
+                  {t("course_home.learn_cta", "Learn 3 new words")}
+                </FakeButton>
               </div>
 
               <img
@@ -229,7 +235,10 @@ export default async function CourseHomePage({ params }: PageProps) {
 
                   <h2 className="mt-0.5 text-lg font-bold leading-tight text-ink-on-dark">
                     {challengesLeft === 0
-                      ? t("course_home.challenge_done_title", "All done for today")
+                      ? t(
+                          "course_home.challenge_done_title",
+                          "All done for today",
+                        )
                       : challengesLeft === 1
                         ? t(
                             "course_home.challenge_title_singular",
@@ -249,11 +258,18 @@ export default async function CourseHomePage({ params }: PageProps) {
                 src="/images/charles.webp"
                 alt=""
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-2 right-20 z-0 h-[92%] select-none object-contain transition-transform duration-300 group-hover:-translate-y-1"
+                className="pointer-events-none absolute bottom-2 right-20 z-0 h-[92%] select-none object-contain transition-transform duration-300 group-hover:-translate-y-1 sm:right-56"
               />
 
-              <div className="absolute right-5 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-green-100/95 shadow-sm backdrop-blur-sm transition-transform group-hover:translate-x-1">
-                <ArrowRight className="h-5 w-5 text-green-700" />
+              <div className="absolute right-5 top-1/2 z-20 -translate-y-1/2">
+                <FakeButton
+                  className="bg-green-100/95 text-green-700"
+                  labelClassName="hidden sm:inline"
+                >
+                  {challengesLeft === 0
+                    ? t("course_home.challenge_done_cta", "View challenge")
+                    : t("course_home.challenge_cta", "Start challenge")}
+                </FakeButton>
               </div>
             </Link>
           </div>
@@ -298,6 +314,27 @@ export default async function CourseHomePage({ params }: PageProps) {
         />
       </aside>
     </div>
+  );
+}
+
+// Button-styled label inside a card link. Rendered as a span because the
+// whole card is already the link, and nesting a real <button> in an <a> is invalid.
+function FakeButton({
+  children,
+  className,
+  labelClassName,
+}: {
+  children: React.ReactNode;
+  className: string;
+  labelClassName?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex h-11 items-center gap-2 rounded-full px-4 text-sm font-bold shadow-sm backdrop-blur-sm transition-[gap] group-hover:gap-3 ${className}`}
+    >
+      <span className={labelClassName}>{children}</span>
+      <ArrowRight className="h-4 w-4 shrink-0" />
+    </span>
   );
 }
 

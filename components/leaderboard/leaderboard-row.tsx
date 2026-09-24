@@ -4,6 +4,42 @@ import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
 import { useTranslations } from "@/components/i18n/locale-provider";
 import type { LeaderboardEntry } from "@/lib/definitions";
 
+function Rank({ rank }: { rank: number }) {
+  if (rank === 1) {
+    return (
+      <svg
+        viewBox="0 0 32 28"
+        fill="none"
+        className="h-5 w-6"
+        aria-label="1st place"
+        role="img"
+      >
+        <path
+          d="m2 7 7.5 7L16 2l6.5 12L30 7l-3 18H5L2 7Z"
+          fill="#E9B849"
+          stroke="#D7A43A"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <span
+      className={`text-sm font-bold tabular-nums ${
+        rank === 2
+          ? "text-sumi/70"
+          : rank === 3
+            ? "text-shu-dark/80"
+            : "text-sumi-soft"
+      }`}
+    >
+      {rank}
+    </span>
+  );
+}
+
 export function LeaderboardRow({
   rank,
   entry,
@@ -16,157 +52,98 @@ export function LeaderboardRow({
   const t = useTranslations();
 
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
-        entry.isSelf ? "bg-ai-soft/40" : ""
+    <li
+      className={`flex min-w-0 items-center gap-2.5 px-2.5 py-1.5 sm:gap-3 sm:px-3 ${
+        entry.isSelf
+          ? "rounded-lg bg-ai-soft/50"
+          : "border-b border-card-border/50 last:border-b-0"
       }`}
     >
-      <span className="w-5 shrink-0 text-center text-sm font-semibold text-sumi-soft">
-        {rank}
+      <span className="flex w-6 shrink-0 justify-center">
+        <Rank rank={rank} />
       </span>
 
-      <div className="h-9 w-9 shrink-0">
-        <DonguriAvatar
-          equippedAccessory={entry.equippedAccessory}
-          className="h-9 w-9"
-        />
+      <DonguriAvatar
+        equippedAccessory={entry.equippedAccessory}
+        className="h-8 w-8 shrink-0"
+      />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-baseline gap-1 text-sm font-semibold text-sumi">
+          <span className="truncate">{entry.name}</span>
+          {entry.isSelf && (
+            <span className="shrink-0 text-xs font-medium text-sumi-soft">
+              {t("leaderboard.you_suffix", "(you)")}
+            </span>
+          )}
+        </div>
+        <span className="mt-0.5 inline-block rounded-full bg-sumi/5 px-1.5 py-px text-[10px] font-medium leading-4 text-sumi-soft">
+          {t("leaderboard.total_xp_pill", "Total {{xp}} XP", { xp: entry.xp })}
+        </span>
       </div>
 
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-sumi">
-        {entry.name}
-        {entry.isSelf && (
-          <span className="text-sumi-soft"> {t("leaderboard.you_suffix", "(you)")}</span>
-        )}
-      </span>
-
-      <span className="shrink-0 text-right leading-tight">
-        <span className="block text-sm font-semibold text-sumi">
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-bold leading-4 tabular-nums text-sumi">
           {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.weeklyXp })}
-        </span>
-        <span className="block text-[11px] text-sumi-soft">
-          {t("leaderboard.total_xp", "{{xp}} total", { xp: entry.xp })}
-        </span>
-      </span>
+        </p>
+        <p className="text-[10px] leading-4 text-sumi-soft">
+          {t("leaderboard.this_week", "this week")}
+        </p>
+      </div>
 
       {onRemove && !entry.isSelf && (
         <button
           type="button"
           onClick={onRemove}
-          aria-label={t("leaderboard.remove_aria", "Remove {{name}}", { name: entry.name })}
-          className="shrink-0 text-sumi-soft transition hover:text-shu-dark"
+          aria-label={t("leaderboard.remove_aria", "Remove {{name}}", {
+            name: entry.name,
+          })}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-lg leading-none text-sumi-soft transition hover:bg-shu/10 hover:text-shu-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ai"
         >
           ×
         </button>
       )}
-    </div>
+    </li>
   );
 }
 
-function PodiumUser({
-  entry,
-  rank,
-  className,
-}: {
-  entry: LeaderboardEntry;
-  rank: 1 | 2 | 3;
-  className: string;
-}) {
+function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
   const t = useTranslations();
+  const placements = [
+    { entry: entries[1], left: "34%", bottom: "42%", width: "14%" },
+    { entry: entries[0], left: "50%", bottom: "50%", width: "16%" },
+    { entry: entries[2], left: "66%", bottom: "40%", width: "14%" },
+  ];
 
   return (
-    <div
-      className={`absolute z-10 flex -translate-x-1/2 flex-col items-center ${className}`}
-    >
-      <div
-        className={`mb-1 max-w-[110px] rounded-full px-2 py-1 text-center shadow-sm backdrop-blur-sm ${
-          entry.isSelf ? "bg-ai-soft/95" : "bg-washi/90"
-        }`}
-      >
-        <p className="truncate text-xs font-bold leading-tight text-sumi sm:text-sm">
-          {entry.name}
-          {entry.isSelf && (
-            <span className="font-medium text-sumi-soft"> {t("leaderboard.you_suffix", "(you)")}</span>
-          )}
-        </p>
-
-        <p className="text-[10px] font-semibold leading-tight text-sumi sm:text-xs">
-          {t("leaderboard.xp_value", "{{xp}} XP", { xp: entry.weeklyXp })}
-        </p>
-
-        <p className="text-[9px] leading-tight text-sumi-soft sm:text-[10px]">
-          {t("leaderboard.total_xp", "{{xp}} total", { xp: entry.xp })}
-        </p>
-      </div>
-
-      <DonguriAvatar
-        equippedAccessory={entry.equippedAccessory}
-        className={[
-          "drop-shadow-md",
-          rank === 1
-            ? "h-14 w-14 sm:h-20 sm:w-20"
-            : "h-12 w-12 sm:h-16 sm:w-16",
-        ].join(" ")}
-      />
-    </div>
-  );
-}
-
-function LeaderboardPodium({
-  entries,
-  selfTotalXp,
-}: {
-  entries: LeaderboardEntry[];
-  selfTotalXp: number | null;
-}) {
-  const t = useTranslations();
-  const first = entries[0];
-  const second = entries[1];
-  const third = entries[2];
-
-  return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-2xl">
+    <div className="relative overflow-hidden rounded-xl bg-washi-soft pt-12">
+      {/* Place leaderboard-podium.png in public/images. Its own size
+          establishes the height, so the podium cannot collapse. */}
       <img
-        src="/images/podium.webp"
-        alt={t("leaderboard.podium_alt", "Winners' podium in front of a cheering crowd")}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-
-      <div className="absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
-        <span className="rounded-full bg-sumi/75 px-3 py-1 text-xs font-bold uppercase tracking-wide text-washi shadow-sm backdrop-blur-sm">
-          {t("leaderboard.xp_this_week", "XP this week")}
-        </span>
-
-        {selfTotalXp !== null && (
-          <span className="rounded-full bg-washi/90 px-3 py-1 text-xs font-semibold text-sumi shadow-sm backdrop-blur-sm">
-            {t("leaderboard.your_total_xp", "Your total: {{xp}} XP", {
-              xp: selfTotalXp,
-            })}
-          </span>
+        src="/images/podium2.webp"
+        width={1774}
+        height={887}
+        alt={t(
+          "leaderboard.podium_alt",
+          "Winners' podium in front of a cheering crowd",
         )}
-      </div>
-
-      {first && (
-        <PodiumUser
-          entry={first}
-          rank={1}
-          className="bottom-[31.5%] left-[50%]"
-        />
-      )}
-
-      {second && (
-        <PodiumUser
-          entry={second}
-          rank={2}
-          className="bottom-[26.5%] left-[25%]"
-        />
-      )}
-
-      {third && (
-        <PodiumUser
-          entry={third}
-          rank={3}
-          className="bottom-[22%] left-[75%]"
-        />
+        className="block h-auto w-full mb-4"
+      />
+      {placements.map(
+        ({ entry, left, bottom, width }) =>
+          entry && (
+            <div
+              key={entry.id}
+              className="absolute -translate-x-1/2"
+              style={{ left, bottom, width }}
+              aria-hidden="true"
+            >
+              <DonguriAvatar
+                equippedAccessory={entry.equippedAccessory}
+                className="h-auto w-full drop-shadow-sm"
+              />
+            </div>
+          ),
       )}
     </div>
   );
@@ -179,37 +156,51 @@ export function LeaderboardList({
   onRemove,
 }: {
   entries: LeaderboardEntry[];
-  // The viewer's all-time XP, shown over the podium — passed in rather than
-  // read from `entries` since the viewer isn't always in the top 10.
   selfTotalXp: number | null;
   emptyMessage: string;
   onRemove?: (id: string) => void;
 }) {
-  if (entries.length === 0) {
-    return (
-      <p className="py-4 text-center text-sm text-sumi-soft">{emptyMessage}</p>
-    );
-  }
-
-  const podiumEntries = entries.slice(0, 3);
-  const remainingEntries = entries.slice(3, 9);
+  const t = useTranslations();
 
   return (
-    <div className="mt-4">
-      <LeaderboardPodium entries={podiumEntries} selfTotalXp={selfTotalXp} />
+    <section className="mt-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-sumi-soft">
+            {t("leaderboard.heading", "Leaderboard")}
+          </h2>
+          <p className="mt-0.5 text-xs text-sumi-soft">
+            {t("leaderboard.xp_this_week", "XP this week")}
+          </p>
+        </div>
+        {selfTotalXp !== null && (
+          <span className="rounded-full bg-ai-soft/50 px-2.5 py-1 text-xs font-medium text-ai-dark">
+            {t("leaderboard.your_total_xp", "Your total: {{xp}} XP", {
+              xp: selfTotalXp,
+            })}
+          </span>
+        )}
+      </div>
 
-      {remainingEntries.length > 0 && (
-        <div className="mt-4 flex flex-col gap-1">
-          {remainingEntries.map((entry, index) => (
-            <LeaderboardRow
-              key={entry.id}
-              rank={index + 4}
-              entry={entry}
-              onRemove={onRemove ? () => onRemove(entry.id) : undefined}
-            />
-          ))}
+      {entries.length === 0 ? (
+        <p className="rounded-2xl bg-washi-soft py-6 text-center text-sm text-sumi-soft">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="rounded-2xl border border-card-border bg-washi-soft p-2 sm:p-3">
+          <LeaderboardPodium entries={entries.slice(0, 3)} />
+          <ol className="mt-2">
+            {entries.slice(0, 10).map((entry, index) => (
+              <LeaderboardRow
+                key={entry.id}
+                rank={index + 1}
+                entry={entry}
+                onRemove={onRemove ? () => onRemove(entry.id) : undefined}
+              />
+            ))}
+          </ol>
         </div>
       )}
-    </div>
+    </section>
   );
 }
