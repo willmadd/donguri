@@ -358,6 +358,37 @@ function DailyChallengeChat({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
+        {heading}
+        <div className="flex shrink-0 items-center gap-3 self-start rounded-full border border-card-border bg-washi-soft/60 px-4 py-1.5 text-sm text-sumi-soft sm:self-auto">
+          <span>
+            {t(
+              "daily_challenge.attempt_progress",
+              "Attempt {{current}} of {{max}}",
+              {
+                current: currentAttempt,
+                max: maxAttemptsPerDay,
+              },
+            )}
+          </span>
+          <span className="flex items-center gap-1.5" aria-hidden>
+            {Array.from({ length: maxAttemptsPerDay }, (_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full transition-colors",
+                  i < attemptsUsed
+                    ? "bg-matcha"
+                    : i === attemptsUsed && !isComplete
+                      ? "bg-matcha/30 ring-2 ring-matcha/60"
+                      : "bg-neutral-soft",
+                )}
+              />
+            ))}
+          </span>
+        </div>
+      </div>
+
       {completion && finalItem && (
         <motion.div
           ref={completionRef}
@@ -378,37 +409,6 @@ function DailyChallengeChat({
       )}
 
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          {heading}
-          <div className="flex shrink-0 items-center gap-3 self-start rounded-full border border-card-border bg-washi-soft/60 px-4 py-1.5 text-sm text-sumi-soft sm:self-auto">
-            <span>
-              {t(
-                "daily_challenge.attempt_progress",
-                "Attempt {{current}} of {{max}}",
-                {
-                  current: currentAttempt,
-                  max: maxAttemptsPerDay,
-                },
-              )}
-            </span>
-            <span className="flex items-center gap-1.5" aria-hidden>
-              {Array.from({ length: maxAttemptsPerDay }, (_, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-full transition-colors",
-                    i < attemptsUsed
-                      ? "bg-matcha"
-                      : i === attemptsUsed && !isComplete
-                        ? "bg-matcha/30 ring-2 ring-matcha/60"
-                        : "bg-neutral-soft",
-                  )}
-                />
-              ))}
-            </span>
-          </div>
-        </div>
-
         {/* App-style frame: a fixed-dark bezel (--pill doesn't invert in
             .dark) around the chat, like a phone screen. */}
         {/* Faded once the challenge is done, so the result card above is
