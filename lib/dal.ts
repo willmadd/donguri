@@ -1048,8 +1048,12 @@ export const getDailyChallengeResults = cache(
       return {
         ...attempt,
         overall: typeof review.overall === "string" ? review.overall : null,
+        overallJa: typeof review.overallJa === "string" ? review.overallJa : null,
         tips: Array.isArray(review.tips)
           ? review.tips.filter((tip): tip is string => typeof tip === "string")
+          : [],
+        tipsJa: Array.isArray(review.tipsJa)
+          ? review.tipsJa.filter((tip): tip is string => typeof tip === "string")
           : [],
         betterVersion: typeof review.betterVersion === "string" ? review.betterVersion : null,
       };

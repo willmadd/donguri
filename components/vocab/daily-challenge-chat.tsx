@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { useLocale, useTranslations } from "@/components/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import { scoreTone } from "@/components/vocab/challenge-score";
+import { BilingualText } from "@/components/vocab/bilingual-text";
 
 type Message = {
   id: number;
@@ -660,7 +661,10 @@ function DailyChallengeChat({
                     {t("daily_challenge.tip", "Tip")}
                   </p>
                   <p className="mt-0.5 text-sm text-sumi">
-                    {selectedItem.reply.feedback}
+                    <BilingualText
+                      en={selectedItem.reply.feedback}
+                      ja={selectedItem.reply.feedbackJa}
+                    />
                   </p>
                 </div>
               </div>
@@ -852,7 +856,9 @@ function CompletionCard({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
               {t("daily_challenge.summary_how_you_did", "How you did")}
             </h3>
-            <p className="mt-1 text-sm text-sumi">{summary.overall}</p>
+            <p className="mt-1 text-sm text-sumi">
+              <BilingualText en={summary.overall} ja={summary.overallJa} />
+            </p>
           </section>
 
           {showBetterVersion && (
@@ -878,13 +884,13 @@ function CompletionCard({
                 {t("daily_challenge.summary_tips", "What to work on")}
               </h3>
               <ul className="mt-2 flex flex-col gap-2 text-sm text-sumi">
-                {summary.tips.map((tip) => (
+                {summary.tips.map((tip, index) => (
                   <li key={tip} className="flex gap-2">
                     <span
                       className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-matcha"
                       aria-hidden
                     />
-                    {tip}
+                    <BilingualText en={tip} ja={summary.tipsJa[index]} />
                   </li>
                 ))}
               </ul>

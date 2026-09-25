@@ -1,16 +1,20 @@
 import "server-only";
 import OpenAI from "openai";
 import { cacheLife } from "next/cache";
-import type { DailyChallengeResult } from "@/lib/daily-challenge";
+import { JAPANESE_FEEDBACK_RULE, type DailyChallengeResult } from "@/lib/daily-challenge";
 
 const REVIEW_TIMEOUT_MS = 12000;
 
 // Charles Duck's look back over the day's attempts on the end-of-day
 // summary: a short paragraph on how the learner did overall, plus the one
 // thing most worth practising next.
+// The ...Ja fields are the Japanese versions (see JAPANESE_FEEDBACK_RULE),
+// null if the model left them out.
 export type DailyChallengeReview = {
   feedback: string;
+  feedbackJa: string | null;
   focus: string;
+  focusJa: string | null;
 };
 
 function describeAttempt(result: DailyChallengeResult, index: number): string {
@@ -56,7 +60,9 @@ Look across all of them together, not one at a time, and write:
 
 Write in very simple, beginner-friendly English — short words, short sentences, no grammar jargon. Be warm and encouraging but honest; don't invent problems that didn't happen.
 
-Return only a JSON object: { "feedback": "...", "focus": "..." }`,
+Also write "feedbackJa" and "focusJa". ${JAPANESE_FEEDBACK_RULE}
+
+Return only a JSON object: { "feedback": "...", "focus": "...", "feedbackJa": "...", "focusJa": "..." }`,
         },
       ],
     },
@@ -66,7 +72,7 @@ Return only a JSON object: { "feedback": "...", "focus": "..." }`,
   const parsed: unknown = JSON.parse(
     response.choices[0]?.message.content ?? "",
   );
-  const review = parsed as Partial<DailyChallengeReview> | null;
+  const review = parsed as Partial<Record<keyof DailyChallengeReview, unknown>> | null;
   if (
     typeof review?.feedback !== "string" ||
     typeof review.focus !== "string"
@@ -74,7 +80,15 @@ Return only a JSON object: { "feedback": "...", "focus": "..." }`,
     throw new Error("Invalid daily challenge review from model");
   }
 
-  return { feedback: review.feedback.trim(), focus: review.focus.trim() };
+  const optional = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null;
+
+  return {
+    feedback: review.feedback.trim(),
+    feedbackJa: optional(review.feedbackJa),
+    focus: review.focus.trim(),
+    focusJa: optional(review.focusJa),
+  };
 }
 
 // Null when there's nothing to review, OpenAI isn't configured or the call

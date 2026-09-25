@@ -11,6 +11,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { startOfUTCDay, dailyChallengeXp } from "@/lib/srs";
 import {
+  JAPANESE_FEEDBACK_RULE,
   pickChallengeTarget,
   type ChallengeItem,
   type ChallengeTarget,
@@ -29,9 +30,14 @@ export type ChatTurn = {
 };
 
 // End-of-attempt review, only written for the message that uses the target.
+// The ...Ja fields are the Japanese versions (see JAPANESE_FEEDBACK_RULE);
+// betterVersion is English-only, since it's the English to learn from.
 export type ChallengeSummary = {
   overall: string;
+  overallJa: string | null;
   tips: string[];
+  // Same order as `tips`; empty when the model didn't return a matching set.
+  tipsJa: string[];
   betterVersion: string;
 };
 
@@ -43,6 +49,8 @@ export type ChatReply = {
   relevanceScore: number;
   complexityScore: number;
   feedback: string;
+  // Japanese version of `feedback`; null if the model left it out.
+  feedbackJa: string | null;
   usedTarget: boolean;
   summary: ChallengeSummary | null;
 };
@@ -74,6 +82,10 @@ const SCORE_FIELDS = [
 // it sounds — the model tends to score the sentence on its own otherwise.
 const NON_RESPONSE_RELEVANCE_CAP = 4;
 
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function parseSummary(value: unknown): ChallengeSummary | null {
   if (!value || typeof value !== "object") return null;
 
@@ -86,10 +98,19 @@ function parseSummary(value: unknown): ChallengeSummary | null {
     return null;
   }
 
+  const tips = summary.tips.filter((tip): tip is string => typeof tip === "string").slice(0, 3);
+  const tipsJa = Array.isArray(summary.tipsJa)
+    ? summary.tipsJa.filter((tip): tip is string => typeof tip === "string").slice(0, 3)
+    : [];
+
   return {
     overall: summary.overall,
+    overallJa: optionalString(summary.overallJa),
     betterVersion: summary.betterVersion,
-    tips: summary.tips.filter((tip): tip is string => typeof tip === "string").slice(0, 3),
+    tips,
+    // Paired with `tips` by position, so a mismatched list is dropped
+    // rather than showing the wrong translation next to a tip.
+    tipsJa: tipsJa.length === tips.length ? tipsJa : [],
   };
 }
 
@@ -171,7 +192,8 @@ Return only a JSON object with exactly these fields, in this order:
 	"complexityScore": 0,
 	"usedTarget": false,
 	"summary": null,
-	"feedback": "One short, encouraging sentence with a concrete tip on how the user's latest message could be more natural, correct, or relevant to the conversation — or, if it's already good, richer (e.g. add a reason or a detail) — or a short specific compliment if it's already excellent. If respondedToYou is false, the tip must be about that (e.g. answer my question first, then ask yours). Write it in very simple, beginner-friendly English — short words, short sentences, no grammar jargon."
+	"feedback": "One short, encouraging sentence with a concrete tip on how the user's latest message could be more natural, correct, or relevant to the conversation — or, if it's already good, richer (e.g. add a reason or a detail) — or a short specific compliment if it's already excellent. If respondedToYou is false, the tip must be about that (e.g. answer my question first, then ask yours). Write it in very simple, beginner-friendly English — short words, short sentences, no grammar jargon.",
+	"feedbackJa": "The same feedback in Japanese"
 }
 respondedToYou is true only if the user's latest message actually responds to what you last said. If you asked a question, it must answer it — even briefly or loosely ("Just some toast!", "I'm not sure"). It is false if the user ignores your question, changes the subject, or replies with a question of their own without answering yours. Asking a question back AFTER answering is great ("Pizza! What about you?") and counts as true.
 usedTarget is true only if the user's latest message genuinely uses ${goal} in a real sentence that is part of the conversation — not just listing, quoting, or asking about it. Judge the latest message only, not earlier ones.
@@ -197,9 +219,12 @@ When usedTarget is true, the chat is over, so "english" should be a short, warm 
 {
 	"overall": "2-3 short sentences on how the user did across the whole chat — how well they used the target, and how natural and relevant their replies were",
 	"tips": ["Up to 3 short, concrete tips on what they could have done better, each about something they actually wrote. Use an empty list if there is truly nothing to improve."],
-	"betterVersion": "A more natural way to say the message where they used the target, still using it. If that message was already perfect, repeat it unchanged."
+	"betterVersion": "A more natural way to say the message where they used the target, still using it. If that message was already perfect, repeat it unchanged.",
+	"overallJa": "The same overall review in Japanese",
+	"tipsJa": ["The same tips in Japanese, one for each tip above, in the same order"]
 }
 When usedTarget is false, "summary" must be null. Write the summary in the same very simple, beginner-friendly English as the feedback, with no grammar jargon.
+${JAPANESE_FEEDBACK_RULE}
 Be honest and strict: 10 means flawless and exactly what a native speaker would text in this situation. Give 10 only when there is truly nothing to improve.
 Do not score based on spelling alone, and do not invent a correction when the sentence is already natural.`;
 }
@@ -306,6 +331,7 @@ export async function sendDailyChallengeMessage(
       english: parsed.english,
       japanese: parsed.japanese,
       feedback: parsed.feedback,
+      feedbackJa: optionalString((parsed as { feedbackJa?: unknown }).feedbackJa),
       grammarScore: Math.round(parsed.grammarScore),
       naturalnessScore: Math.round(parsed.naturalnessScore),
       relevanceScore,

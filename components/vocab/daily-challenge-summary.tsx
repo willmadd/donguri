@@ -6,6 +6,7 @@ import { DAILY_CHALLENGE_FLAWLESS_XP } from "@/lib/srs";
 import { getTranslator } from "@/lib/i18n/server";
 import { Button } from "@/components/ui/button";
 import { scoreTone } from "@/components/vocab/challenge-score";
+import { BilingualText } from "@/components/vocab/bilingual-text";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -265,12 +266,16 @@ async function CharlesReview({
           {t("daily_challenge.charles_notes", "Charles's notes on today")}
         </h3>
       </div>
-      <p className="text-sm leading-relaxed text-sumi">{review.feedback}</p>
+      <p className="text-sm leading-relaxed text-sumi">
+        <BilingualText en={review.feedback} ja={review.feedbackJa} />
+      </p>
       <div className="rounded-xl bg-kin/10 px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
           {t("daily_challenge.next_time", "Next time, try")}
         </p>
-        <p className="mt-0.5 text-sm text-sumi">{review.focus}</p>
+        <p className="mt-0.5 text-sm text-sumi">
+          <BilingualText en={review.focus} ja={review.focusJa} />
+        </p>
       </div>
     </section>
   );

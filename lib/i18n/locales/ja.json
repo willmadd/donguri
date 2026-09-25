@@ -593,6 +593,8 @@
   "xp_tooltip.aria_label": "",
   "xp_tooltip.earning": "",
   "xp_tooltip.leveling": "",
+  "daily_challenge.feedback_in": "",
+  "daily_challenge.feedback_language": "",
   "daily_challenge.exhausted_subtitle": "",
   "chat.greeting": "",
   "daily_challenge.xp_rule_pass": "",

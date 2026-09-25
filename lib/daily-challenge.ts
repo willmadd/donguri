@@ -28,6 +28,13 @@ export type ChallengeTarget = {
   fallbackOpener: ChallengeOpener;
 };
 
+// How every piece of learner-facing feedback gets its Japanese twin (the
+// chat's per-reply tip, the end-of-attempt summary, the end-of-day review):
+// learners read feedback in their native Japanese, but anything from the
+// English conversation itself stays in English so they can see exactly
+// what it refers to.
+export const JAPANESE_FEEDBACK_RULE = `Every "...Ja" field is the same content written in natural, simple Japanese for a beginner (polite です/ます style, no difficult kanji or grammar jargon) — not a word-for-word translation. Inside the Japanese, keep anything that comes from the English conversation in English, in quotes: words or sentences the user wrote, the target word or pattern, words or sentences you said, and any English wording you suggest. For example: 「"I ate some food."」は正しい文ですが、"what" を使って質問に答えるともっと自然です。`;
+
 // One finished attempt, as the end-of-day summary shows it. Scores and the
 // message are null for attempts saved before they were recorded.
 export type DailyChallengeResult = {
@@ -40,7 +47,9 @@ export type DailyChallengeResult = {
   relevanceScore: number | null;
   complexityScore: number | null;
   overall: string | null;
+  overallJa: string | null;
   tips: string[];
+  tipsJa: string[];
   betterVersion: string | null;
 };
 
