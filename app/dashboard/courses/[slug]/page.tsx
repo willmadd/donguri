@@ -24,6 +24,7 @@ import { DeckCompleteCelebration } from "@/components/vocab/deck-complete-celebr
 import { FindDeckModal } from "@/components/vocab/find-deck-modal";
 import { ResetProgressButton } from "@/components/vocab/reset-progress-button";
 import { ReviewQueueDevPanel } from "@/components/vocab/review-queue-dev-panel";
+import { DailyChallengeDevReset } from "@/components/vocab/daily-challenge-dev-reset";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -247,6 +248,16 @@ export default async function CourseHomePage({ params }: PageProps) {
       <main className="flex min-w-0 flex-col gap-6 sm:gap-8">
         <div>
           <Greeting firstName={profile.first_name ?? profile.email} />
+
+          {isAdmin && (
+            <div className="mt-4">
+              <DailyChallengeDevReset
+                courseSlug={slug}
+                attemptsToday={challengeStatus.attemptsToday}
+                maxAttemptsPerDay={challengeStatus.maxAttemptsPerDay}
+              />
+            </div>
+          )}
 
           {isAdmin && reviewQueueDebug && (
             <div className="mt-4">

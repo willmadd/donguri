@@ -2,7 +2,12 @@
 
 import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
-import { requireUser, MAX_DAILY_CHALLENGE_ATTEMPTS, bumpStreak } from "@/lib/dal";
+import {
+  requireUser,
+  requireProfile,
+  MAX_DAILY_CHALLENGE_ATTEMPTS,
+  bumpStreak,
+} from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { startOfUTCDay, dailyChallengeXp } from "@/lib/srs";
 import {
@@ -14,8 +19,7 @@ import {
 // A daily-challenge attempt is a chat with Charles Duck in which the learner
 // has to work a target word and/or grammar pattern (see pickChallengeTarget)
 // into the conversation naturally. The attempt ends on the first message
-// that uses the target; that message's grammar and naturalness scores
-// decide the XP (see dailyChallengeXp in lib/srs.ts). The target is always
+// that uses the target; that message's scores decide the XP (see dailyChallengeXp in lib/srs.ts). The target is always
 // re-derived here rather than taken from the client, and the scores come
 // straight from the model, so the client can't award itself XP.
 
@@ -36,6 +40,8 @@ export type ChatReply = {
   japanese: string;
   grammarScore: number;
   naturalnessScore: number;
+  relevanceScore: number;
+  complexityScore: number;
   feedback: string;
   usedTarget: boolean;
   summary: ChallengeSummary | null;
@@ -56,6 +62,17 @@ export type SendDailyChallengeMessageResult =
 
 const MAX_HISTORY_TURNS = 16;
 const MAX_MESSAGE_LENGTH = 500;
+const SCORE_FIELDS = [
+  "grammarScore",
+  "naturalnessScore",
+  "relevanceScore",
+  "complexityScore",
+] as const;
+// Relevance ceiling for a message that doesn't respond to what Charles just
+// said (e.g. dodging his question with one of its own). Kept below
+// DAILY_CHALLENGE_PASS_SCORE so a dodge can never earn XP, however fluent
+// it sounds — the model tends to score the sentence on its own otherwise.
+const NON_RESPONSE_RELEVANCE_CAP = 4;
 
 function parseSummary(value: unknown): ChallengeSummary | null {
   if (!value || typeof value !== "object") return null;
@@ -78,7 +95,7 @@ function parseSummary(value: unknown): ChallengeSummary | null {
 
 function isChatReply(
   value: unknown,
-): value is Omit<ChatReply, "summary"> & { summary?: unknown } {
+): value is Omit<ChatReply, "summary"> & { summary?: unknown; respondedToYou?: boolean } {
   if (!value || typeof value !== "object") return false;
 
   const reply = value as Record<string, unknown>;
@@ -88,12 +105,11 @@ function isChatReply(
     typeof reply.japanese === "string" &&
     typeof reply.feedback === "string" &&
     typeof reply.usedTarget === "boolean" &&
-    typeof reply.grammarScore === "number" &&
-    typeof reply.naturalnessScore === "number" &&
-    reply.grammarScore >= 0 &&
-    reply.grammarScore <= 10 &&
-    reply.naturalnessScore >= 0 &&
-    reply.naturalnessScore <= 10
+    (reply.respondedToYou === undefined || typeof reply.respondedToYou === "boolean") &&
+    SCORE_FIELDS.every((field) => {
+      const score = reply[field];
+      return typeof score === "number" && score >= 0 && score <= 10;
+    })
   );
 }
 
@@ -143,19 +159,40 @@ How to chat:
 - If the user tries to end the chat early, kindly keep it going with a new simple, friendly question.
 - Never break character or mention that this is a language exercise, scoring, or practice.
 
-Return only a JSON object with exactly these fields:
+Return only a JSON object with exactly these fields, in this order:
 {
+	"assessment": "Private notes for scoring, never shown to the user, 1-2 short sentences: what did you last say or ask, and does the user's latest message actually respond to it?",
+	"respondedToYou": true,
 	"english": "Charles Duck's simple, casual chat reply in English",
 	"japanese": "A natural Japanese translation of the same reply",
 	"grammarScore": 0,
 	"naturalnessScore": 0,
+	"relevanceScore": 0,
+	"complexityScore": 0,
 	"usedTarget": false,
 	"summary": null,
-	"feedback": "One short, encouraging sentence with a concrete tip on how the user's latest message could be more natural, correct, or relevant to the conversation, or a short specific compliment if it's already excellent. Write it in very simple, beginner-friendly English — short words, short sentences, no grammar jargon."
+	"feedback": "One short, encouraging sentence with a concrete tip on how the user's latest message could be more natural, correct, or relevant to the conversation — or, if it's already good, richer (e.g. add a reason or a detail) — or a short specific compliment if it's already excellent. If respondedToYou is false, the tip must be about that (e.g. answer my question first, then ask yours). Write it in very simple, beginner-friendly English — short words, short sentences, no grammar jargon."
 }
+respondedToYou is true only if the user's latest message actually responds to what you last said. If you asked a question, it must answer it — even briefly or loosely ("Just some toast!", "I'm not sure"). It is false if the user ignores your question, changes the subject, or replies with a question of their own without answering yours. Asking a question back AFTER answering is great ("Pizza! What about you?") and counts as true.
 usedTarget is true only if the user's latest message genuinely uses ${goal} in a real sentence that is part of the conversation — not just listing, quoting, or asking about it. Judge the latest message only, not earlier ones.
-grammarScore is an integer from 0 to 10 for the grammatical correctness of the user's latest message, judged on its own. When usedTarget is true, also judge whether the target is used correctly.
-naturalnessScore is an integer from 0 to 10 for how natural the user's latest message sounds AND how relevant it is as a reply to what you just said. A message that forces the target in awkwardly, or ignores your question just to use it, should score low even if the grammar is fine.
+grammarScore is an integer from 0 to 10 for the grammatical correctness of the user's latest message, judged on its own, not on relevance. This is casual texting, so ignore capital letters and missing end punctuation. When usedTarget is true, also judge whether the target is used correctly.
+naturalnessScore is an integer from 0 to 10 for how natural the WORDING of the user's latest message is — would a native speaker text it this way? Judge the wording only; whether it fits the conversation is relevanceScore.
+- 9-10: exactly how a native speaker would text it. 10 only if there is nothing to change.
+- 7-8: clear, but a little stiff, textbook-like, or an unusual word choice.
+- 4-6: understandable but awkward — a native speaker would not say it like this, or the target is forced in where it doesn't fit.
+- 0-3: hard to understand.
+relevanceScore is an integer from 0 to 10 for how well the user's latest message responds to what you just said.
+- 9-10: responds directly and fully to what you said. 10 only if it's exactly the kind of reply a friend would hope for.
+- 7-8: responds, but loosely or only partly.
+- 4-6: vague, or only barely connected to what you said.
+- 0-3: does not respond — ignores or dodges your question, answers it with an unrelated question, or changes the subject.
+If respondedToYou is false, relevanceScore must be ${NON_RESPONSE_RELEVANCE_CAP} or lower. A sentence can sound perfectly natural and still score low for relevance.
+complexityScore is an integer from 0 to 10 for how rich and developed the user's latest message is as a sentence, independent of whether it's correct.
+- 9-10: connects ideas smoothly — e.g. a reason, a contrast, a time or a detail joined with words like because, but, when, so, or two related sentences — while still sounding like a text, not an essay.
+- 7-8: a full sentence with some extra detail (who, where, when, why, or a describing word).
+- 4-6: one short, basic sentence.
+- 0-3: a single word or a fragment.
+Don't reward length for its own sake: rambling, repetitive or overlong messages should not score higher than a tight sentence that connects two ideas.
 When usedTarget is true, the chat is over, so "english" should be a short, warm reply that wraps up the chat, and "summary" must be an object reviewing the user's whole performance:
 {
 	"overall": "2-3 short sentences on how the user did across the whole chat — how well they used the target, and how natural and relevant their replies were",
@@ -258,10 +295,21 @@ export async function sendDailyChallengeMessage(
       parsed.usedTarget &&
       (!target.vocab || containsVocab(trimmedMessage, target.vocab));
 
+    // The model sometimes flags a dodge in respondedToYou but still scores
+    // the sentence on its own merits, so the cap is enforced here too.
+    const relevanceScore =
+      parsed.respondedToYou === false
+        ? Math.min(Math.round(parsed.relevanceScore), NON_RESPONSE_RELEVANCE_CAP)
+        : Math.round(parsed.relevanceScore);
+
     reply = {
-      ...parsed,
+      english: parsed.english,
+      japanese: parsed.japanese,
+      feedback: parsed.feedback,
       grammarScore: Math.round(parsed.grammarScore),
       naturalnessScore: Math.round(parsed.naturalnessScore),
+      relevanceScore,
+      complexityScore: Math.round(parsed.complexityScore),
       usedTarget,
       summary: usedTarget ? parseSummary(parsed.summary) : null,
     };
@@ -278,10 +326,24 @@ export async function sendDailyChallengeMessage(
     return { ok: true, reply, completion: null };
   }
 
-  const xpEarned = dailyChallengeXp(reply.grammarScore, reply.naturalnessScore);
+  const xpEarned = dailyChallengeXp(reply);
 
   await prisma.dailyChallengeAttempt.create({
-    data: { userId: user.id, courseId: enrollment.courseId, challengeDate: today },
+    data: {
+      userId: user.id,
+      courseId: enrollment.courseId,
+      challengeDate: today,
+      xpEarned,
+      targetTerms: [target.vocab?.term, target.grammar?.term].filter(
+        (term): term is string => term !== undefined,
+      ),
+      message: trimmedMessage,
+      grammarScore: reply.grammarScore,
+      naturalnessScore: reply.naturalnessScore,
+      relevanceScore: reply.relevanceScore,
+      complexityScore: reply.complexityScore,
+      summary: reply.summary ?? undefined,
+    },
   });
 
   await bumpStreak(user.id, enrollment.courseId, today);
@@ -298,15 +360,71 @@ export async function sendDailyChallengeMessage(
     ]);
   }
 
-  revalidatePath(`/dashboard/courses/${courseSlug}`);
-  revalidatePath(`/dashboard/courses/${courseSlug}/daily-challenge`);
-  // "layout" scope too: the header's XP/level badge lives in the shared
-  // dashboard layout, not just the pages under this exact path.
-  revalidatePath("/dashboard", "layout");
+  revalidateChallengePaths(courseSlug);
 
   return {
     ok: true,
     reply,
     completion: { xpEarned, attemptsToday: attemptsToday + 1 },
   };
+}
+
+// "layout" scope too: the header's XP/level badge lives in the shared
+// dashboard layout, not just the pages under this exact path.
+function revalidateChallengePaths(courseSlug: string) {
+  revalidatePath(`/dashboard/courses/${courseSlug}`);
+  revalidatePath(`/dashboard/courses/${courseSlug}/daily-challenge`);
+  revalidatePath("/dashboard", "layout");
+}
+
+// Dev-mode tool (admin only): deletes the caller's attempts for today in
+// this course so the daily cap stops getting in the way while testing, and
+// takes back the XP they earned — with a negative xp_events row, so weekly
+// totals stay in step with `profiles.xp`. Re-guarded here, not just hidden
+// in the UI, since server actions are callable directly.
+export async function resetDailyChallengeToday(
+  courseSlug: string,
+): Promise<{ ok: boolean }> {
+  const profile = await requireProfile();
+  if (profile.role !== "admin") return { ok: false };
+
+  const course = await prisma.course.findFirst({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+  if (!course) return { ok: false };
+
+  const where = {
+    userId: profile.id,
+    courseId: course.id,
+    challengeDate: startOfUTCDay(new Date()),
+  };
+  try {
+    const { _sum } = await prisma.dailyChallengeAttempt.aggregate({
+      where,
+      _sum: { xpEarned: true },
+    });
+    const xpToRemove = Math.min(_sum.xpEarned ?? 0, profile.xp);
+
+    await prisma.$transaction([
+      prisma.dailyChallengeAttempt.deleteMany({ where }),
+      ...(xpToRemove > 0
+        ? [
+            prisma.profile.update({
+              where: { id: profile.id },
+              data: { xp: { decrement: xpToRemove } },
+            }),
+            prisma.xpEvent.create({
+              data: { userId: profile.id, amount: -xpToRemove },
+            }),
+          ]
+        : []),
+    ]);
+  } catch (error) {
+    console.error("Daily challenge reset failed:", error);
+    return { ok: false };
+  }
+
+  revalidateChallengePaths(courseSlug);
+  return { ok: true };
 }

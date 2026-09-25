@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
   // Load `include`d relations with one LATERAL-join query instead of one
   // query per relation level. The DB is a remote pooler (~285ms RTT), so
   // e.g. getReviewQueue went from 4 sequential round trips to 1.
@@ -309,13 +309,23 @@ model WordCategory {
 // query-time timezone, matching `lastActivityDate` on `CourseEnrollment`.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model DailyChallengeAttempt {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  courseId      String   @map("course_id") @db.Uuid
-  challengeDate DateTime @map("challenge_date") @db.Date
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  course        Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  profile       Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  courseId         String   @map("course_id") @db.Uuid
+  challengeDate    DateTime @map("challenge_date") @db.Date
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  xpEarned         Int      @default(0) @map("xp_earned")
+  targetTerms      String[] @default([]) @map("target_terms")
+  message          String?
+  grammarScore     Int?     @map("grammar_score") @db.SmallInt
+  naturalnessScore Int?     @map("naturalness_score") @db.SmallInt
+  relevanceScore   Int?     @map("relevance_score") @db.SmallInt
+  complexityScore  Int?     @map("complexity_score") @db.SmallInt
+  // { overall, tips, betterVersion } — see ChallengeSummary in
+  // lib/actions/daily-challenge.ts.
+  summary          Json?
+  course           Course   @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profile          Profile  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId, courseId, challengeDate], map: "daily_challenge_attempts_user_course_date_idx")
   @@map("daily_challenge_attempts")

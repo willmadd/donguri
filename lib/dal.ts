@@ -49,7 +49,12 @@ import {
 } from "@/lib/cloze";
 import { isLatinTypeable } from "@/lib/language";
 import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
-import { pickChallengeTarget, type ChallengeTarget } from "@/lib/daily-challenge";
+import {
+  pickChallengeTarget,
+  type ChallengeTarget,
+  type DailyChallengeResult,
+} from "@/lib/daily-challenge";
+import type { ChallengeSummary } from "@/lib/actions/daily-challenge";
 
 // Shared with sendDailyChallengeMessage in lib/actions/daily-challenge.ts,
 // which enforces the same cap on write.
@@ -1009,6 +1014,46 @@ export const getDailyChallengeStatus = cache(
     });
 
     return { attemptsToday, maxAttemptsPerDay: MAX_DAILY_CHALLENGE_ATTEMPTS };
+  },
+);
+
+// Today's (UTC) finished attempts in this course, oldest first — what the
+// end-of-day summary on the daily-challenge page reviews.
+export const getDailyChallengeResults = cache(
+  async (courseSlug: string): Promise<DailyChallengeResult[]> => {
+    const { user, course } = await requireEnrolledCourse(courseSlug);
+
+    const attempts = await prisma.dailyChallengeAttempt.findMany({
+      where: {
+        userId: user.id,
+        courseId: course.id,
+        challengeDate: startOfUTCDay(new Date()),
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        xpEarned: true,
+        targetTerms: true,
+        message: true,
+        grammarScore: true,
+        naturalnessScore: true,
+        relevanceScore: true,
+        complexityScore: true,
+        summary: true,
+      },
+    });
+
+    return attempts.map(({ summary, ...attempt }) => {
+      const review = (summary ?? {}) as Partial<ChallengeSummary>;
+      return {
+        ...attempt,
+        overall: typeof review.overall === "string" ? review.overall : null,
+        tips: Array.isArray(review.tips)
+          ? review.tips.filter((tip): tip is string => typeof tip === "string")
+          : [],
+        betterVersion: typeof review.betterVersion === "string" ? review.betterVersion : null,
+      };
+    });
   },
 );
 

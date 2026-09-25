@@ -12,10 +12,129 @@ export type ChallengeItem = {
   forms: string[];
 };
 
+// Charles Duck's first message of an attempt. Always English (it's what
+// the learner is practising against, so it never goes through the UI's
+// i18n), with a Japanese translation behind the chat's Translate button.
+// Normally generated to suit the target (see getChallengeOpener in
+// lib/daily-challenge-opener.ts); the fixed ones below are the fallback.
+export type ChallengeOpener = {
+  english: string;
+  japanese: string;
+};
+
 export type ChallengeTarget = {
   vocab: ChallengeItem | null;
   grammar: ChallengeItem | null;
+  fallbackOpener: ChallengeOpener;
 };
+
+// One finished attempt, as the end-of-day summary shows it. Scores and the
+// message are null for attempts saved before they were recorded.
+export type DailyChallengeResult = {
+  id: string;
+  xpEarned: number;
+  targetTerms: string[];
+  message: string | null;
+  grammarScore: number | null;
+  naturalnessScore: number | null;
+  relevanceScore: number | null;
+  complexityScore: number | null;
+  overall: string | null;
+  tips: string[];
+  betterVersion: string | null;
+};
+
+// Short, everyday openers a total beginner can read: common words, one
+// clear question each, spread across topics so consecutive attempts don't
+// feel the same. Used as-is when generation fails, and as the topic
+// suggestion when the target doesn't point to an everyday topic of its own.
+const OPENERS: ChallengeOpener[] = [
+  { english: "Hi! How was your day?", japanese: "やあ！今日はどうだった？" },
+  {
+    english: "Hey! Did you eat anything good today?",
+    japanese: "ねえ！今日は何かおいしいもの食べた？",
+  },
+  {
+    english: "Hi! What did you do last weekend?",
+    japanese: "やあ！先週末は何をしたの？",
+  },
+  {
+    english: "Hey! Do you have any plans for this weekend?",
+    japanese: "ねえ！今週末は何か予定ある？",
+  },
+  {
+    english: "Good morning! What did you have for breakfast?",
+    japanese: "おはよう！朝ごはんは何を食べた？",
+  },
+  {
+    english: "Hi! What are you doing right now?",
+    japanese: "やあ！今何してるの？",
+  },
+  {
+    english: "Hey! Did you sleep well last night?",
+    japanese: "ねえ！昨日の夜はよく眠れた？",
+  },
+  {
+    english: "Hi! Do you have any pets?",
+    japanese: "やあ！ペットは飼ってる？",
+  },
+  {
+    english: "Hey! What's your favorite food?",
+    japanese: "ねえ！好きな食べ物は何？",
+  },
+  {
+    english: "Hi! Where do you want to go on your next trip?",
+    japanese: "やあ！次の旅行はどこに行きたい？",
+  },
+  {
+    english: "Hey! Which do you like more, coffee or tea?",
+    japanese: "ねえ！コーヒーと紅茶、どっちが好き？",
+  },
+  {
+    english: "Hi! What do you usually do after work or school?",
+    japanese: "やあ！仕事や学校のあとは、いつも何してる？",
+  },
+  {
+    english: "Hey! I just had pizza for lunch. What did you have?",
+    japanese: "ねえ！お昼にピザを食べたんだ。君は何を食べた？",
+  },
+  {
+    english: "Hi! Do you play any sports?",
+    japanese: "やあ！何かスポーツはしてる？",
+  },
+  {
+    english: "Hey! What kind of music do you like?",
+    japanese: "ねえ！どんな音楽が好き？",
+  },
+  {
+    english: "Hi! How is your week going?",
+    japanese: "やあ！今週はどんな感じ？",
+  },
+  {
+    english: "Hey! Did you go anywhere fun recently?",
+    japanese: "ねえ！最近どこか楽しいところに行った？",
+  },
+  {
+    english: "Hi! What made you happy today?",
+    japanese: "やあ！今日は何かうれしいことあった？",
+  },
+  {
+    english: "Hey! Have you watched any good movies or shows lately?",
+    japanese: "ねえ！最近何かいい映画やドラマを観た？",
+  },
+  {
+    english: "Hi! What's the weather like where you are?",
+    japanese: "やあ！そっちの天気はどう？",
+  },
+  {
+    english: "Hey! Do you like cooking?",
+    japanese: "ねえ！料理するのは好き？",
+  },
+  {
+    english: "Hi! What's your favorite way to relax?",
+    japanese: "やあ！一番好きなリラックス方法は何？",
+  },
+];
 
 // cyrb53-style string hash → mulberry32 PRNG. Deterministic so the page and
 // the chat action (which never trusts a client-supplied target) agree on the
@@ -85,11 +204,8 @@ export async function pickChallengeTarget(
 
   if (vocab.length === 0 && grammar.length === 0) return null;
 
-  const random = mulberry32(
-    hashSeed(
-      `${userId}:${courseId}:${challengeDate.toISOString().slice(0, 10)}:${attemptIndex}`,
-    ),
-  );
+  const seed = `${userId}:${courseId}:${challengeDate.toISOString().slice(0, 10)}:${attemptIndex}`;
+  const random = mulberry32(hashSeed(seed));
   const pick = <T>(items: T[]): T => items[Math.floor(random() * items.length)];
 
   const modes: ("vocab" | "grammar" | "both")[] = [];
@@ -105,8 +221,13 @@ export async function pickChallengeTarget(
     forms: word.forms.map((form) => form.value),
   });
 
+  // Its own stream, so adding or reordering openers never changes which
+  // word or grammar point an attempt picks.
+  const openerRandom = mulberry32(hashSeed(`${seed}:opener`));
+
   return {
     vocab: mode === "grammar" ? null : toItem(pick(vocab)),
     grammar: mode === "vocab" ? null : toItem(pick(grammar)),
+    fallbackOpener: OPENERS[Math.floor(openerRandom() * OPENERS.length)],
   };
 }

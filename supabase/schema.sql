@@ -1528,3 +1528,20 @@ drop policy if exists "Users can view own review events" on public.review_events
 create policy "Users can view own review events"
   on public.review_events for select
   using (auth.uid() = user_id);
+
+-- 36. Daily challenge results ------------------------------------------------------
+-- What each finished daily-challenge attempt scored (see
+-- sendDailyChallengeMessage in lib/actions/daily-challenge.ts), so the
+-- end-of-day summary can show XP earned and review the day's sentences
+-- after a reload. Scores and the message are null on attempts made before
+-- these columns existed; they aren't backfilled.
+
+alter table public.daily_challenge_attempts
+  add column if not exists xp_earned integer not null default 0,
+  add column if not exists target_terms text[] not null default '{}',
+  add column if not exists message text,
+  add column if not exists grammar_score smallint,
+  add column if not exists naturalness_score smallint,
+  add column if not exists relevance_score smallint,
+  add column if not exists complexity_score smallint,
+  add column if not exists summary jsonb;
