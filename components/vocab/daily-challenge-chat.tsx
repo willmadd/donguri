@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import {
   FormEvent,
   ReactNode,
@@ -22,10 +23,12 @@ import type {
   ChallengeTarget,
 } from "@/lib/daily-challenge";
 import {
-  DAILY_CHALLENGE_FLAWLESS_XP,
-  DAILY_CHALLENGE_PASS_SCORE,
-  DAILY_CHALLENGE_PASS_XP,
-  DAILY_CHALLENGE_PERFECT_XP,
+  DAILY_CHALLENGE_BASE_XP,
+  DAILY_CHALLENGE_MAX_TOTAL,
+  DAILY_CHALLENGE_PERFECT_BONUS_XP,
+  DAILY_CHALLENGE_XP_THRESHOLD,
+  dailyChallengeTotal,
+  dailyChallengeXp,
 } from "@/lib/srs";
 import { Button } from "@/components/ui/button";
 import { useLocale, useTranslations } from "@/components/i18n/locale-provider";
@@ -166,6 +169,7 @@ function DailyChallengeChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const feedbackRef = useRef<HTMLElement>(null);
+  const completionRef = useRef<HTMLDivElement>(null);
 
   const isComplete = completion !== null;
   const isOpening = messages.length === 0;
@@ -212,6 +216,17 @@ function DailyChallengeChat({
       inputRef.current?.focus({ preventScroll: true });
     }
   }, [isReplying, isComplete, messages.length]);
+
+  // The result card appears above the chat, which may be scrolled out of
+  // view by then — bring it up.
+  useEffect(() => {
+    if (completion) {
+      completionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [completion]);
 
   const timeFormat = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
@@ -343,6 +358,25 @@ function DailyChallengeChat({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+      {completion && finalItem && (
+        <motion.div
+          ref={completionRef}
+          initial={{ opacity: 0, y: -16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          className="scroll-mt-6 lg:col-span-2"
+        >
+          <CompletionCard
+            completion={completion}
+            finalItem={finalItem}
+            showBetterVersion={showBetterVersion}
+            hasMoreAttempts={hasMoreAttempts}
+            isAdvancing={isAdvancing}
+            onNext={onAdvance}
+          />
+        </motion.div>
+      )}
+
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {heading}
@@ -375,205 +409,250 @@ function DailyChallengeChat({
           </div>
         </div>
 
-        <section className="flex h-144 flex-col overflow-hidden rounded-3xl border border-card-border bg-washi shadow-sm lg:h-168">
-          <header className="flex items-center gap-3 border-b border-card-border px-5 py-4">
-            <Image
-              src="/images/charles.webp"
-              alt=""
-              width={96}
-              height={96}
-              className="h-12 w-12 rounded-full border border-card-border bg-washi-soft object-cover"
-            />
-            <div className="flex flex-col">
-              <p className="font-semibold text-sumi">Charles Duck</p>
-              <p className="flex items-center gap-1.5 text-xs text-sumi-soft">
-                <span className="h-2 w-2 rounded-full bg-matcha" aria-hidden />
-                {isCharlesTyping
-                  ? t("daily_challenge.typing", "Typing…")
-                  : t("daily_challenge.online", "Online now")}
-              </p>
-            </div>
-          </header>
-
-          <TargetBanner target={target} isComplete={isComplete} />
-
-          <div
-            ref={scrollRef}
-            className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-5"
-            aria-live="polite"
-          >
-            {messages.map((message) => {
-              const isUser = message.role === "user";
-              const feedback = isUser
-                ? feedbackByUserMessage.get(message.id)
-                : undefined;
-              const showTranslation = translatedIds.has(message.id);
-
-              return (
-                <div
-                  key={message.id}
+        {/* App-style frame: a fixed-dark bezel (--pill doesn't invert in
+            .dark) around the chat, like a phone screen. */}
+        {/* Faded once the challenge is done, so the result card above is
+            where the eye goes — hovering or focusing brings it back for
+            reading over. */}
+        <div
+          className={cn(
+            "rounded-[2.25rem] bg-pill p-1.5 shadow-[0_30px_60px_-24px_rgba(22,13,4,0.45)] ring-1 ring-white/10 transition duration-500",
+            isComplete &&
+              "opacity-45 saturate-50 hover:opacity-100 hover:saturate-100 focus-within:opacity-100 focus-within:saturate-100",
+          )}
+        >
+          <section className="flex h-144 flex-col overflow-hidden rounded-[1.85rem] bg-washi lg:h-168">
+            <header className="relative z-10 flex items-center gap-3 border-b border-card-border/70 bg-washi/90 px-4 py-3 backdrop-blur">
+              <span className="relative shrink-0">
+                <Image
+                  src="/images/charles.webp"
+                  alt=""
+                  width={96}
+                  height={96}
+                  className="h-11 w-11 rounded-full bg-washi-soft object-cover ring-2 ring-washi"
+                />
+                <span
+                  className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-matcha ring-2 ring-washi"
+                  aria-hidden
+                />
+              </span>
+              <div className="flex min-w-0 flex-col">
+                <p className="font-semibold leading-tight text-sumi">
+                  Charles Duck
+                </p>
+                <p
                   className={cn(
-                    "flex items-end gap-2.5",
-                    isUser && "flex-row-reverse",
+                    "text-xs transition-colors",
+                    isCharlesTyping ? "text-ai" : "text-sumi-soft",
                   )}
                 >
-                  <Avatar role={message.role} />
-                  <div
-                    className={cn(
-                      "flex max-w-[78%] flex-col gap-1",
-                      isUser ? "items-end" : "items-start",
-                    )}
-                  >
-                    <p
-                      className={cn(
-                        "rounded-2xl px-4 py-2.5 text-[0.95rem] leading-snug",
-                        isUser
-                          ? "rounded-br-md bg-ai text-washi"
-                          : "rounded-bl-md bg-washi-soft text-sumi",
-                      )}
-                    >
-                      {message.text}
-                      {showTranslation && message.japanese && (
-                        <span className="mt-1.5 block border-t border-card-border pt-1.5 text-sm text-sumi-soft">
-                          {message.japanese}
-                        </span>
-                      )}
-                    </p>
-                    <div
-                      className={cn(
-                        "flex items-center gap-2 px-1 text-xs text-sumi-soft",
-                        isUser && "flex-row-reverse",
-                      )}
-                    >
-                      <time dateTime={new Date(message.sentAt).toISOString()}>
-                        {timeFormat.format(message.sentAt)}
-                      </time>
-                      {message.japanese && (
-                        <button
-                          type="button"
-                          onClick={() => toggleTranslation(message.id)}
-                          className="rounded-full px-1.5 py-0.5 transition hover:bg-washi-soft hover:text-sumi"
-                        >
-                          {showTranslation
-                            ? t(
-                                "daily_challenge.hide_translation",
-                                "Hide translation",
-                              )
-                            : t(
-                                "daily_challenge.show_translation",
-                                "Translate",
-                              )}
-                        </button>
-                      )}
-                    </div>
-                    {feedback && (
-                      <button
-                        type="button"
-                        onClick={() => showFeedback(feedback.id)}
-                        aria-pressed={feedback.id === selectedItem?.id}
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition",
-                          feedback.id === selectedItem?.id
-                            ? "border-kin/60 bg-kin/15 text-sumi"
-                            : "border-card-border bg-washi text-sumi-soft hover:bg-washi-soft hover:text-sumi",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "h-2 w-2 rounded-full",
-                            scoreTone(
-                              Math.min(
-                                feedback.reply.grammarScore,
-                                feedback.reply.naturalnessScore,
-                                feedback.reply.relevanceScore,
-                              ),
-                            ).dot,
-                          )}
-                          aria-hidden
-                        />
-                        {t("daily_challenge.see_feedback", "See feedback")}
-                        <ChevronIcon className="h-3 w-3 -rotate-90" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {isCharlesTyping && (
-              <div className="flex items-end gap-2.5">
-                <Avatar role="ai" />
-                <p
-                  className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-washi-soft px-4 py-3.5"
-                  aria-label={t("daily_challenge.typing", "Typing…")}
-                >
-                  {[0, 150, 300].map((delay) => (
-                    <span
-                      key={delay}
-                      className="h-2 w-2 animate-bounce rounded-full bg-sumi-soft/60"
-                      style={{ animationDelay: `${delay}ms` }}
-                    />
-                  ))}
+                  {isCharlesTyping
+                    ? t("daily_challenge.typing", "Typing…")
+                    : t("daily_challenge.online", "Online now")}
                 </p>
               </div>
+            </header>
+
+            <TargetBanner target={target} isComplete={isComplete} />
+
+            <MotionConfig reducedMotion="user">
+              <div
+                ref={scrollRef}
+                className="flex flex-1 flex-col gap-3 overflow-y-auto bg-washi-soft/40 px-3 py-4 sm:px-4"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(var(--card-border) 1px, transparent 1px)",
+                  backgroundSize: "18px 18px",
+                }}
+                aria-live="polite"
+              >
+                <span className="mx-auto mb-1 rounded-full bg-washi/90 px-3 py-1 text-[11px] font-medium text-sumi-soft shadow-sm">
+                  {t("daily_challenge.today", "Today")}
+                </span>
+
+                {messages.map((message) => {
+                  const isUser = message.role === "user";
+                  const feedback = isUser
+                    ? feedbackByUserMessage.get(message.id)
+                    : undefined;
+                  const showTranslation = translatedIds.has(message.id);
+
+                  return (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      style={{
+                        transformOrigin: isUser
+                          ? "bottom right"
+                          : "bottom left",
+                      }}
+                      className={cn(
+                        "flex items-end gap-2",
+                        isUser && "justify-end",
+                      )}
+                    >
+                      {!isUser && <Avatar />}
+                      <div
+                        className={cn(
+                          "flex max-w-[80%] flex-col gap-1",
+                          isUser ? "items-end" : "items-start",
+                        )}
+                      >
+                        <p
+                          className={cn(
+                            "rounded-[1.25rem] px-4 py-2.5 text-[0.95rem] leading-snug shadow-sm",
+                            isUser
+                              ? "rounded-br-md bg-linear-to-br from-ai to-ai-dark text-washi shadow-ai/25"
+                              : "rounded-bl-md bg-washi text-sumi ring-1 ring-card-border/60",
+                          )}
+                        >
+                          {message.text}
+                          {showTranslation && message.japanese && (
+                            <span className="mt-1.5 block border-t border-card-border pt-1.5 text-sm text-sumi-soft">
+                              {message.japanese}
+                            </span>
+                          )}
+                        </p>
+                        <div
+                          className={cn(
+                            "flex items-center gap-2 px-1.5 text-[11px] text-sumi-soft",
+                            isUser && "flex-row-reverse",
+                          )}
+                        >
+                          <time
+                            dateTime={new Date(message.sentAt).toISOString()}
+                          >
+                            {timeFormat.format(message.sentAt)}
+                          </time>
+                          {message.japanese && (
+                            <button
+                              type="button"
+                              onClick={() => toggleTranslation(message.id)}
+                              className="rounded-full px-1.5 py-0.5 font-medium transition hover:bg-washi hover:text-sumi"
+                            >
+                              {showTranslation
+                                ? t(
+                                    "daily_challenge.hide_translation",
+                                    "Hide translation",
+                                  )
+                                : t(
+                                    "daily_challenge.show_translation",
+                                    "Translate",
+                                  )}
+                            </button>
+                          )}
+                        </div>
+                        {feedback && (
+                          <button
+                            type="button"
+                            onClick={() => showFeedback(feedback.id)}
+                            aria-pressed={feedback.id === selectedItem?.id}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shadow-sm ring-1 transition",
+                              feedback.id === selectedItem?.id
+                                ? "bg-kin/15 text-sumi ring-kin/60"
+                                : "bg-washi text-sumi-soft ring-card-border hover:text-sumi",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                scoreTone(
+                                  Math.min(
+                                    feedback.reply.grammarScore,
+                                    feedback.reply.naturalnessScore,
+                                    feedback.reply.relevanceScore,
+                                  ),
+                                ).dot,
+                              )}
+                              aria-hidden
+                            />
+                            {t("daily_challenge.see_feedback", "See feedback")}
+                            <ChevronIcon className="h-3 w-3 -rotate-90" />
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+
+                <AnimatePresence>
+                  {isCharlesTyping && (
+                    <motion.div
+                      key="typing"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex items-end gap-2"
+                    >
+                      <Avatar />
+                      <p
+                        className="flex items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-washi px-4 py-3.5 shadow-sm ring-1 ring-card-border/60"
+                        aria-label={t("daily_challenge.typing", "Typing…")}
+                      >
+                        {[0, 150, 300].map((delay) => (
+                          <span
+                            key={delay}
+                            className="h-2 w-2 animate-bounce rounded-full bg-sumi-soft/60"
+                            style={{ animationDelay: `${delay}ms` }}
+                          />
+                        ))}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </MotionConfig>
+
+            {error && (
+              <p
+                role="alert"
+                className="border-t border-shu/20 bg-shu/10 px-4 py-2 text-sm text-shu"
+              >
+                {error}
+              </p>
             )}
-          </div>
 
-          {error && (
-            <p
-              role="alert"
-              className="mx-4 mb-2 rounded-xl bg-shu/10 px-3 py-2 text-sm text-shu"
+            <form
+              onSubmit={handleSubmit}
+              className="flex items-center gap-2 border-t border-card-border/70 bg-washi/90 px-3 py-3 backdrop-blur"
             >
-              {error}
-            </p>
-          )}
-
-          <form
-            onSubmit={handleSubmit}
-            className="flex items-center gap-2 border-t border-card-border px-4 py-3 sm:px-5"
-          >
-            <label htmlFor="message" className="sr-only">
-              {t("chat.your_message", "Your message")}
-            </label>
-            <input
-              ref={inputRef}
-              id="message"
-              name="message"
-              value={draft}
-              maxLength={500}
-              autoComplete="off"
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={
-                isComplete
-                  ? t("chat.session_complete_short", "Session complete!")
-                  : t("chat.type_a_message", "Type a message")
-              }
-              disabled={isReplying || isComplete}
-              className="h-12 min-w-0 flex-1 rounded-2xl border border-card-border bg-washi px-4 text-sumi outline-none transition placeholder:text-sumi-soft/70 focus:border-ai focus:ring-2 focus:ring-ai/20 disabled:bg-washi-soft/50"
-            />
-            <Button
-              type="submit"
-              disabled={isCharlesTyping || isComplete || !draft.trim()}
-              className="h-12 rounded-2xl px-6 disabled:opacity-40"
-            >
-              {t("chat.send", "Send")}
-            </Button>
-          </form>
-        </section>
+              <label htmlFor="message" className="sr-only">
+                {t("chat.your_message", "Your message")}
+              </label>
+              <input
+                ref={inputRef}
+                id="message"
+                name="message"
+                value={draft}
+                maxLength={500}
+                autoComplete="off"
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={
+                  isComplete
+                    ? t("chat.session_complete_short", "Session complete!")
+                    : t("chat.type_a_message", "Type a message")
+                }
+                disabled={isReplying || isComplete}
+                className="h-11 min-w-0 flex-1 rounded-full border border-card-border bg-washi-soft/60 px-4 text-sumi outline-none transition placeholder:text-sumi-soft/70 focus:border-ai/50 focus:bg-washi focus:ring-4 focus:ring-ai/10 disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={isCharlesTyping || isComplete || !draft.trim()}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ai text-washi shadow-sm transition hover:bg-ai-dark active:scale-95 disabled:cursor-not-allowed disabled:bg-neutral-soft disabled:text-sumi-soft disabled:shadow-none"
+              >
+                <SendIcon className="h-5 w-5" />
+                <span className="sr-only">{t("chat.send", "Send")}</span>
+              </button>
+            </form>
+          </section>
+        </div>
       </div>
 
       <aside ref={feedbackRef} className="flex scroll-mt-6 flex-col gap-6">
-        {completion && finalItem && (
-          <CompletionCard
-            completion={completion}
-            finalItem={finalItem}
-            showBetterVersion={showBetterVersion}
-            hasMoreAttempts={hasMoreAttempts}
-            isAdvancing={isAdvancing}
-            onNext={onAdvance}
-          />
-        )}
-
         <section className="flex flex-col gap-4 rounded-3xl border border-card-border bg-washi p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-washi-soft text-sumi-soft">
@@ -688,40 +767,19 @@ function DailyChallengeChat({
             <ChevronIcon className="h-4 w-4 text-sumi-soft transition-transform group-open:rotate-180" />
           </summary>
           <div className="border-t border-card-border px-5 pb-5 pt-4 text-sm text-sumi">
-            <ul className="flex flex-col gap-2.5">
-              <XpRule
-                xp={DAILY_CHALLENGE_FLAWLESS_XP}
-                tone="flawless"
-                text={t(
-                  "daily_challenge.xp_rule_flawless",
-                  "10/10 on all four scores",
-                )}
-              />
-              <XpRule
-                xp={DAILY_CHALLENGE_PERFECT_XP}
-                tone="perfect"
-                text={t(
-                  "daily_challenge.xp_rule_perfect_all",
-                  "10/10 for grammar, natural phrasing and relevance",
-                )}
-              />
-              <XpRule
-                xp={DAILY_CHALLENGE_PASS_XP}
-                tone="pass"
-                text={t(
-                  "daily_challenge.xp_rule_pass_all",
-                  "{{pass}}+ for all three",
-                  {
-                    pass: DAILY_CHALLENGE_PASS_SCORE,
-                  },
-                )}
-              />
-              <XpRule
-                xp={0}
-                tone="none"
-                text={t("daily_challenge.xp_rule_none", "Anything lower")}
-              />
-            </ul>
+            <p className="text-sm text-sumi-soft">
+              {t(
+                "daily_challenge.xp_rule_intro",
+                "Your four scores are added up to a total out of {{max}}. Finishing always earns {{base}} XP, every point above {{threshold}} adds 1 more, and a perfect {{max}}/{{max}} adds a +{{bonus}} bonus.",
+                {
+                  max: DAILY_CHALLENGE_MAX_TOTAL,
+                  base: DAILY_CHALLENGE_BASE_XP,
+                  threshold: DAILY_CHALLENGE_XP_THRESHOLD,
+                  bonus: DAILY_CHALLENGE_PERFECT_BONUS_XP,
+                },
+              )}
+            </p>
+            <XpTable />
             <p className="mt-3 border-t border-card-border pt-3 text-xs text-sumi-soft">
               {t(
                 "daily_challenge.xp_rule_note",
@@ -748,22 +806,25 @@ function TargetBanner({
     (item): item is ChallengeItem => item !== null,
   );
 
+  // Pinned under the header, like a pinned message in a chat app.
   return (
     <div
       className={cn(
-        "mx-4 mt-4 flex items-start gap-3 rounded-2xl p-4 transition-colors sm:mx-5",
-        isComplete ? "bg-matcha/15" : "bg-matcha-soft/70",
+        "relative z-10 flex items-center gap-3 border-b px-4 py-2.5 transition-colors",
+        isComplete
+          ? "border-matcha/30 bg-matcha/15"
+          : "border-matcha/20 bg-matcha-soft/60",
       )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-washi/70 text-matcha-dark">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-washi/80 text-matcha-dark shadow-sm">
         {isComplete ? (
           <CheckIcon className="h-5 w-5" />
         ) : (
-          <TargetIcon className="h-6 w-6" />
+          <TargetIcon className="h-5 w-5" />
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-matcha-dark">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-matcha-dark">
           {isComplete
             ? t(
                 "daily_challenge.target_done",
@@ -773,18 +834,124 @@ function TargetBanner({
               ? t("daily_challenge.target_both", "Use both in one reply")
               : t("daily_challenge.target_one", "Use this in a reply")}
         </p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {items.map((item, index) => (
-            <div key={item.term} className="flex items-center gap-3">
+            <span
+              key={item.term}
+              title={item.explanation ?? undefined}
+              className="flex items-baseline gap-1.5"
+            >
               {index > 0 && <span className="text-matcha-dark/60">+</span>}
-              <div title={item.explanation ?? undefined}>
-                <p className="font-semibold text-sumi">“{item.term}”</p>
-                <p className="text-sm text-sumi-soft">{item.translation}</p>
-              </div>
-            </div>
+              <strong className="font-semibold text-sumi">“{item.term}”</strong>
+              <span className="text-sm text-sumi-soft">{item.translation}</span>
+            </span>
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Why the attempt earned what it did: the four scores adding up to the
+// total out of 40, the rule that turned that into XP, and where the missing
+// points went. xpEarned is the server's real award (dailyChallengeXp in
+// lib/srs.ts); the rest is worked out from the same scores.
+function XpBreakdown({
+  reply,
+  xpEarned,
+}: {
+  reply: ChatReply;
+  xpEarned: number;
+}) {
+  const t = useTranslations();
+  const locale = useLocale();
+  const list = new Intl.ListFormat(locale, { type: "conjunction" });
+  const total = dailyChallengeTotal(reply);
+
+  const scores = [
+    {
+      label: t("daily_challenge.summary_grammar", "Grammar"),
+      score: reply.grammarScore,
+    },
+    {
+      label: t("daily_challenge.summary_naturalness", "Natural phrasing"),
+      score: reply.naturalnessScore,
+    },
+    {
+      label: t("daily_challenge.summary_relevance", "Relevance"),
+      score: reply.relevanceScore,
+    },
+    {
+      label: t("daily_challenge.summary_complexity", "Complexity"),
+      score: reply.complexityScore,
+    },
+  ];
+  const missed = scores
+    .filter(({ score }) => score < 10)
+    .map(({ label, score }) => `${label} −${10 - score}`);
+
+  let reason: string;
+  if (total === DAILY_CHALLENGE_MAX_TOTAL) {
+    reason = t(
+      "daily_challenge.xp_reason_perfect_total",
+      "A perfect {{max}}/{{max}}: {{scoreXp}} XP for the score plus a +{{bonus}} XP bonus.",
+      {
+        max: DAILY_CHALLENGE_MAX_TOTAL,
+        scoreXp: xpEarned - DAILY_CHALLENGE_PERFECT_BONUS_XP,
+        bonus: DAILY_CHALLENGE_PERFECT_BONUS_XP,
+      },
+    );
+  } else if (total > DAILY_CHALLENGE_XP_THRESHOLD) {
+    reason = t(
+      "daily_challenge.xp_reason_above",
+      "{{base}} XP for finishing, plus 1 for each of the {{extra}} points above {{threshold}}.",
+      {
+        base: DAILY_CHALLENGE_BASE_XP,
+        extra: total - DAILY_CHALLENGE_XP_THRESHOLD,
+        threshold: DAILY_CHALLENGE_XP_THRESHOLD,
+      },
+    );
+  } else {
+    reason = t(
+      "daily_challenge.xp_reason_base",
+      "{{base}} XP for finishing. Score over {{threshold}} and every extra point adds 1 more.",
+      {
+        base: DAILY_CHALLENGE_BASE_XP,
+        threshold: DAILY_CHALLENGE_XP_THRESHOLD,
+      },
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col items-center gap-2.5">
+      <ul className="flex flex-wrap items-center justify-center gap-1.5">
+        {scores.map(({ label, score }) => (
+          <li
+            key={label}
+            className="flex items-center gap-1.5 rounded-full bg-washi/80 px-2.5 py-1 text-xs text-sumi-soft shadow-sm"
+          >
+            <span
+              className={cn("h-1.5 w-1.5 rounded-full", scoreTone(score).dot)}
+              aria-hidden
+            />
+            {label}
+            <strong className={cn("tabular-nums", scoreTone(score).text)}>
+              {score}
+            </strong>
+          </li>
+        ))}
+        <li className="rounded-full bg-sumi px-2.5 py-1 text-xs font-semibold text-washi tabular-nums shadow-sm">
+          = {total}/{DAILY_CHALLENGE_MAX_TOTAL}
+        </li>
+      </ul>
+      <p className="max-w-xs text-sm leading-snug text-sumi-soft">{reason}</p>
+      {missed.length > 0 && (
+        <p className="max-w-xs text-xs text-sumi-soft">
+          {t("daily_challenge.xp_points_missed", "Points missed: {{list}}", {
+            list: list.format(missed),
+          })}
+        </p>
+      )}
     </div>
   );
 }
@@ -806,52 +973,79 @@ function CompletionCard({
 }) {
   const t = useTranslations();
   const summary = finalItem.reply.summary;
-  const isFlawless = completion.xpEarned === DAILY_CHALLENGE_FLAWLESS_XP;
-  const isPerfect = completion.xpEarned === DAILY_CHALLENGE_PERFECT_XP;
+  const total = dailyChallengeTotal(finalItem.reply);
+  const isPerfect = total === DAILY_CHALLENGE_MAX_TOTAL;
+  const isGreat = total >= DAILY_CHALLENGE_MAX_TOTAL - 2;
+  const isAboveThreshold = total > DAILY_CHALLENGE_XP_THRESHOLD;
 
   return (
-    <section className="flex flex-col gap-4 overflow-hidden rounded-3xl border border-card-border bg-washi shadow-sm">
+    <section
+      className={cn(
+        "grid overflow-hidden rounded-3xl border bg-washi shadow-xl ring-4",
+        isPerfect
+          ? "border-kin/60 ring-kin/20"
+          : isAboveThreshold
+            ? "border-matcha/50 ring-matcha/15"
+            : "border-card-border ring-sumi/5",
+        summary && "md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
+      )}
+    >
       <div
         className={cn(
-          "flex flex-col items-center gap-1 px-5 pb-4 pt-6 text-center",
-          isFlawless || isPerfect
+          "flex flex-col items-center justify-center gap-1 px-5 py-6 text-center",
+          isPerfect
             ? "bg-kin/15"
-            : completion.xpEarned > 0
+            : isAboveThreshold
               ? "bg-matcha-soft/60"
               : "bg-washi-soft",
         )}
       >
         <span className="text-3xl" aria-hidden>
-          {isFlawless
-            ? "🌟"
-            : isPerfect
-              ? "🏆"
-              : completion.xpEarned > 0
-                ? "🎉"
-                : "🌱"}
+          {isPerfect ? "🌟" : isGreat ? "🏆" : isAboveThreshold ? "🎉" : "🌱"}
         </span>
         <p className="text-xl font-semibold text-sumi">
-          {isFlawless
-            ? t("daily_challenge.result_flawless", "Flawless! +{{xp}} XP", {
-                xp: completion.xpEarned,
-              })
-            : isPerfect
-              ? t("daily_challenge.result_perfect", "Perfect! +{{xp}} XP", {
+          {isPerfect
+            ? t(
+                "daily_challenge.result_perfect_total",
+                "Perfect {{max}}/{{max}}! +{{xp}} XP",
+                {
+                  max: DAILY_CHALLENGE_MAX_TOTAL,
+                  xp: completion.xpEarned,
+                },
+              )
+            : isGreat
+              ? t("daily_challenge.result_great", "Excellent! +{{xp}} XP", {
                   xp: completion.xpEarned,
                 })
-              : completion.xpEarned > 0
+              : isAboveThreshold
                 ? t("daily_challenge.result_pass", "Nice work! +{{xp}} XP", {
                     xp: completion.xpEarned,
                   })
                 : t(
-                    "daily_challenge.result_none",
-                    "Challenge done — no XP this time",
+                    "daily_challenge.result_done",
+                    "Challenge done! +{{xp}} XP",
+                    {
+                      xp: completion.xpEarned,
+                    },
                   )}
         </p>
+        <XpBreakdown reply={finalItem.reply} xpEarned={completion.xpEarned} />
+        <div className="mt-4 w-full max-w-xs">
+          <Button
+            variant="secondary"
+            disabled={isAdvancing}
+            onClick={onNext}
+            fullWidth
+          >
+            {hasMoreAttempts
+              ? t("daily_challenge.next", "Next challenge")
+              : t("daily_challenge.see_summary", "See today's summary")}
+          </Button>
+        </div>
       </div>
 
       {summary && (
-        <div className="flex flex-col gap-4 px-5">
+        <div className="flex flex-col gap-4 p-5 sm:p-6">
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
               {t("daily_challenge.summary_how_you_did", "How you did")}
@@ -865,16 +1059,20 @@ function CompletionCard({
             <section className="rounded-2xl bg-washi-soft p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
                 {t(
-                  "daily_challenge.summary_better_version",
-                  "A more natural way to say it",
+                  "daily_challenge.summary_better_way",
+                  "A better way to say it",
                 )}
               </h3>
-              <p className="mt-2 text-sm text-sumi-soft line-through decoration-sumi-soft/50">
-                {finalItem.userText}
-              </p>
-              <p className="mt-1 font-medium text-ai">
-                {summary.betterVersion}
-              </p>
+              <dl className="mt-2 grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5 text-sm">
+                <dt className="text-xs text-sumi-soft">
+                  {t("daily_challenge.you_wrote", "You wrote")}
+                </dt>
+                <dd className="text-sumi-soft">{finalItem.userText}</dd>
+                <dt className="text-xs font-semibold text-ai">
+                  {t("daily_challenge.try_this", "Try")}
+                </dt>
+                <dd className="font-medium text-ai">{summary.betterVersion}</dd>
+              </dl>
             </section>
           )}
 
@@ -898,40 +1096,18 @@ function CompletionCard({
           )}
         </div>
       )}
-
-      <div className="flex justify-center px-5 pb-5">
-        {hasMoreAttempts ? (
-          <Button
-            variant="secondary"
-            disabled={isAdvancing}
-            onClick={onNext}
-            fullWidth
-          >
-            {t("daily_challenge.next", "Next challenge")}
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            disabled={isAdvancing}
-            onClick={onNext}
-            fullWidth
-          >
-            {t("daily_challenge.see_summary", "See today's summary")}
-          </Button>
-        )}
-      </div>
     </section>
   );
 }
 
-function Avatar({ role }: { role: Message["role"] }) {
+function Avatar() {
   return (
     <Image
-      src={role === "user" ? "/images/mascot.png" : "/images/charles.webp"}
+      src="/images/charles.webp"
       alt=""
       width={64}
       height={64}
-      className="h-9 w-9 shrink-0 rounded-full border border-card-border bg-washi-soft object-cover"
+      className="h-8 w-8 shrink-0 rounded-full bg-washi-soft object-cover shadow-sm ring-2 ring-washi"
     />
   );
 }
@@ -974,30 +1150,74 @@ function ScoreTile({
   );
 }
 
-function XpRule({
-  xp,
-  tone,
-  text,
-}: {
-  xp: number;
-  tone: "flawless" | "perfect" | "pass" | "none";
-  text: string;
-}) {
+// One row per total from a perfect score down to the threshold, then a
+// catch-all row, all computed with dailyChallengeXp so it can't drift from
+// the real rule.
+function XpTable() {
+  const t = useTranslations();
+  const totals = Array.from(
+    { length: DAILY_CHALLENGE_MAX_TOTAL - DAILY_CHALLENGE_XP_THRESHOLD + 1 },
+    (_, i) => DAILY_CHALLENGE_MAX_TOTAL - i,
+  );
+
   return (
-    <li className="flex items-center gap-3">
-      <span
-        className={cn(
-          "w-14 shrink-0 rounded-full py-0.5 text-center text-xs font-semibold",
-          tone === "flawless" && "bg-kin text-ink-on-light",
-          tone === "perfect" && "bg-kin/20 text-sumi",
-          tone === "pass" && "bg-matcha-soft text-matcha-dark",
-          tone === "none" && "bg-washi-soft text-sumi-soft",
-        )}
-      >
-        +{xp} XP
-      </span>
-      <span>{text}</span>
-    </li>
+    <table className="mt-3 w-full text-sm">
+      <thead className="text-xs text-sumi-soft">
+        <tr>
+          <th className="pb-1.5 text-left font-medium">
+            {t("daily_challenge.xp_table_total", "Total")}
+          </th>
+          <th className="pb-1.5 text-right font-medium">XP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {totals.map((total) => {
+          const isThreshold = total === DAILY_CHALLENGE_XP_THRESHOLD;
+          const xp = dailyChallengeXp({
+            grammarScore: total,
+            naturalnessScore: 0,
+            relevanceScore: 0,
+            complexityScore: 0,
+          });
+          return (
+            <tr key={total} className="border-t border-card-border/60">
+              <td className="py-1.5 tabular-nums text-sumi">
+                {isThreshold
+                  ? t("daily_challenge.xp_table_or_less", "{{total}} or less", {
+                      total,
+                    })
+                  : `${total}/${DAILY_CHALLENGE_MAX_TOTAL}`}
+              </td>
+              <td className="py-1.5 text-right">
+                <span
+                  className={cn(
+                    "inline-block min-w-14 rounded-full px-2 py-0.5 text-center text-xs font-semibold tabular-nums",
+                    total === DAILY_CHALLENGE_MAX_TOTAL
+                      ? "bg-kin text-ink-on-light"
+                      : isThreshold
+                        ? "bg-washi-soft text-sumi-soft"
+                        : "bg-matcha-soft text-matcha-dark",
+                  )}
+                >
+                  +{xp} XP
+                </span>
+                {total === DAILY_CHALLENGE_MAX_TOTAL && (
+                  <span className="ml-1.5 text-xs text-sumi-soft">
+                    {t(
+                      "daily_challenge.xp_table_bonus",
+                      "incl. +{{bonus}} bonus",
+                      {
+                        bonus: DAILY_CHALLENGE_PERFECT_BONUS_XP,
+                      },
+                    )}
+                  </span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
@@ -1089,6 +1309,19 @@ function CheckIcon({ className }: IconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function SendIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3.1 2.3a.75.75 0 0 0-1 .92l1.9 5.9a1 1 0 0 0 .92.69H11a.75.75 0 0 1 0 1.5H4.92a1 1 0 0 0-.92.69l-1.9 5.9a.75.75 0 0 0 1 .92l15-7.1a.75.75 0 0 0 0-1.36l-15-7.1Z" />
     </svg>
   );
 }

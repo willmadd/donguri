@@ -65,17 +65,21 @@ export function streakBonusXp(currentStreak: number): number {
   return currentStreak >= 2 ? (currentStreak - 1) * 0.5 : 0;
 }
 
-// XP for one daily-challenge chat attempt, from the scores (0-10) of the
+// XP for one daily-challenge chat attempt, from the four 0-10 scores of the
 // message where the learner used the challenge target (see
-// sendDailyChallengeMessage in lib/actions/daily-challenge.ts). Grammar,
-// natural phrasing and relevance decide the pass and perfect tiers — every
-// one must clear the bar, so a 10, 10 and 9 is only a pass. Complexity only
-// counts towards the flawless tier on top, so beginners writing short,
-// simple sentences can still earn full perfect XP.
-export const DAILY_CHALLENGE_FLAWLESS_XP = 5;
-export const DAILY_CHALLENGE_PERFECT_XP = 3;
-export const DAILY_CHALLENGE_PASS_XP = 1;
-export const DAILY_CHALLENGE_PASS_SCORE = 7;
+// sendDailyChallengeMessage in lib/actions/daily-challenge.ts), added up
+// into a total out of 40. Finishing always earns the base 1 XP; every point
+// above DAILY_CHALLENGE_XP_THRESHOLD adds 1 more, up to 6 for the score
+// itself, and a perfect 40 adds a bonus on top:
+//   total ≤ 34 → 1 XP, 35 → 2, 36 → 3, 37 → 4, 38 → 5, 39 → 6, 40 → 6 + 1 = 7
+export const DAILY_CHALLENGE_MAX_TOTAL = 40;
+export const DAILY_CHALLENGE_XP_THRESHOLD = 34;
+export const DAILY_CHALLENGE_BASE_XP = 1;
+export const DAILY_CHALLENGE_MAX_SCORE_XP = 6;
+export const DAILY_CHALLENGE_PERFECT_BONUS_XP = 1;
+export const DAILY_CHALLENGE_MAX_XP = DAILY_CHALLENGE_MAX_SCORE_XP + DAILY_CHALLENGE_PERFECT_BONUS_XP;
+// A "good" single score — only used to colour scores in the UI now.
+export const DAILY_CHALLENGE_GOOD_SCORE = 7;
 
 export type DailyChallengeScores = {
   grammarScore: number;
@@ -84,21 +88,23 @@ export type DailyChallengeScores = {
   complexityScore: number;
 };
 
-export function dailyChallengeXp({
+export function dailyChallengeTotal({
   grammarScore,
   naturalnessScore,
   relevanceScore,
   complexityScore,
 }: DailyChallengeScores): number {
-  const core = [grammarScore, naturalnessScore, relevanceScore];
+  return grammarScore + naturalnessScore + relevanceScore + complexityScore;
+}
 
-  if (core.every((score) => score === 10)) {
-    return complexityScore === 10 ? DAILY_CHALLENGE_FLAWLESS_XP : DAILY_CHALLENGE_PERFECT_XP;
-  }
-  if (core.every((score) => score >= DAILY_CHALLENGE_PASS_SCORE)) {
-    return DAILY_CHALLENGE_PASS_XP;
-  }
-  return 0;
+export function dailyChallengeXp(scores: DailyChallengeScores): number {
+  const total = dailyChallengeTotal(scores);
+  const scoreXp = Math.min(
+    DAILY_CHALLENGE_BASE_XP + Math.max(0, total - DAILY_CHALLENGE_XP_THRESHOLD),
+    DAILY_CHALLENGE_MAX_SCORE_XP,
+  );
+  const bonus = total === DAILY_CHALLENGE_MAX_TOTAL ? DAILY_CHALLENGE_PERFECT_BONUS_XP : 0;
+  return scoreXp + bonus;
 }
 
 // Every UTC day with any recorded activity — a word introduced, a word

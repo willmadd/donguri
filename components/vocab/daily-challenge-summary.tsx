@@ -2,7 +2,7 @@ import Image from "next/image";
 import { Suspense } from "react";
 import type { DailyChallengeResult } from "@/lib/daily-challenge";
 import type { DailyChallengeReview } from "@/lib/daily-challenge-review";
-import { DAILY_CHALLENGE_FLAWLESS_XP } from "@/lib/srs";
+import { DAILY_CHALLENGE_MAX_XP } from "@/lib/srs";
 import { getTranslator } from "@/lib/i18n/server";
 import { Button } from "@/components/ui/button";
 import { scoreTone } from "@/components/vocab/challenge-score";
@@ -45,7 +45,7 @@ export async function DailyChallengeSummary({
 }: Props) {
   const { t } = await getTranslator();
   const totalXp = results.reduce((sum, result) => sum + result.xpEarned, 0);
-  const maxXp = maxAttemptsPerDay * DAILY_CHALLENGE_FLAWLESS_XP;
+  const maxXp = maxAttemptsPerDay * DAILY_CHALLENGE_MAX_XP;
 
   const averages: { key: ScoreKey; label: string }[] = [
     {
@@ -198,10 +198,7 @@ export async function DailyChallengeSummary({
                   {showBetter && (
                     <p className="mt-2 text-sm text-sumi">
                       <span className="text-sumi-soft">
-                        {t(
-                          "daily_challenge.more_natural",
-                          "More natural:",
-                        )}{" "}
+                        {t("daily_challenge.better_version_label", "Try:")}{" "}
                       </span>
                       <span className="font-medium text-ai">
                         {result.betterVersion}

@@ -77,9 +77,10 @@ const SCORE_FIELDS = [
   "complexityScore",
 ] as const;
 // Relevance ceiling for a message that doesn't respond to what Charles just
-// said (e.g. dodging his question with one of its own). Kept below
-// DAILY_CHALLENGE_PASS_SCORE so a dodge can never earn XP, however fluent
-// it sounds — the model tends to score the sentence on its own otherwise.
+// said (e.g. dodging his question with one of its own). Low enough that a
+// dodge can't total more than 34/40, so it only ever earns the base XP
+// (see dailyChallengeXp), however fluent it sounds — the model tends to
+// score the sentence on its own otherwise.
 const NON_RESPONSE_RELEVANCE_CAP = 4;
 
 function optionalString(value: unknown): string | null {
@@ -138,9 +139,11 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Guards against the model claiming a vocab word was used when it wasn't —
-// the term itself or any of its forms must actually appear. Grammar
-// patterns can't be matched like this, so those are left to the model.
+// Whether the message contains the target word — the term itself or any of
+// its forms, as a whole word. This decides a word target on its own (see
+// describeTargetUsage), so the model can neither end a chat without the
+// word nor keep one going that has it. Grammar patterns can't be matched
+// like this, so those are left to the model.
 function containsVocab(sentence: string, item: ChallengeItem): boolean {
   return [item.term, ...item.forms].some((form) =>
     new RegExp(
@@ -165,7 +168,28 @@ function describeTarget(target: ChallengeTarget): string {
   return `the word ${describeItem(target.vocab!)}`;
 }
 
-function buildSystemPrompt(target: ChallengeTarget): string {
+// What the model is told about whether the latest message used the target.
+// The vocab word is checked here, not by the model, so any message that
+// contains it ends the attempt — even a bare "you" or a broken sentence;
+// low quality shows up in the scores instead. Grammar patterns can't be
+// string-matched, so an attempt at one is left to the model.
+function describeTargetUsage(target: ChallengeTarget, vocabInMessage: boolean): string {
+  const attemptRule =
+    "Any attempt counts — even if it's wrong, awkward, unrelated to the conversation, or the target on its own with nothing else. Mistakes lower the scores; they never stop the challenge from ending.";
+
+  if (target.vocab && !vocabInMessage) {
+    return `The user's latest message does NOT contain the target word, so usedTarget must be false.`;
+  }
+  if (target.vocab && target.grammar) {
+    return `The user's latest message DOES contain the target word. usedTarget is true if it also attempts the grammar pattern ${describeItem(target.grammar)}. ${attemptRule}`;
+  }
+  if (target.vocab) {
+    return `The user's latest message DOES contain the target word, so usedTarget must be true and the chat ends now. ${attemptRule}`;
+  }
+  return `usedTarget is true if the user's latest message attempts the grammar pattern ${describeItem(target.grammar!)}. ${attemptRule}`;
+}
+
+function buildSystemPrompt(target: ChallengeTarget, vocabInMessage: boolean): string {
   const goal = describeTarget(target);
 
   return `You are Charles Duck, the user's kind English-speaking friend. You two are just texting casually — this is NOT a classroom and you are not a teacher. You want the user to practice using ${goal} themselves, but you never announce that or make it feel like a lesson.
@@ -196,7 +220,7 @@ Return only a JSON object with exactly these fields, in this order:
 	"feedbackJa": "The same feedback in Japanese"
 }
 respondedToYou is true only if the user's latest message actually responds to what you last said. If you asked a question, it must answer it — even briefly or loosely ("Just some toast!", "I'm not sure"). It is false if the user ignores your question, changes the subject, or replies with a question of their own without answering yours. Asking a question back AFTER answering is great ("Pizza! What about you?") and counts as true.
-usedTarget is true only if the user's latest message genuinely uses ${goal} in a real sentence that is part of the conversation — not just listing, quoting, or asking about it. Judge the latest message only, not earlier ones.
+${describeTargetUsage(target, vocabInMessage)} Judge the latest message only, not earlier ones.
 grammarScore is an integer from 0 to 10 for the grammatical correctness of the user's latest message, judged on its own, not on relevance. This is casual texting, so ignore capital letters and missing end punctuation. When usedTarget is true, also judge whether the target is used correctly.
 naturalnessScore is an integer from 0 to 10 for how natural the WORDING of the user's latest message is — would a native speaker text it this way? Judge the wording only; whether it fits the conversation is relevanceScore.
 - 9-10: exactly how a native speaker would text it. 10 only if there is nothing to change.
@@ -219,7 +243,7 @@ When usedTarget is true, the chat is over, so "english" should be a short, warm 
 {
 	"overall": "2-3 short sentences on how the user did across the whole chat — how well they used the target, and how natural and relevant their replies were",
 	"tips": ["Up to 3 short, concrete tips on what they could have done better, each about something they actually wrote. Use an empty list if there is truly nothing to improve."],
-	"betterVersion": "A more natural way to say the message where they used the target, still using it. If that message was already perfect, repeat it unchanged.",
+	"betterVersion": "A better version of the message where they used the target, still using it: fix any mistakes, make it sound natural, make it actually answer what you last said, and add a little detail if it was very short. Keep it short, simple and beginner-friendly — something they could realistically say. If that message was already perfect, repeat it unchanged.",
 	"overallJa": "The same overall review in Japanese",
 	"tipsJa": ["The same tips in Japanese, one for each tip above, in the same order"]
 }
@@ -290,6 +314,8 @@ export async function sendDailyChallengeMessage(
     };
   }
 
+  const vocabInMessage = target.vocab ? containsVocab(trimmedMessage, target.vocab) : true;
+
   let reply: ChatReply;
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -297,7 +323,7 @@ export async function sendDailyChallengeMessage(
       model: process.env.OPENAI_MODEL ?? "gpt-5.6-luna",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: buildSystemPrompt(target) },
+        { role: "system", content: buildSystemPrompt(target, vocabInMessage) },
         ...history.slice(-MAX_HISTORY_TURNS).map((turn) => ({
           role: turn.role === "assistant" ? ("assistant" as const) : ("user" as const),
           content: String(turn.content).slice(0, MAX_MESSAGE_LENGTH * 2),
@@ -316,9 +342,13 @@ export async function sendDailyChallengeMessage(
       return { ok: false, reason: "error", error: "Charles Duck sent an invalid reply." };
     }
 
+    // A word-only target is decided here outright, whatever the model said;
+    // a grammar pattern needs the model's judgement (and the word too, when
+    // both are set).
     const usedTarget =
-      parsed.usedTarget &&
-      (!target.vocab || containsVocab(trimmedMessage, target.vocab));
+      target.vocab && !target.grammar
+        ? vocabInMessage
+        : vocabInMessage && parsed.usedTarget;
 
     // The model sometimes flags a dodge in respondedToYou but still scores
     // the sentence on its own merits, so the cap is enforced here too.
