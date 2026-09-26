@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bug, ChevronDown, Flame, GraduationCap, LogOut, Menu, Settings, User, Users, X } from "lucide-react";
+import { Bug, ChevronDown, CreditCard, Flame, GraduationCap, LogOut, Menu, Settings, User, Users, X } from "lucide-react";
 import { DonguriAvatar } from "@/components/icons/DonguriAvatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
@@ -258,6 +258,14 @@ function AccountLinks({
       >
         <Settings className="h-4 w-4 text-sumi-soft" aria-hidden="true" />
         {t("dashboard_layout.account_settings", "Account settings")}
+      </Link>
+      <Link
+        href="/dashboard/billing"
+        onClick={onNavigate}
+        className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sumi transition hover:bg-sumi/5"
+      >
+        <CreditCard className="h-4 w-4 text-sumi-soft" aria-hidden="true" />
+        {t("dashboard_layout.membership", "Membership")}
       </Link>
 
       <div className="my-1 border-t border-card-border" />

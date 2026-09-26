@@ -1545,3 +1545,35 @@ alter table public.daily_challenge_attempts
   add column if not exists relevance_score smallint,
   add column if not exists complexity_score smallint,
   add column if not exists summary jsonb;
+
+-- 37. Subscriptions -----------------------------------------------------------------
+-- One row per user who has ever started Stripe Checkout: their Stripe
+-- customer, and a copy of their current subscription's state, kept in sync
+-- by the Stripe webhook (app/api/stripe/webhook/route.ts → syncStripeCustomer
+-- in lib/billing.ts). Access to /dashboard content depends on `status` (see
+-- hasActiveAccess), so this lives in its own table rather than on
+-- `profiles`: users can update their own profile row through Supabase, and
+-- must never be able to write this one. Read-only for the owner; only the
+-- server (Prisma, which bypasses RLS) writes it.
+
+create table if not exists public.subscriptions (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  stripe_customer_id text not null unique,
+  stripe_subscription_id text unique,
+  status text,
+  price_id text,
+  trial_end timestamptz,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  -- Set once any subscription with a trial has existed, so a second
+  -- Checkout doesn't hand out another free trial.
+  trial_used boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.subscriptions enable row level security;
+
+drop policy if exists "Users can view own subscription" on public.subscriptions;
+create policy "Users can view own subscription"
+  on public.subscriptions for select
+  using (auth.uid() = user_id);

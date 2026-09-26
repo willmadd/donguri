@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cacheLife } from "next/cache";
 import { getAvailableCourses, getEnrolledCourses } from "@/lib/dal";
 import { enrollInCourse } from "@/lib/actions/courses";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
@@ -10,11 +11,19 @@ export const metadata: Metadata = {
   title: "Courses — Donguri",
 };
 
+// Private cache scope, like loadCourseHome on the course page: the session
+// read checks token expiry against `Date.now()`, which Cache Components only
+// allows inside a cache scope during a (runtime) prerender. Enrolling
+// revalidates this path, which clears it outright.
+async function loadCourses() {
+  "use cache: private";
+  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
+
+  return Promise.all([getEnrolledCourses(), getAvailableCourses()]);
+}
+
 export default async function CoursesPage() {
-  const [enrolled, available] = await Promise.all([
-    getEnrolledCourses(),
-    getAvailableCourses(),
-  ]);
+  const [enrolled, available] = await loadCourses();
   const { t } = await getTranslator();
 
   return (

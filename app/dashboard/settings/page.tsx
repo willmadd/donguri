@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cacheLife } from "next/cache";
 import { requireProfile } from "@/lib/dal";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { PageTitle, PageSubtitle } from "@/components/ui/page-heading";
@@ -9,8 +10,18 @@ export const metadata: Metadata = {
   title: "Account settings — Donguri",
 };
 
+// Private cache scope, like loadCourseHome on the course page: the session
+// read checks token expiry against `Date.now()`, which Cache Components only
+// allows inside a cache scope during a (runtime) prerender.
+async function loadProfile() {
+  "use cache: private";
+  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
+
+  return requireProfile();
+}
+
 export default async function SettingsPage() {
-  const profile = await requireProfile();
+  const profile = await loadProfile();
   const { t } = await getTranslator();
 
   return (

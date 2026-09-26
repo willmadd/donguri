@@ -2,11 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/dal";
+import { requireSubscriber } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 
 export async function enrollInCourse(courseId: string): Promise<void> {
-  const user = await requireUser();
+  const user = await requireSubscriber();
 
   const course = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
@@ -20,5 +20,6 @@ export async function enrollInCourse(courseId: string): Promise<void> {
   });
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/courses");
   redirect(`/dashboard/courses/${course.slug}`);
 }

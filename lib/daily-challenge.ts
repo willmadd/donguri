@@ -41,6 +41,9 @@ export type DailyChallengeResult = {
   id: string;
   xpEarned: number;
   targetTerms: string[];
+  // targetTerms with each one's Japanese from the course, looked up when
+  // read; null if the word has since been renamed or removed.
+  targets: { term: string; translation: string | null }[];
   message: string | null;
   grammarScore: number | null;
   naturalnessScore: number | null;

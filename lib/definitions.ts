@@ -104,6 +104,19 @@ export type Profile = {
   donguriConfig: unknown;
   first_name: string | null;
   last_name: string | null;
+  // Synced copy of their Stripe subscription (see lib/billing.ts), null if
+  // they've never started Checkout.
+  subscription: ProfileSubscription | null;
+  // Whether they can use /dashboard content right now — admins always can.
+  hasAccess: boolean;
+};
+
+export type ProfileSubscription = {
+  status: string | null;
+  trialEnd: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  trialUsed: boolean;
 };
 
 // Per-course streaks live on the enrollment (see `CourseStreak` below) and

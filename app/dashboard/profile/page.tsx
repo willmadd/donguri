@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cacheLife } from "next/cache";
 import { requireProfile } from "@/lib/dal";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { DonguriCharacterCard } from "@/components/donguri/donguri-character-card";
@@ -12,8 +13,19 @@ export const metadata: Metadata = {
   title: "Profile — Donguri",
 };
 
+// Private cache scope, like loadCourseHome on the course page: the session
+// read checks token expiry against `Date.now()`, which Cache Components only
+// allows inside a cache scope during a (runtime) prerender. Profile edits
+// revalidate this path (see lib/actions/profile.ts), which clears it.
+async function loadProfile() {
+  "use cache: private";
+  cacheLife({ stale: 30, revalidate: 60, expire: 300 });
+
+  return requireProfile();
+}
+
 export default async function ProfilePage() {
-  const profile = await requireProfile();
+  const profile = await loadProfile();
   const { t } = await getTranslator();
 
   const donguriConfigText = profile.donguriConfig ? JSON.stringify(profile.donguriConfig, null, 2) : "";

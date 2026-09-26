@@ -37,6 +37,7 @@ model Profile {
   dailyChallengeAttempts DailyChallengeAttempt[]
   xpEvents               XpEvent[]
   reviewEvents           ReviewEvent[]
+  subscription           Subscription?
 
   @@map("profiles")
 }
@@ -363,4 +364,23 @@ model ReviewEvent {
 
   @@index([userId, createdAt], map: "review_events_user_created_at_idx")
   @@map("review_events")
+}
+
+// A user's Stripe customer and a synced copy of their subscription — see
+// section 37 of supabase/schema.sql and syncStripeCustomer in
+// lib/billing.ts. Only the server writes it (RLS: owner read-only).
+model Subscription {
+  userId               String    @id @map("user_id") @db.Uuid
+  stripeCustomerId     String    @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  status               String?
+  priceId              String?   @map("price_id")
+  trialEnd             DateTime? @map("trial_end") @db.Timestamptz(6)
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  trialUsed            Boolean   @default(false) @map("trial_used")
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  profile              Profile   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("subscriptions")
 }

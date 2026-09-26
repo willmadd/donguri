@@ -3,7 +3,7 @@
 import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
 import {
-  requireUser,
+  requireSubscriber,
   requireProfile,
   MAX_DAILY_CHALLENGE_ATTEMPTS,
   bumpStreak,
@@ -258,7 +258,7 @@ export async function sendDailyChallengeMessage(
   history: ChatTurn[],
   message: string,
 ): Promise<SendDailyChallengeMessageResult> {
-  const user = await requireUser();
+  const user = await requireSubscriber();
   const trimmedMessage = message.trim();
 
   if (!trimmedMessage) {

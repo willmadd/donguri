@@ -8,12 +8,13 @@ import {
   requireProfile,
 } from "@/lib/dal";
 import { DailyChallenge } from "@/components/vocab/daily-challenge-chat";
-import { getChallengeOpener } from "@/lib/daily-challenge-opener";
+import { firstNameOf, getChallengeOpener } from "@/lib/daily-challenge-opener";
 import { getDailyChallengeReview } from "@/lib/daily-challenge-review";
 import { DailyChallengeSummary } from "@/components/vocab/daily-challenge-summary";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/ui/breadcrumbs";
 import { getTranslator } from "@/lib/i18n/server";
 import { Button } from "@/components/ui/button";
+import { parseDonguriConfig, type AccessoryId } from "@/lib/levels";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -33,20 +34,28 @@ async function loadDailyChallenge(slug: string) {
   "use cache: private";
   cacheLife({ stale: 30, revalidate: 60, expire: 300 });
 
-  const [{ course }, challenge, results] = await Promise.all([
+  const [{ course }, challenge, results, profile] = await Promise.all([
     getCourseHome(slug),
     getDailyChallenge(slug),
     getDailyChallengeResults(slug),
     requireProfile(),
   ]);
+  const equippedAccessory = (parseDonguriConfig(profile.donguriConfig)
+    .equippedAccessory ?? null) as AccessoryId | null;
 
-  return { courseTitle: course.title, challenge, results };
+  return {
+    courseTitle: course.title,
+    challenge,
+    results,
+    equippedAccessory,
+    firstName: firstNameOf(profile.full_name),
+  };
 }
 
 export default async function DailyChallengePage({ params }: PageProps) {
   const { slug } = await params;
 
-  const [{ courseTitle, challenge, results }, { t }] = await Promise.all([
+  const [{ courseTitle, challenge, results, equippedAccessory, firstName }, { t }] = await Promise.all([
     loadDailyChallenge(slug),
     getTranslator(),
   ]);
@@ -54,7 +63,7 @@ export default async function DailyChallengePage({ params }: PageProps) {
   // Not awaited: the page renders straight away and the opener streams into
   // the chat, which shows Charles typing until it arrives.
   const openerPromise = challenge.target
-    ? getChallengeOpener(challenge.target)
+    ? getChallengeOpener(challenge.target, firstName)
     : null;
   const isDayComplete = challenge.attemptsToday >= challenge.maxAttemptsPerDay;
 
@@ -72,6 +81,7 @@ export default async function DailyChallengePage({ params }: PageProps) {
       <DailyChallenge
         courseSlug={slug}
         challenge={challenge}
+        equippedAccessory={equippedAccessory}
         openerPromise={openerPromise}
         heading={
           <div className="flex items-center gap-4">
@@ -97,6 +107,7 @@ export default async function DailyChallengePage({ params }: PageProps) {
               courseSlug={slug}
               results={results}
               maxAttemptsPerDay={challenge.maxAttemptsPerDay}
+              equippedAccessory={equippedAccessory}
               reviewPromise={getDailyChallengeReview(results)}
             />
           ) : (

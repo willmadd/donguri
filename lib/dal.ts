@@ -1,3 +1,4 @@
+import { hasActiveAccess } from "@/lib/billing";
 import "server-only";
 
 import { cache } from "react";
@@ -121,6 +122,15 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
       donguriConfig: true,
       firstName: true,
       lastName: true,
+      subscription: {
+        select: {
+          status: true,
+          trialEnd: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
+          trialUsed: true,
+        },
+      },
     },
   });
 
@@ -137,6 +147,8 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     donguriConfig: profile.donguriConfig,
     first_name: profile.firstName,
     last_name: profile.lastName,
+    subscription: profile.subscription,
+    hasAccess: hasActiveAccess(profile.role, profile.subscription),
   };
 });
 
@@ -148,6 +160,20 @@ export const requireProfile = cache(async (): Promise<Profile> => {
     console.error(`No Prisma profile exists for authenticated user ${user.id}`);
 
     redirect("/onboarding");
+  }
+
+  return profile;
+});
+
+// For everything behind the paywall: the signed-in profile, or a redirect
+// to the billing page to start the free trial / resubscribe. Called from
+// the data functions and server actions that serve course content (not
+// just the pages), since those are reachable directly.
+export const requireSubscriber = cache(async (): Promise<Profile> => {
+  const profile = await requireProfile();
+
+  if (!profile.hasAccess) {
+    redirect("/dashboard/billing");
   }
 
   return profile;
@@ -165,7 +191,7 @@ export const requireAdminProfile = cache(async (): Promise<Profile> => {
 
 export const getEnrolledCourses = cache(
   async (): Promise<EnrolledCourseSummary[]> => {
-    const user = await requireUser();
+    const user = await requireSubscriber();
 
     const enrollments = await prisma.courseEnrollment.findMany({
       where: { userId: user.id, course: { active: true } },
@@ -494,7 +520,7 @@ export const getAdminWordQuizQuestions = cache(async (wordId: string) => {
 });
 
 export const getAvailableCourses = cache(async (): Promise<CourseSummary[]> => {
-  const user = await requireUser();
+  const user = await requireSubscriber();
 
   const courses = await prisma.course.findMany({
     where: { active: true, enrollments: { none: { userId: user.id } } },
@@ -521,7 +547,7 @@ export const getAvailableCourses = cache(async (): Promise<CourseSummary[]> => {
 // Postgres for one page view. One combined query instead of two separate
 // ones for the same reason.
 const requireEnrolledCourse = cache(async (courseSlug: string) => {
-  const user = await requireUser();
+  const user = await requireSubscriber();
 
   const enrollment = await prisma.courseEnrollment.findFirst({
     where: { userId: user.id, course: { slug: courseSlug, active: true } },
@@ -1043,10 +1069,26 @@ export const getDailyChallengeResults = cache(
       },
     });
 
+    // Attempts store only the terms, so their Japanese comes from the
+    // course's words as they are now.
+    const terms = [...new Set(attempts.flatMap((attempt) => attempt.targetTerms))];
+    const words =
+      terms.length === 0
+        ? []
+        : await prisma.word.findMany({
+            where: { term: { in: terms }, languageDeck: { courseId: course.id } },
+            select: { term: true, translation: true },
+          });
+    const translations = new Map(words.map((word) => [word.term, word.translation]));
+
     return attempts.map(({ summary, ...attempt }) => {
       const review = (summary ?? {}) as Partial<ChallengeSummary>;
       return {
         ...attempt,
+        targets: attempt.targetTerms.map((term) => ({
+          term,
+          translation: translations.get(term) ?? null,
+        })),
         overall: typeof review.overall === "string" ? review.overall : null,
         overallJa: typeof review.overallJa === "string" ? review.overallJa : null,
         tips: Array.isArray(review.tips)

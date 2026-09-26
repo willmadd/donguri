@@ -8,11 +8,15 @@ import { Button } from "@/components/ui/button";
 import { scoreTone } from "@/components/vocab/challenge-score";
 import { BilingualText } from "@/components/vocab/bilingual-text";
 import { cn } from "@/lib/utils";
+import { RainbowAvatar } from "@/components/donguri/rainbow-avatar";
+import { ScoreBar } from "@/components/vocab/score-bar";
+import type { AccessoryId } from "@/lib/levels";
 
 type Props = {
   courseSlug: string;
   results: DailyChallengeResult[];
   maxAttemptsPerDay: number;
+  equippedAccessory: AccessoryId | null;
   reviewPromise: Promise<DailyChallengeReview | null>;
 };
 
@@ -34,20 +38,22 @@ function average(
   );
 }
 
-// End-of-day screen once all of today's daily-challenge attempts are used:
-// XP earned, average scores, Charles's look back over the day (streamed in —
-// see getDailyChallengeReview), and each attempt's sentence.
+// End-of-day screen once all of today's daily-challenge attempts are used,
+// full width: a header with the day's XP and the way out, Charles's look
+// back over the day (streamed in — see getDailyChallengeReview) beside the
+// average scores, then one card per attempt.
 export async function DailyChallengeSummary({
   courseSlug,
   results,
   maxAttemptsPerDay,
+  equippedAccessory,
   reviewPromise,
 }: Props) {
   const { t } = await getTranslator();
   const totalXp = results.reduce((sum, result) => sum + result.xpEarned, 0);
   const maxXp = maxAttemptsPerDay * DAILY_CHALLENGE_MAX_XP;
 
-  const averages: { key: ScoreKey; label: string }[] = [
+  const scores: { key: ScoreKey; label: string }[] = [
     {
       key: "grammarScore",
       label: t("daily_challenge.summary_grammar", "Grammar"),
@@ -67,73 +73,43 @@ export async function DailyChallengeSummary({
   ];
 
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-card-border bg-washi shadow-sm">
-      <div className="flex flex-col items-center gap-2 bg-kin/15 px-6 pb-6 pt-8 text-center">
-        <span className="text-4xl" aria-hidden>
-          🎉
-        </span>
-        <h2 className="text-2xl font-bold text-sumi">
-          {t(
-            "daily_challenge.day_complete_title",
-            "Today's challenges complete!",
-          )}
-        </h2>
-        <p className="text-sm text-sumi-soft">
-          {t(
-            "daily_challenge.day_complete_subtitle",
-            "You finished all {{max}} of today's challenges. New ones unlock at midnight UTC.",
-            { max: maxAttemptsPerDay },
-          )}
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-6 p-5 sm:p-6">
-        <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-matcha-soft/60 px-8 py-5 text-center">
+    <div className="flex w-full flex-col gap-6">
+      <section className="flex flex-col gap-4 rounded-3xl border border-kin/40 bg-kin/10 p-5 shadow-sm sm:flex-row sm:items-center sm:gap-6 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <RainbowAvatar equippedAccessory={equippedAccessory} />
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-sumi">
+              {t(
+                "daily_challenge.day_complete_title",
+                "Today's challenges complete!",
+              )}
+            </h2>
             <p className="text-sm text-sumi-soft">
-              {t("daily_challenge.xp_earned", "XP earned")}
+              {t(
+                "daily_challenge.day_complete_next",
+                "New ones unlock at midnight UTC.",
+              )}
             </p>
-            <p className="text-4xl font-bold text-matcha-dark tabular-nums">
-              +{totalXp}
-            </p>
-            <p className="text-xs text-sumi-soft">
-              {t("daily_challenge.xp_out_of", "out of {{max}} possible", {
-                max: maxXp,
-              })}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {averages.map(({ key, label }) => {
-              const value = average(results, key);
-              return (
-                <div
-                  key={key}
-                  className="rounded-2xl border border-card-border px-4 py-3"
-                >
-                  <p className="text-xs text-sumi-soft">
-                    {t("daily_challenge.average_label", "Avg. {{label}}", {
-                      label,
-                    })}
-                  </p>
-                  <p
-                    className={cn(
-                      "text-xl font-bold tabular-nums",
-                      value === null
-                        ? "text-sumi-soft"
-                        : scoreTone(Math.round(value)).text,
-                    )}
-                  >
-                    {value ?? "—"}
-                    <span className="text-sm font-semibold opacity-70">
-                      /10
-                    </span>
-                  </p>
-                </div>
-              );
-            })}
           </div>
         </div>
+        <p className="flex shrink-0 items-baseline gap-1.5 self-start sm:self-auto">
+          <span className="rounded-full bg-kin px-3 py-0.5 text-lg font-extrabold tabular-nums text-ink-on-light shadow-[0_4px_14px_-2px_rgb(255_184_0/0.6)] ring-2 ring-kin/30">
+            {t("daily_challenge.xp_gain", "+{{xp}} XP", { xp: totalXp })}
+          </span>
+          <span className="text-sm tabular-nums text-sumi-soft">
+            / {maxXp}
+          </span>
+        </p>
+        <Button
+          variant="secondary"
+          href={`/dashboard/courses/${courseSlug}`}
+          className="shrink-0 sm:min-w-40"
+        >
+          {t("daily_challenge.finish", "Finish")}
+        </Button>
+      </section>
 
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <Suspense
           fallback={
             <ReviewSkeleton
@@ -147,97 +123,146 @@ export async function DailyChallengeSummary({
           <CharlesReview reviewPromise={reviewPromise} />
         </Suspense>
 
-        <section className="flex flex-col gap-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
-            {t("daily_challenge.your_sentences", "Your sentences today")}
+        <section className="flex flex-col gap-3 rounded-3xl border border-card-border bg-washi p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-sumi">
+            {t("daily_challenge.todays_average", "Today's average")}
           </h3>
-          <ol className="flex flex-col gap-3">
-            {results.map((result, index) => {
-              const showBetter =
-                result.message !== null &&
-                result.betterVersion !== null &&
-                result.betterVersion.trim().toLowerCase() !==
-                  result.message.trim().toLowerCase();
-
+          <ul className="flex flex-col gap-2.5">
+            {scores.map(({ key, label }) => {
+              const value = average(results, key);
               return (
                 <li
-                  key={result.id}
-                  className="rounded-2xl border border-card-border p-4"
+                  key={key}
+                  className="grid grid-cols-[8rem_1fr_2.5rem] items-center gap-3 text-sm"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-sumi-soft">
-                      {t("daily_challenge.attempt_number", "Challenge {{n}}", {
-                        n: index + 1,
-                      })}
-                    </span>
-                    {result.targetTerms.map((term) => (
-                      <span
-                        key={term}
-                        className="rounded-full bg-matcha-soft/70 px-2.5 py-0.5 text-xs font-medium text-matcha-dark"
-                      >
-                        {term}
-                      </span>
-                    ))}
-                    <span
-                      className={cn(
-                        "ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                        result.xpEarned > 0
-                          ? "bg-kin/20 text-sumi"
-                          : "bg-washi-soft text-sumi-soft",
-                      )}
-                    >
-                      +{result.xpEarned} XP
-                    </span>
-                  </div>
-
-                  {result.message && (
-                    <p className="mt-3 rounded-xl bg-ai-soft px-3 py-2 text-sm font-medium text-sumi">
-                      {result.message}
-                    </p>
+                  <span className="truncate text-sumi-soft">{label}</span>
+                  {value === null ? (
+                    <span className="h-2 rounded-sm bg-neutral-soft" />
+                  ) : (
+                    <ScoreBar score={value} />
                   )}
-                  {showBetter && (
-                    <p className="mt-2 text-sm text-sumi">
-                      <span className="text-sumi-soft">
-                        {t("daily_challenge.better_version_label", "Try:")}{" "}
-                      </span>
-                      <span className="font-medium text-ai">
-                        {result.betterVersion}
-                      </span>
-                    </p>
-                  )}
-                  {result.grammarScore !== null && (
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-sumi-soft">
-                      {averages.map(({ key, label }) => {
-                        const score = result[key];
-                        if (score === null) return null;
-                        return (
-                          <span key={key}>
-                            {label}{" "}
-                            <strong className={scoreTone(score).text}>
-                              {score}
-                            </strong>
-                            /10
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <strong
+                    className={cn(
+                      "text-right tabular-nums",
+                      value === null
+                        ? "text-sumi-soft"
+                        : scoreTone(Math.round(value)).text,
+                    )}
+                  >
+                    {value ?? "—"}
+                  </strong>
                 </li>
               );
             })}
-          </ol>
+          </ul>
         </section>
-
-        <Button
-          variant="secondary"
-          size="lg"
-          href={`/dashboard/courses/${courseSlug}`}
-          fullWidth
-        >
-          {t("daily_challenge.finish", "Finish")}
-        </Button>
       </div>
-    </section>
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-sumi">
+          {t("daily_challenge.your_sentences", "Your sentences today")}
+        </h3>
+        <ol className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {results.map((result, index) => {
+            const showBetter =
+              result.message !== null &&
+              result.betterVersion !== null &&
+              result.betterVersion.trim().toLowerCase() !==
+                result.message.trim().toLowerCase();
+
+            return (
+              <li
+                key={result.id}
+                className="flex flex-col gap-4 rounded-3xl border border-card-border bg-washi p-5 shadow-sm"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sumi text-xs font-bold text-washi">
+                    {index + 1}
+                  </span>
+                  <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                    {result.targets.map(({ term, translation }) => (
+                      <li
+                        key={term}
+                        className="flex min-w-0 flex-col rounded-xl bg-matcha-soft/60 px-2.5 py-1"
+                      >
+                        <span className="text-xs font-semibold text-matcha-dark">
+                          {term}
+                        </span>
+                        {translation && (
+                          <span className="text-[11px] leading-snug text-sumi-soft">
+                            {translation}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums",
+                      result.xpEarned > 0
+                        ? "bg-kin text-ink-on-light"
+                        : "bg-washi-soft text-sumi-soft",
+                    )}
+                  >
+                    {t("daily_challenge.xp_gain", "+{{xp}} XP", {
+                      xp: result.xpEarned,
+                    })}
+                  </span>
+                </div>
+
+                {result.message && (
+                  <div className="flex flex-col">
+                    <p className="rounded-2xl bg-washi-soft px-4 py-3 text-sm text-sumi">
+                      {result.message}
+                    </p>
+                    {showBetter && (
+                      <>
+                        <span className="relative z-10 mx-auto -my-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-washi text-sumi-soft ring-1 ring-card-border">
+                          <ArrowDownIcon className="h-4 w-4" />
+                        </span>
+                        <div className="rounded-2xl bg-ai-soft/70 px-4 py-3">
+                          <p className="text-xs font-semibold text-ai">
+                            {t("daily_challenge.try_this", "Try")}
+                          </p>
+                          <p className="mt-0.5 text-sm font-semibold text-ai">
+                            {result.betterVersion}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {result.grammarScore !== null && (
+                  <ul className="mt-auto grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-card-border pt-4">
+                    {scores.map(({ key, label }) => {
+                      const score = result[key];
+                      if (score === null) return null;
+                      return (
+                        <li key={key} className="flex flex-col gap-1">
+                          <span className="flex items-baseline justify-between gap-2 text-xs text-sumi-soft">
+                            <span className="truncate">{label}</span>
+                            <strong
+                              className={cn(
+                                "tabular-nums",
+                                scoreTone(score).text,
+                              )}
+                            >
+                              {score}
+                            </strong>
+                          </span>
+                          <ScoreBar score={score} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
   );
 }
 
@@ -250,29 +275,34 @@ async function CharlesReview({
   if (!review) return null;
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-washi-soft p-4 sm:p-5">
-      <div className="flex items-center gap-3">
+    <section className="flex flex-col gap-4 rounded-3xl border border-card-border bg-washi p-5 shadow-sm">
+      <div className="flex gap-3">
         <Image
           src="/images/charles.webp"
           alt=""
           width={80}
           height={80}
-          className="h-10 w-10 rounded-full border border-card-border bg-washi object-cover"
+          className="h-10 w-10 shrink-0 rounded-full border border-card-border bg-washi object-cover"
         />
-        <h3 className="font-semibold text-sumi">
-          {t("daily_challenge.charles_notes", "Charles's notes on today")}
-        </h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-sumi">
+            {t("daily_challenge.charles_notes", "Charles's notes on today")}
+          </h3>
+          <p className="mt-1 text-sm leading-relaxed text-sumi">
+            <BilingualText en={review.feedback} ja={review.feedbackJa} />
+          </p>
+        </div>
       </div>
-      <p className="text-sm leading-relaxed text-sumi">
-        <BilingualText en={review.feedback} ja={review.feedbackJa} />
-      </p>
-      <div className="rounded-xl bg-kin/10 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-sumi-soft">
-          {t("daily_challenge.next_time", "Next time, try")}
-        </p>
-        <p className="mt-0.5 text-sm text-sumi">
-          <BilingualText en={review.focus} ja={review.focusJa} />
-        </p>
+      <div className="flex gap-3 rounded-2xl bg-kin/10 p-4">
+        <BulbIcon className="mt-0.5 h-5 w-5 shrink-0 text-kin" />
+        <div className="min-w-0 text-sm text-sumi">
+          <p className="font-semibold">
+            {t("daily_challenge.next_time", "Next time, try")}
+          </p>
+          <p className="mt-0.5">
+            <BilingualText en={review.focus} ja={review.focusJa} />
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -281,13 +311,48 @@ async function CharlesReview({
 function ReviewSkeleton({ label }: { label: string }) {
   return (
     <div
-      className="flex flex-col gap-3 rounded-2xl bg-washi-soft p-4 sm:p-5"
+      className="flex flex-col gap-3 rounded-3xl border border-card-border bg-washi p-5 shadow-sm"
       aria-busy
     >
       <p className="text-sm text-sumi-soft">{label}</p>
       <div className="h-3 w-full animate-pulse rounded-full bg-neutral-soft" />
       <div className="h-3 w-4/5 animate-pulse rounded-full bg-neutral-soft" />
-      <div className="h-10 w-full animate-pulse rounded-xl bg-neutral-soft/70" />
+      <div className="h-14 w-full animate-pulse rounded-2xl bg-neutral-soft/70" />
     </div>
+  );
+}
+
+type IconProps = { className?: string };
+
+function ArrowDownIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      className={className}
+      aria-hidden
+    >
+      <path
+        d="M10 4v12m0 0-4.5-4.5M10 16l4.5-4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BulbIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path d="M10 2a6 6 0 0 0-3.6 10.8c.4.3.6.7.6 1.2v.5h6V14c0-.5.2-.9.6-1.2A6 6 0 0 0 10 2Z" />
+      <rect x="7.5" y="15.5" width="5" height="2.5" rx="1" />
+    </svg>
   );
 }
